@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When			What
 	--------	----------		----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #include "rt_config.h"
 
@@ -225,7 +226,7 @@ VOID MTPollTxRxEmpty(RTMP_ADAPTER *pAd)
 
 }
 
-VOID MTHifPolling(RTMP_ADAPTER *pAd)
+VOID MTHifPolling(RTMP_ADAPTER *pAd, UINT8 ucDbdcIdx)
 {
 #ifdef RTMP_MAC_PCI
 	UINT32 Loop, RxPending = 0;
@@ -253,7 +254,7 @@ VOID MTHifPolling(RTMP_ADAPTER *pAd)
 
 	for (Loop = 0; Loop < 10; Loop++)
 	{
-		AsicExtWifiHifCtrl(pAd, HIF_CTRL_ID_HIF_USB_TX_RX_IDLE, &rResult);
+		AsicExtWifiHifCtrl(pAd, ucDbdcIdx, HIF_CTRL_ID_HIF_USB_TX_RX_IDLE, &rResult);
 
 		if (rResult.u4Status == 0)
 			break;
@@ -282,78 +283,69 @@ VOID MTHifPolling(RTMP_ADAPTER *pAd)
 }
 
 VOID MTRadioOn(PRTMP_ADAPTER pAd, struct wifi_dev *wdev)
-{
-	/*  Send radio on command and wait for ack */
-	if (IS_MT7603(pAd))
-	{
-		MtCmdRadioOnOffCtrl(pAd, WIFI_RADIO_ON);
-	}
-	else
-	{
-        AsicRadioOnOffCtrl(pAd, HcGetBandByWdev(wdev), WIFI_RADIO_ON);
+{    
+    /*  Send radio on command and wait for ack */
+    if (IS_MT7603(pAd))
+    {
+        MtCmdRadioOnOffCtrl(pAd, WIFI_RADIO_ON);
+    }
+    else
+    {
+        RTMP_RADIO_ON_OFF_CTRL(pAd, HcGetBandByChannel(pAd, wdev->channel), WIFI_RADIO_ON);
     }
 
-	/* Send Led on command */
+    /* Send Led on command */
 
-	/* Enable RX */
-	if (IS_MT7603(pAd))
-	{
-		AsicSetMacTxRx(pAd, ASIC_MAC_RX, TRUE);
-	}
-	else
-	{
-		/* MT7637 MT7615 is offloaded to AsicExtPmStateCtrl() */
-	}
+    /* Enable RX */
+    if (IS_MT7603(pAd))
+    {
+        AsicSetMacTxRx(pAd, ASIC_MAC_RX, TRUE);
+    }
+    else
+    {
+        /* MT7637 MT7615 is offloaded to AsicExtPmStateCtrl() */
+    }
 
-    //Pat: TODO
-	RTMP_CLEAR_FLAG(pAd, fRTMP_ADAPTER_RADIO_OFF);
-
-    //Pat: TODO
-	RTMP_CLEAR_FLAG(pAd, fRTMP_ADAPTER_DISABLE_DEQUEUEPACKET);
-
+    HcSetRadioCurStatByChannel(pAd, wdev->channel, PHY_INUSE);
 }
 
 VOID MTRadioOff(PRTMP_ADAPTER pAd, struct wifi_dev *wdev)
-{
-    //Pat: TODO
-	RTMP_SET_FLAG(pAd, fRTMP_ADAPTER_DISABLE_DEQUEUEPACKET);
+{    
+    /*  Disable RX */
+    if (IS_MT7603(pAd))
+    {
+        AsicSetMacTxRx(pAd, ASIC_MAC_RX, FALSE);
+    }
+    else
+    {
+        /* MT7637 MT7615 is offload to AsicSetMacTxRx(pAd, ASIC_MAC_RX, FALSE); */
+    }
 
-	/*  Disable RX */
-	if (IS_MT7603(pAd))
-	{
-		AsicSetMacTxRx(pAd, ASIC_MAC_RX, FALSE);
-	}
-	else
-	{
-		/* MT7637 MT7615 is offload to AsicSetMacTxRx(pAd, ASIC_MAC_RX, FALSE); */
-	}
+    /*  Polling TX/RX path until packets empty */
+    if (IS_MT7603(pAd))
+    {
+        MTPollTxRxEmpty(pAd);
+    }
+    else
+    {
+        // No need for MT7636/MT7637/MT7615
+    }
 
-	/*  Polling TX/RX path until packets empty */
-	if (IS_MT7603(pAd))
-	{
-		MTPollTxRxEmpty(pAd);
-	}
-	else
-	{
-		// No need for MT7636/MT7637/MT7615
-	}
+    /* Set Radio off flag*/
+    HcSetRadioCurStatByChannel(pAd, wdev->channel, PHY_RADIOOFF);
 
-    //Pat: TODO
-	/* Set Radio off flag*/
-	RTMP_SET_FLAG(pAd, fRTMP_ADAPTER_RADIO_OFF);
+    /* Delay for CR access, review it again. Pat: */
+    //msleep(1000);	
 
-	/* Delay for CR access, review it again. Pat: */
-	//msleep(1000);	
-
-	/*  Send radio off command and wait for ack */
-	if (IS_MT7603(pAd))
-	{
-		MtCmdRadioOnOffCtrl(pAd, WIFI_RADIO_OFF);
-	}
-	else
-	{
-        AsicRadioOnOffCtrl(pAd, HcGetBandByWdev(wdev), WIFI_RADIO_OFF);	
-	}
+    /*  Send radio off command and wait for ack */
+    if (IS_MT7603(pAd))
+    {
+        MtCmdRadioOnOffCtrl(pAd, WIFI_RADIO_OFF);
+    }
+    else
+    {
+        RTMP_RADIO_ON_OFF_CTRL(pAd, HcGetBandByChannel(pAd, wdev->channel), WIFI_RADIO_OFF);	
+    }
 }
 
 #ifdef RTMP_MAC_PCI
@@ -382,17 +374,15 @@ VOID MTMlmeLpExit(PRTMP_ADAPTER pAd, struct wifi_dev *wdev)
 	RTMP_SET_FLAG(pAd, fRTMP_ADAPTER_MCU_SEND_IN_BAND_CMD);
 
 	/*  Send radio on command and wait for ack */
-    AsicRadioOnOffCtrl(pAd, HcGetBandByWdev(wdev), WIFI_RADIO_ON);
+	RTMP_RADIO_ON_OFF_CTRL(pAd, DBDC_BAND_NUM, WIFI_RADIO_ON);
 
 	/* Send Led on command */
 	
 	/* Enable RX */
 	// Offlaod below task to AsicExtPmStateCtrl()
 	//AsicSetMacTxRx(pAd, ASIC_MAC_RX, TRUE);
-	
-	RTMP_CLEAR_FLAG(pAd, fRTMP_ADAPTER_RADIO_OFF);	
 
-	RTMP_CLEAR_FLAG(pAd, fRTMP_ADAPTER_DISABLE_DEQUEUEPACKET);
+	HcSetAllSupportedBandsRadioOn(pAd);
 
 	/*  Resume sending TX packet */
 	RTMP_OS_NETDEV_START_QUEUE(pAd->net_dev);
@@ -417,6 +407,7 @@ VOID MTMlmeLpEnter(PRTMP_ADAPTER pAd, struct wifi_dev *wdev)
 {
 #ifdef CONFIG_AP_SUPPORT
 	INT32 IdBss, MaxNumBss = pAd->ApCfg.BssidNum;
+	UCHAR RfIC = wmode_2_rfic(wdev->PhyMode);
 #endif /* CONFIG_AP_SUPPORT */
 
 	/*  Stop send TX packets */
@@ -441,17 +432,15 @@ VOID MTMlmeLpEnter(PRTMP_ADAPTER pAd, struct wifi_dev *wdev)
 
 #ifdef CONFIG_AP_SUPPORT
 	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
-		APStop(pAd);
+		APStopByRf(pAd, RfIC);
 #endif /* CONFIG_AP_SUPPORT */
-
-	RTMP_SET_FLAG(pAd, fRTMP_ADAPTER_DISABLE_DEQUEUEPACKET);
 	
 	/*  Disable RX */
 	// Below function is offloaded to AsicExtPmStateCtrl()
 	//AsicSetMacTxRx(pAd, ASIC_MAC_RX, FALSE);
 
 	/* Set Radio off flag*/
-	RTMP_SET_FLAG(pAd, fRTMP_ADAPTER_RADIO_OFF);
+	HcSetAllSupportedBandsRadioOff(pAd);
 
 	/* Delay for CR access */
 	msleep(1000);
@@ -459,10 +448,10 @@ VOID MTMlmeLpEnter(PRTMP_ADAPTER pAd, struct wifi_dev *wdev)
 	/*  Send Led off command */
 
 	/*  Send radio off command and wait for ack */
-    AsicRadioOnOffCtrl(pAd, HcGetBandByWdev(wdev), WIFI_RADIO_OFF);
+	RTMP_RADIO_ON_OFF_CTRL(pAd, DBDC_BAND_NUM, WIFI_RADIO_OFF);
 
 	/*  Polling TX/RX path until packets empty */
-	MTHifPolling(pAd);
+	MTHifPolling(pAd, HcGetBandByWdev(wdev));
 
 #ifdef RTMP_MAC_PCI
 	/*  Disable PDMA */
@@ -670,6 +659,17 @@ VOID PDMAResetAndRecovery(RTMP_ADAPTER *pAd)
 	RTMPRingCleanUp(pAd, QID_BMC);
 	RTMPRingCleanUp(pAd, QID_RX);
 
+#ifdef VENDOR_FEATURE6_SUPPORT
+// Start - Triggered from PDMAWatchDog. Log and try to recover.
+	if(pAd->TxDMAResetCount >= 3)
+	{
+		UCHAR event_msg[100] = {0};
+		ARRISMOD_CALL(arris_event_send_hook, ATOM_HOST, WLAN_EVENT, ASIC_RELOAD_EVENT, "MT7615", strlen("MT7615"));
+		snprintf(event_msg, sizeof(event_msg), "MT7615 - Hardware error detected - recovery was attempted.\n");
+		ARRISMOD_CALL(arris_event_send_hook, ATOM_HOST, WLAN_LOG_SAVE_CONSOLE, 0, event_msg, strlen(event_msg));
+		return;
+	}
+#endif
 //	AsicEnableBssSync(pAd, pAd->CommonCfg.BeaconPeriod);//Carter check this.
 
 	/* Enable PDMA */

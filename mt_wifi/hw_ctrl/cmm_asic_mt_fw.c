@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
 	Who			When			What
 	--------	----------		----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #ifdef COMPOS_WIN
 #include "MtConfig.h"
 #if defined(EVENT_TRACING)
@@ -123,6 +125,34 @@ VOID MtAsicDelWcidTabByFw(
 }
 
 
+#ifdef HTC_DECRYPT_IOT
+VOID MtAsicSetWcidAAD_OMByFw(
+	IN PRTMP_ADAPTER pAd,
+	IN UCHAR wcid_idx,
+	IN UCHAR value)
+{
+	UINT32 mask = 0xfffffff7;
+	UINT32 val;
+
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s, wcid_idx(%d), value(%d)\n", __FUNCTION__, wcid_idx,value));
+
+	if (value)
+	{
+		val =0x8;		
+	    	WtblDwSet(pAd,wcid_idx,1,2,mask,val);
+	}
+	else
+	{
+		val =0x0;		
+	    	WtblDwSet(pAd,wcid_idx,1,2,mask,val);		
+	}
+	
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s, <---\n", __FUNCTION__));
+}
+#endif /* HTC_DECRYPT_IOT */
+
+
+
 // MT7615
 //need to ready first, Carter, wilsonl
 VOID MtAsicUpdateRxWCIDTableByFw(
@@ -217,6 +247,7 @@ VOID MtAsicUpdateRxWCIDTableByFw(
 		/* Tag = 1 */
 		rWtblRx.ucRv = 1;
 		rWtblRx.ucRca1 = 1;
+		rWtblRx.ucRcid = 1;
 		//if (pAd->OpMode == OPMODE_AP)
 		{
 			rWtblRx.ucRca2 = 1;
@@ -250,6 +281,9 @@ VOID MtAsicUpdateRxWCIDTableByFw(
 		{
 			rWtblRx.ucRca1 = 1;
 		}
+
+		if (WtblInfo.WcidType == MT_WCID_TYPE_APCLI_MCAST)
+			rWtblRx.ucRcid = 1;
 
 		rWtblRx.ucRv = 1;
 		rWtblRx.ucRca2 = 1;
@@ -364,45 +398,45 @@ VOID MtAsicUpdateRxWCIDTableByFw(
 	/* Append TLV msg */
 	pTempBuffer = pTlvAppend(
 		pTlvBuffer,
-		cpu_to_le16(WTBL_GENERIC),
-		cpu_to_le16(sizeof(CMD_WTBL_GENERIC_T)),
+		(WTBL_GENERIC),
+		(sizeof(CMD_WTBL_GENERIC_T)),
 		&rWtblGeneric,
 		&u4TotalTlvLen,
 		&ucTotalTlvNumber);
 	pTempBuffer = pTlvAppend(
 		pTempBuffer,
-		cpu_to_le16(WTBL_RX),
-		cpu_to_le16(sizeof(CMD_WTBL_RX_T)),
+		(WTBL_RX),
+		(sizeof(CMD_WTBL_RX_T)),
 		&rWtblRx,
 		&u4TotalTlvLen,
 		&ucTotalTlvNumber);
 #ifdef DOT11_N_SUPPORT
 	pTempBuffer = pTlvAppend(
 		pTempBuffer,
-		cpu_to_le16(WTBL_HT),
-		cpu_to_le16(sizeof(CMD_WTBL_HT_T)),
+		(WTBL_HT),
+		(sizeof(CMD_WTBL_HT_T)),
 		&rWtblHt,
 		&u4TotalTlvLen,
 		&ucTotalTlvNumber);
 	pTempBuffer = pTlvAppend(
 		pTempBuffer,
-		cpu_to_le16(WTBL_RDG),
-		cpu_to_le16(sizeof(CMD_WTBL_RDG_T)),
+		(WTBL_RDG),
+		(sizeof(CMD_WTBL_RDG_T)),
 		&rWtblRdg,
 		&u4TotalTlvLen,
 		&ucTotalTlvNumber);
 	pTempBuffer = pTlvAppend(
 		pTempBuffer,
-		cpu_to_le16(cpu_to_le16(WTBL_SMPS)),
-		sizeof(CMD_WTBL_SMPS_T),
+		(WTBL_SMPS),
+		(sizeof(CMD_WTBL_SMPS_T)),
 		&rWtblSmPs,
 		&u4TotalTlvLen,
 		&ucTotalTlvNumber);
 #ifdef DOT11_VHT_AC
 	pTempBuffer = pTlvAppend(
 		pTempBuffer,
-		cpu_to_le16(WTBL_VHT),
-		cpu_to_le16(sizeof(CMD_WTBL_VHT_T)),
+		(WTBL_VHT),
+		(sizeof(CMD_WTBL_VHT_T)),
 		&rWtblVht,
 		&u4TotalTlvLen,
 		&ucTotalTlvNumber);
@@ -410,29 +444,29 @@ VOID MtAsicUpdateRxWCIDTableByFw(
 #endif /* DOT11_N_SUPPORT */
 	pTempBuffer = pTlvAppend(
 		pTempBuffer,
-		cpu_to_le16(WTBL_TX_PS),
-		cpu_to_le16(sizeof(CMD_WTBL_TX_PS_T)),
+		(WTBL_TX_PS),
+		(sizeof(CMD_WTBL_TX_PS_T)),
 		&rWtblTxPs,
 		&u4TotalTlvLen,
 		&ucTotalTlvNumber);
 #if defined(HDR_TRANS_RX_SUPPORT) || defined(HDR_TRANS_TX_SUPPORT)
 	pTempBuffer = pTlvAppend(
 		pTempBuffer,
-		cpu_to_le16(WTBL_HDR_TRANS),
-		cpu_to_le16(sizeof(CMD_WTBL_HDR_TRANS_T)),
+		(WTBL_HDR_TRANS),
+		(sizeof(CMD_WTBL_HDR_TRANS_T)),
 		&rWtblHdrTrans,
 		&u4TotalTlvLen,
 		&ucTotalTlvNumber);
 #endif /* HDR_TRANS_RX_SUPPORT || HDR_TRANS_TX_SUPPORT */
 	pTempBuffer = pTlvAppend(
 		pTempBuffer,
-		cpu_to_le16(WTBL_SECURITY_KEY),
-		cpu_to_le16(sizeof(CMD_WTBL_SECURITY_KEY_T)),
+		(WTBL_SECURITY_KEY),
+		(sizeof(CMD_WTBL_SECURITY_KEY_T)),
 		&rWtblSecurityKey,
 		&u4TotalTlvLen,
 		&ucTotalTlvNumber);
 #ifdef TXBF_SUPPORT
-    MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+    MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_INFO,
 			("%s: u2PfmuId = 0x%x\n",
 			__FUNCTION__, pAd->rStaRecBf.u2PfmuId));
 
@@ -440,8 +474,8 @@ VOID MtAsicUpdateRxWCIDTableByFw(
     {
         pTempBuffer = pTlvAppend(
 		pTempBuffer,
-		cpu_to_le16(WTBL_BF),
-		cpu_to_le16(sizeof(CMD_WTBL_BF_T)),
+		(WTBL_BF),
+		(sizeof(CMD_WTBL_BF_T)),
 		&rWtblBf,
 		&u4TotalTlvLen,
 		&ucTotalTlvNumber);
@@ -449,14 +483,17 @@ VOID MtAsicUpdateRxWCIDTableByFw(
 #endif /* TXBF_SUPPORT */
     pTempBuffer = pTlvAppend(
 		pTempBuffer,
-		cpu_to_le16(WTBL_SPE),
-		cpu_to_le16(sizeof(CMD_WTBL_SPE_T)),
+		(WTBL_SPE),
+		(sizeof(CMD_WTBL_SPE_T)),
 		&rWtblSpe,
 		&u4TotalTlvLen,
 		&ucTotalTlvNumber);
 
 	/* Send TLV msg*/
-	CmdExtWtblUpdate(pAd, (UINT8)WtblInfo.Wcid, RESET_WTBL_AND_SET, pTlvBuffer, u4TotalTlvLen);
+	if (WtblInfo.IsReset == TRUE)
+		CmdExtWtblUpdate(pAd, (UINT8)WtblInfo.Wcid, RESET_WTBL_AND_SET, pTlvBuffer, u4TotalTlvLen);
+	else
+		CmdExtWtblUpdate(pAd, (UINT8)WtblInfo.Wcid, SET_WTBL, pTlvBuffer, u4TotalTlvLen);
 
 	/* Free TLV msg */
 	if (pTlvBuffer)
@@ -639,6 +676,24 @@ UINT16 MtAsicGetTidSnByFw(
     return ssn;
 }
 
+void update_wtbl_vht_info(struct _RTMP_ADAPTER *pAd, UCHAR wcid,
+                                struct _wtbl_vht_info *vht_info)
+{
+        CMD_WTBL_VHT_T wtbl_vht={0};
+
+        wtbl_vht.u2Tag = WTBL_VHT;
+        wtbl_vht.u2Length = sizeof(CMD_WTBL_VHT_T);
+
+        if (vht_info == NULL)
+                return;
+
+        wtbl_vht.ucLdpcVht = vht_info->ldpc;
+        wtbl_vht.ucDynBw = vht_info->dyn_bw;
+        wtbl_vht.ucVht = vht_info->vht;
+        wtbl_vht.ucTxopPsCap = vht_info->txop_ps;
+
+        CmdExtWtblUpdate(pAd, wcid, SET_WTBL, &wtbl_vht, sizeof(CMD_WTBL_VHT_T));
+}
 
 VOID MtAsicAddRemoveKeyTabByFw (
 	IN struct _RTMP_ADAPTER *pAd,
@@ -813,8 +868,8 @@ VOID MtAsicSetSMPSByFw(
 {
 	CMD_WTBL_SMPS_T 	CmdWtblSmPs = {0};
 
-	CmdWtblSmPs.u2Tag = cpu_to_le16(WTBL_SMPS);
-	CmdWtblSmPs.u2Length = cpu_to_le16(sizeof(CMD_WTBL_SMPS_T));
+	CmdWtblSmPs.u2Tag = WTBL_SMPS;
+	CmdWtblSmPs.u2Length = sizeof(CMD_WTBL_SMPS_T);
 
 	CmdWtblSmPs.ucSmPs = Smps;
 
@@ -831,8 +886,8 @@ VOID MtSetIgnorePsmByFw(
 
 	pEntry->i_psm = value;
 
-	CmdWtblPeerPs.u2Tag = cpu_to_le16(WTBL_PEER_PS);
-	CmdWtblPeerPs.u2Length = cpu_to_le16(sizeof(CMD_WTBL_PEER_PS_T));
+	CmdWtblPeerPs.u2Tag = WTBL_PEER_PS;
+	CmdWtblPeerPs.u2Length = sizeof(CMD_WTBL_PEER_PS_T);
 
 	CmdWtblPeerPs.ucDuIPsm = value;
 	CmdWtblPeerPs.ucIPsm = value;
@@ -1347,41 +1402,44 @@ VOID MtAsicUpdateProtectByFw (
         struct _RTMP_ADAPTER *pAd,
         MT_PROTECT_CTRL_T *protect)
 {
-    struct _EXT_CMD_UPDATE_PROTECT_T fw_protect;
+	struct _EXT_CMD_UPDATE_PROTECT_T fw_protect;
 
-    fw_protect.ucProtectIdx = 2;
-    fw_protect.Data.rUpdateProtect.ucLongNav = protect->long_nav;
-    fw_protect.Data.rUpdateProtect.ucMMProtect = protect->mix_mode;
-    fw_protect.Data.rUpdateProtect.ucGFProtect = protect->gf;
-    fw_protect.Data.rUpdateProtect.ucBW40Protect = protect->bw40;
-    fw_protect.Data.rUpdateProtect.ucRifsProtect = protect->rifs;
-    fw_protect.Data.rUpdateProtect.ucBW80Protect = protect->bw80;
-    fw_protect.Data.rUpdateProtect.ucBW160Protect = protect->bw160;
-    fw_protect.Data.rUpdateProtect.ucERProtectMask = protect->erp_mask;
+	fw_protect.ucProtectIdx = UPDATE_PROTECTION_CTRL;
+	fw_protect.ucDbdcIdx = protect->band_idx;
+	fw_protect.Data.rUpdateProtect.ucLongNav = protect->long_nav;
+	fw_protect.Data.rUpdateProtect.ucMMProtect = protect->mix_mode;
+	fw_protect.Data.rUpdateProtect.ucGFProtect = protect->gf;
+	fw_protect.Data.rUpdateProtect.ucBW40Protect = protect->bw40;
+	fw_protect.Data.rUpdateProtect.ucRifsProtect = protect->rifs;
+	fw_protect.Data.rUpdateProtect.ucBW80Protect = protect->bw80;
+	fw_protect.Data.rUpdateProtect.ucBW160Protect = protect->bw160;
+	fw_protect.Data.rUpdateProtect.ucERProtectMask = protect->erp_mask;
 
-    MtCmdUpdateProtect(pAd, &fw_protect);
-
-    return ;
+	MtCmdUpdateProtect(pAd, &fw_protect);
 }
 
 
 VOID MtAsicUpdateRtsThldByFw (
-        struct _RTMP_ADAPTER *pAd,
-        MT_RTS_THRESHOLD_T *rts_thld)
+        struct _RTMP_ADAPTER *pAd, struct wifi_dev *wdev, UCHAR pkt_num, UINT32 length)
 {
+        MT_RTS_THRESHOLD_T rts_thld = {0};
+
+	rts_thld.band_idx = HcGetBandByWdev(wdev);
+	rts_thld.pkt_num_thld = pkt_num;
+	rts_thld.pkt_len_thld = length;
  	if(MTK_REV_GTE(pAd, MT7615, MT7615E1) && MTK_REV_LT(pAd, MT7615, MT7615E3) && pAd->CommonCfg.dbdc_mode)
 	{
 		;//DBDC does not support RTS setting
 	} else {
 		struct _EXT_CMD_UPDATE_PROTECT_T fw_rts;
 
-		fw_rts.ucProtectIdx = 1;
-		fw_rts.Data.rUpdateRtsThld.u4RtsPktLenThreshold = rts_thld->pkt_len_thld;
-		fw_rts.Data.rUpdateRtsThld.u4RtsPktNumThreshold = rts_thld->pkt_num_thld;
+		fw_rts.ucProtectIdx = UPDATE_RTS_THRESHOLD;
+		fw_rts.ucDbdcIdx = rts_thld.band_idx;
+		fw_rts.Data.rUpdateRtsThld.u4RtsPktLenThreshold = cpu2le32(rts_thld.pkt_len_thld);
+		fw_rts.Data.rUpdateRtsThld.u4RtsPktNumThreshold = cpu2le32(rts_thld.pkt_num_thld);
 
 		MtCmdUpdateProtect(pAd, &fw_rts);
 	}
-    return ;
 }
 
 
@@ -1564,12 +1622,19 @@ VOID MtAsicDisableSyncByFw(struct _RTMP_ADAPTER *pAd, UCHAR HWBssidIdx)
             continue;
         }
     }
-    ASSERT(wdev != NULL);
+    //ASSERT(wdev != NULL);
 
-    if (wdev == NULL || wdev->bss_info_argument.fgInitialized == FALSE)
+    if (wdev == NULL)
         return;
 
-    wdev->bss_info_argument.Active = FALSE;
+    if (WDEV_BSS_STATE(wdev) == BSS_INIT)
+    {
+		MTWF_LOG(DBG_CAT_TX, DBG_SUBCAT_ALL, DBG_LVL_WARN, ("%s: BssInfo idx (%d) is INIT currently!!!\n",
+			__FUNCTION__, wdev->bss_info_argument.ucBssIndex));
+        return;
+    }
+
+    WDEV_BSS_STATE(wdev) = BSS_INITED;
     CmdSetSyncModeByBssInfoUpdate(pAd, wdev->bss_info_argument);
 }
 
@@ -1597,12 +1662,19 @@ VOID MtAsicEnableBssSyncByFw(
             continue;
         }
     }
-    ASSERT(wdev != NULL);
+    //ASSERT(wdev != NULL);
 
-    if (wdev == NULL || wdev->bss_info_argument.fgInitialized == FALSE)
+    if (wdev == NULL)
         return;
 
-    wdev->bss_info_argument.Active = TRUE;
+    if (WDEV_BSS_STATE(wdev) == BSS_INIT)
+    {
+		MTWF_LOG(DBG_CAT_TX, DBG_SUBCAT_ALL, DBG_LVL_WARN, ("%s: BssInfo idx (%d) is INIT currently!!!\n",
+			__FUNCTION__, wdev->bss_info_argument.ucBssIndex));
+        return;
+    }
+
+    WDEV_BSS_STATE(wdev) = BSS_ACTIVE;
     CmdSetSyncModeByBssInfoUpdate(pAd, wdev->bss_info_argument);
 }
 
@@ -1743,7 +1815,7 @@ VOID MtAsicInsertRepeaterRootEntryByFw(
                 sizeof(EXT_CMD_MUAR_T) + sizeof(EXT_CMD_MUAR_MULTI_ENTRY_T));
 
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
-            ("\n%s %02x:%02x:%02x:%02x:%02x:%02x-%02x\n",
+            ("\n%s %02x:%02x:%02x:%02x:%02x:%02x-%02x (%d)\n",
             __FUNCTION__,
             pAddr[0],
             pAddr[1],
@@ -1751,7 +1823,8 @@ VOID MtAsicInsertRepeaterRootEntryByFw(
             pAddr[3],
             pAddr[4],
             pAddr[5] ,
-            ReptCliIdx));
+            ReptCliIdx,
+			Wcid));
 
     config_muar.ucMuarModeSel = MUAR_REPEATER;
     config_muar.ucEntryCnt = 1;

@@ -4,7 +4,7 @@
 /*! \file   "ra_ctrl_mt.c"
     \brief
 */
-
+#ifdef MTK_LICENSE
 /*******************************************************************************
 * Copyright (c) 2014 MediaTek Inc.
 *
@@ -46,9 +46,62 @@
 * (ICC).
 ********************************************************************************
 */
-
+#endif /* MTK_LICENSE */
 /*
 ** $Log: ra_ctrl_mt.c $
+**
+** 06 16 2016 chunting.wu
+** [WCNCR00121389] [JEDI][64-bit porting]
+** 	
+** 	1) Purpose:
+** 	Fix 4-byte alignment.
+** 	2) Changed function name:
+** 	RA_PHY_CFG_T, CMD_STAREC_AUTO_RATE_T, 
+** 	CMD_STAREC_AUTO_RATE_CFG_T
+** 	3) Code change description brief:
+** 	Fix 4-byte alignment.
+** 	4) Unit Test Result:
+** 	UT pass.
+**
+** 05 26 2016 chunting.wu
+** [WCNCR00121272] [MT7615] dynamic adjust max phy rate for mt7621 platform
+** 	
+** 	1) Purpose:
+** 	MT7621 can TX 4SS MCS8,9 when initial.
+** 	2) Changed function name:
+** 	MtCmdSetMaxPhyRate()
+** 	MacTableMaintenance()
+** 	3) Code change description brief:
+** 	send MCU command to limit max phy rate when TP > 50mbps.	
+** 	4) Unit Test Result:
+** 	RDUT pass.
+**
+** 05 04 2016 chunting.wu
+** [WCNCR00120115] [MT7615] change text format from dos to Unix avoid compile error
+** 	
+** 	1) Purpose:
+** 	Change text format from dos to unix.
+** 	2) Changed function name:
+** 	
+** 	3) Code change description brief:
+** 	
+** 	4) Unit Test Result:
+** 	Build pass.
+**
+** 03 11 2016 chunting.wu
+** [WCNCR00036330] [MT7615] Auto rate control
+** 	
+** 	1) Purpose:
+** 	Profile support G band 256QAM enable/disable.
+** 	2) Changed function name:
+** 	ExtEventGBand256QamProbeResule()
+** 	raWrapperEntrySet()
+** 	3) Code change description brief:
+** 	driver notify FW RA enable/disable G band 256QAM probing.
+** 	4) Unit Test Result:
+** 	RD UT pass
+** 	
+** 	Review: http://mtksap20:8080/go?page=NewReview&reviewid=242440
 **
 **
 **
@@ -227,369 +280,6 @@ raMinRssi(
 }
 
 
-#ifdef NEW_RATE_ADAPT_SUPPORT
-
-
-/*----------------------------------------------------------------------------*/
-/*!
-* \brief     Set TxPhy according to MaxPhy, rate table and config
-*
-* \param[in] pAd
-* \param[in] pRaEntry
-* \param[in] pRaCfg
-* \param[in] pRaInternal
-*
-* \return    None
-*/
-/*----------------------------------------------------------------------------*/
-VOID
-SetTxRateMtCore(
-	IN RTMP_ADAPTER *pAd,
-    IN P_RA_ENTRY_INFO_T pRaEntry,
-    IN P_RA_COMMON_INFO_T pRaCfg,
-    IN P_RA_INTERNAL_INFO_T pRaInternal,
-	IN RTMP_RA_GRP_TB *pTxRate
-	)
-{
-    UCHAR tx_mode = pTxRate->Mode;
-    UCHAR *pTable;
-#ifdef DOT11_VHT_AC
-    UCHAR tx_bw = pTxRate->BW;
-#endif /* DOT11_VHT_AC */
-
-    pTable = pRaInternal->pucTable;
-
-#ifdef DOT11_VHT_AC
-    if ((pRaCfg->PhyCaps & fPHY_CAP_VHT) && 
-            ((pTable == RateTableVht2S) || (pTable == RateTableVht1S) ||
-            (pTable == RateTableVht1S_MCS9) ||
-            (pTable == RateTableVht2S_BW20) ||
-            (pTable == RateTableVht2S_BW40) ||
-            (pTable == RateTableVht2S_MCS7)))
-    {
-        RTMP_RA_GRP_TB *pAdaptTbEntry = (RTMP_RA_GRP_TB *)pTxRate;
-        UCHAR bw_cap = BW_20;
-			
-        if (pRaEntry->MaxPhyCfg.BW != pAdaptTbEntry->BW)
-        {
-            switch (pRaEntry->MaxPhyCfg.BW)
-            {
-                case BW_80:
-                    bw_cap = pAdaptTbEntry->BW;
-                    break;
-                case BW_40:
-                    if (pAdaptTbEntry->BW == BW_80)
-                    {
-                        bw_cap = BW_40;
-                    }
-                    else
-                    {
-                        bw_cap = pAdaptTbEntry->BW;
-                    }
-                    break;
-                case BW_10:
-                    bw_cap = BW_10;
-                    break;
-                case BW_20:
-                default:
-                    if (pAdaptTbEntry->BW == BW_80 || pAdaptTbEntry->BW == BW_40)
-                    {
-                        bw_cap = BW_20;
-                    }
-                    else
-                    {
-                        bw_cap = pAdaptTbEntry->BW;
-                    }
-                    break;
-            }
-            tx_bw = bw_cap;
-        }
-        else
-        {
-            tx_bw = pAdaptTbEntry->BW;
-        }
-
-        if ((pRaEntry->force_op_mode == TRUE))
-        {
-            switch (pRaEntry->vhtOpModeChWidth) 
-            {
-                case 1:
-                    bw_cap = BW_40;
-                    break;
-                case 2:
-                    bw_cap = BW_80;
-                    break;
-                case 0:
-                default:
-                    bw_cap = BW_20;
-                    break;
-            }
-            if ((tx_bw != BW_10) && (tx_bw >= bw_cap))
-            {
-                tx_bw = bw_cap;
-            }
-        }
-
-        MTWF_LOG(DBG_CAT_RA, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("%s(): txbw=%d, txmode=%d\n", __FUNCTION__, tx_bw, tx_mode));
-    }
-#endif /* DOT11_VHT_AC */
-
-#ifdef DOT11_N_SUPPORT
-    if (tx_mode == MODE_HTMIX || tx_mode == MODE_HTGREENFIELD)
-    {
-        if ((pTxRate->STBC) && (pRaEntry->MaxPhyCfg.STBC))
-        {
-            pRaEntry->TxPhyCfg.STBC = STBC_USE;
-        }
-		else
-        {      
-            pRaEntry->TxPhyCfg.STBC = STBC_NONE;
-        }
-
-		if ((pTxRate->ShortGI || pRaCfg->TestbedForceShortGI) && (pRaEntry->MaxPhyCfg.ShortGI))
-        {      
-            pRaEntry->TxPhyCfg.ShortGI = GI_400;
-        }
-        else
-        {
-            pRaEntry->TxPhyCfg.ShortGI = GI_800;
-        }
-    }
-    else
-    {
-        pRaEntry->TxPhyCfg.STBC = STBC_NONE;
-    }
-
-#ifndef COMPOS_WIN
-    // TODO: Lens, fix it!
-    pRaEntry->TxPhyCfg.ldpc = 0;
-    if (CLIENT_STATUS_TEST_FLAG(pRaEntry, fCLIENT_STATUS_VHT_RX_LDPC_CAPABLE))
-    {
-        pRaEntry->TxPhyCfg.ldpc |= VHT_LDPC;
-    }
-    if (CLIENT_STATUS_TEST_FLAG(pRaEntry, fCLIENT_STATUS_HT_RX_LDPC_CAPABLE))
-    {
-        pRaEntry->TxPhyCfg.ldpc |= HT_LDPC;
-    }
-#endif
-
-#ifdef DOT11_VHT_AC
-    if (tx_mode == MODE_VHT)
-    {
-        if ((CLIENT_STATUS_TEST_FLAG(pRaEntry, fCLIENT_STATUS_SGI80_CAPABLE)) && 
-                (pTxRate->ShortGI))
-        {
-            pRaEntry->TxPhyCfg.ShortGI = GI_400;
-        }
-        else
-        {
-            pRaEntry->TxPhyCfg.ShortGI = GI_800;
-        }
-
-        if (pTxRate->STBC && (CLIENT_STATUS_TEST_FLAG(pRaEntry, fCLIENT_STATUS_VHT_RXSTBC_CAPABLE)))
-        {
-            pRaEntry->TxPhyCfg.STBC = STBC_USE;
-        }
-        else
-        {
-            pRaEntry->TxPhyCfg.STBC = STBC_NONE;
-        }
-    }
-#endif /* DOT11_VHT_AC */
-#endif /* DOT11_N_SUPPORT */
-
-    if (pTxRate->CurrMCS < MCS_AUTO)
-    {   
-        pRaEntry->TxPhyCfg.MCS = pTxRate->CurrMCS;
-    }
-
-#ifdef DOT11_N_SUPPORT
-    if ((pRaCfg->HtMode == HTMODE_GF) &&
-            (pRaEntry->fgHtCapInfoGF == HTMODE_GF)) 
-    {
-        pRaEntry->TxPhyCfg.MODE = MODE_HTGREENFIELD;
-    }
-    else
-    {
-        pRaEntry->TxPhyCfg.MODE = tx_mode;
-    }
-
-    if ((pRaCfg->TestbedForceGreenField & pRaEntry->fgHtCapInfoGF) && 
-            (pRaEntry->TxPhyCfg.MODE == MODE_HTMIX))
-    {
-        /* force Tx GreenField */
-        pRaEntry->TxPhyCfg.MODE = MODE_HTGREENFIELD;
-    }
-
-    /* BW depends on BSSWidthTrigger and Negotiated BW */
-    if (pRaCfg->bRcvBSSWidthTriggerEvents ||
-            (pRaEntry->MaxPhyCfg.BW == BW_20) ||
-            (pRaEntry->ucBBPCurrentBW == BW_20))
-    {
-        pRaEntry->TxPhyCfg.BW = BW_20;
-    }
-    else
-    {
-        pRaEntry->TxPhyCfg.BW = BW_40;
-    }
-
-#ifdef DOT11_VHT_AC
-    if (pRaEntry->ucBBPCurrentBW == BW_80 &&
-            pRaEntry->MaxPhyCfg.BW == BW_80 &&
-            pRaEntry->MaxPhyCfg.MODE == MODE_VHT)
-    {
-        pRaEntry->TxPhyCfg.BW = BW_80;
-    }
-
-#ifdef NEW_RATE_ADAPT_SUPPORT
-    if ((pTable == RateTableVht2S) ||
-            (pTable == RateTableVht2S_BW20) ||
-            (pTable == RateTableVht2S_BW40) ||
-            (pTable == RateTableVht1S) ||
-            (pTable == RateTableVht1S_MCS9) ||
-            (pTable == RateTableVht2S_MCS7))
-    {
-        RTMP_RA_GRP_TB *pAdaptTbEntry = (RTMP_RA_GRP_TB *)pTxRate;
-        pRaEntry->TxPhyCfg.MCS = pAdaptTbEntry->CurrMCS;
-        pRaEntry->TxPhyCfg.VhtNss = pAdaptTbEntry->dataRate;
-        pRaEntry->TxPhyCfg.BW = tx_bw;
-    }
-    else if (pRaEntry->MaxPhyCfg.MODE == MODE_VHT)
-    {
-        UCHAR bw_max = pRaEntry->MaxPhyCfg.BW;
-        if (pRaEntry->force_op_mode == TRUE)
-        {
-            switch (pRaEntry->vhtOpModeChWidth)
-            {
-                case 1:
-                    bw_max = BW_40;
-                    break;
-                case 2: /* not support for BW_80 for other rate table */
-                case 0:
-                default:
-                    bw_max = BW_20;
-                    break;
-            }
-        }
-
-        if ( (bw_max != BW_10) &&
-            (bw_max > pRaEntry->ucBBPCurrentBW))
-        {
-            bw_max = pRaEntry->ucBBPCurrentBW;
-        }
-        pRaEntry->TxPhyCfg.BW = bw_max;		
-    }
-#endif /* NEW_RATE_ADAPT_SUPPORT */
-
-#endif /* DOT11_VHT_AC */
-
-	/* Reexam each bandwidth's SGI support. */
-    if ((pRaEntry->TxPhyCfg.BW == BW_20 && !CLIENT_STATUS_TEST_FLAG(pRaEntry, fCLIENT_STATUS_SGI20_CAPABLE)) ||
-            (pRaEntry->TxPhyCfg.BW == BW_40 && !CLIENT_STATUS_TEST_FLAG(pRaEntry, fCLIENT_STATUS_SGI40_CAPABLE)) )
-    {
-        pRaEntry->TxPhyCfg.ShortGI = GI_800;
-    }
-#endif /* DOT11_N_SUPPORT */
-
-#ifdef DOT11_N_SUPPORT
-    /*  Disable invalid HT Duplicate modes to prevent PHY error */
-    if (pRaEntry->TxPhyCfg.MCS == MCS_32)
-    {
-        if ((pRaEntry->TxPhyCfg.BW != BW_40) && (pRaEntry->TxPhyCfg.BW!=BW_80))
-        {
-            pRaEntry->TxPhyCfg.MCS = 0;
-        }
-    }
-#endif /*  DOT11_N_SUPPORT */
-
-
-#ifdef MCS_LUT_SUPPORT
-    MtAsicMcsLutUpdateCore(pAd, pRaEntry, pRaCfg, pRaInternal);
-#endif /* MCS_LUT_SUPPORT */
-}
-
-
-/*----------------------------------------------------------------------------*/
-/*!
-* \brief     The entrypoint of set new tx rate
-*
-* \param[in] pAd
-* \param[in] pRaEntry
-* \param[in] pRaCfg
-* \param[in] pRaInternal
-*
-* \return    None
-*/
-/*----------------------------------------------------------------------------*/
-VOID
-NewTxRateMtCore(
-    IN PRTMP_ADAPTER pAd,
-    IN P_RA_ENTRY_INFO_T pRaEntry,
-    IN P_RA_COMMON_INFO_T pRaCfg,
-    IN P_RA_INTERNAL_INFO_T pRaInternal
-    )
-{
-    RTMP_RA_GRP_TB *pNextTxRate;
-    UCHAR *pTable;
-
-    if ((pRaEntry == NULL) || (pRaInternal->pucTable == NULL))
-    {
-        return;
-    }
-    else
-    {
-        pTable = pRaInternal->pucTable;
-    }
-
-    /*  Get pointer to CurrTxRate entry */
-#ifdef NEW_RATE_ADAPT_SUPPORT
-    if (ADAPT_RATE_TABLE(pTable))
-    {   
-        pNextTxRate = PTX_RA_GRP_ENTRY(pTable, pRaInternal->ucCurrTxRateIndex);
-    }
-    else
-#endif /* NEW_RATE_ADAPT_SUPPORT */
-    {
-        MTWF_LOG(DBG_CAT_RA, DBG_SUBCAT_ALL, DBG_LVL_ERROR,("%s:Not GRP table!\n", __FUNCTION__));
-        return;
-    }
-
-#ifdef NEW_RATE_ADAPT_SUPPORT
-    if (pRaEntry->fgAuthWapiMode)
-    {
-        if (pTable == RateSwitchTableAdapt11N2S)
-        {
-            if ((pRaInternal->ucCurrTxRateIndex >= 14) && (pRaInternal->ucCurrTxRateIndex <= 16))
-            {
-                pNextTxRate = PTX_RA_GRP_ENTRY(pTable, 13);
-            }
-        }
-    }
-#endif /* NEW_RATE_ADAPT_SUPPORT */
-
-    /*  Set new rate */
-    SetTxRateMtCore(pAd, pRaEntry, pRaCfg, pRaInternal ,pNextTxRate);
-
-#ifdef DOT11_N_SUPPORT
-    /*  Disable invalid HT Duplicate modes to prevent PHY error */
-    if (pRaEntry->TxPhyCfg.MCS == MCS_32)
-    {
-        if ((pRaEntry->TxPhyCfg.BW != BW_40) && (pRaEntry->TxPhyCfg.BW!=BW_80))
-        {
-            pRaEntry->TxPhyCfg.MCS = 0;
-        }
-        else
-        {
-            pRaEntry->TxPhyCfg.STBC = 0;
-        }
-    }
-#endif /*  DOT11_N_SUPPORT */
-
-#ifndef COMPOS_WIN
-    RA_SAVE_LAST_TX_CFG(pRaEntry);
-#endif /* !COMPOS_WIN */
-}
-#endif /* NEW_RATE_ADAPT_SUPPORT */
 
 
 #if defined(RATE_ADAPT_AGBS_SUPPORT) && (!defined(RACTRL_FW_OFFLOAD_SUPPORT) || defined(WIFI_BUILD_RAM))
@@ -809,7 +499,7 @@ SetTxRateMtCoreAGBS(
     }
 #endif /* DOT11_VHT_AC */
 
-    if ((pRaEntry->fgGband256QAMSupport) && (ucTxMode == MODE_VHT))
+    if ((pRaEntry->ucGband256QAMSupport) && (ucTxMode == MODE_VHT))
     {
         pRaEntry->TxPhyCfg.VhtNss = pRaInternal->ucMcsGroup;
     }
@@ -998,12 +688,6 @@ raSelectTxRateTable(
     do
     {
 #ifdef DOT11_VHT_AC
-#ifdef NEW_RATE_ADAPT_SUPPORT
-        if (pRaCfg->ucRateAlg == RATE_ALG_GRP)
-        {
-            *ppTable = raSelectVHTTxRateTableGRP(pRaEntry, pRaCfg, pRaInternal);
-        }
-#endif /* NEW_RATE_ADAPT_SUPPORT */
 
 #if defined(RATE_ADAPT_AGBS_SUPPORT) && (!defined(RACTRL_FW_OFFLOAD_SUPPORT) || defined(WIFI_BUILD_RAM))
         if (pRaCfg->ucRateAlg == RATE_ALG_AGBS)
@@ -1018,12 +702,6 @@ raSelectTxRateTable(
         }
 #endif /* DOT11_VHT_AC */
 
-#ifdef NEW_RATE_ADAPT_SUPPORT
-        if (pRaCfg->ucRateAlg == RATE_ALG_GRP) 
-        {
-            *ppTable = raSelectTxRateTableGRP(pRaEntry, pRaCfg, pRaInternal);
-        }
-#endif /* NEW_RATE_ADAPT_SUPPORT */
 
 #if defined(RATE_ADAPT_AGBS_SUPPORT) && (!defined(RACTRL_FW_OFFLOAD_SUPPORT) || defined(WIFI_BUILD_RAM))
         if (pRaCfg->ucRateAlg == RATE_ALG_AGBS) 
@@ -1034,16 +712,6 @@ raSelectTxRateTable(
 
     } while(FALSE);
 
-#ifdef NEW_RATE_ADAPT_SUPPORT
-    if (pRaCfg->ucRateAlg == RATE_ALG_GRP) 
-    {
-        if (ADAPT_RATE_TABLE(*ppTable) == FALSE)
-        {
-            *ppTable = RateSwitchTableAdapt11B;
-            MTWF_LOG(DBG_CAT_RA, DBG_SUBCAT_ALL, DBG_LVL_ERROR,("%s: Invalid Rate Table, Set to RateSwitchTableAdapt11B.\n", __FUNCTION__));
-        }       
-    }
-#endif /* NEW_RATE_ADAPT_SUPPORT */
 
 #if defined(RATE_ADAPT_AGBS_SUPPORT) && (!defined(RACTRL_FW_OFFLOAD_SUPPORT) || defined(WIFI_BUILD_RAM))
     if (pRaCfg->ucRateAlg == RATE_ALG_AGBS) 
@@ -1258,175 +926,6 @@ raStbcSettingCheck(
 }
 
 
-#ifdef NEW_RATE_ADAPT_SUPPORT
-/*----------------------------------------------------------------------------*/
-/*!
-* \brief     set tx rate table in wtbl2 by TxPhyCfg
-*
-* \param[in] phy_mode
-* \param[in] mcs
-* \param[in] stbc
-*
-* \return    None
-*/
-/*----------------------------------------------------------------------------*/
-VOID
-MtAsicMcsLutUpdateCore(
-    IN RTMP_ADAPTER *pAd,
-    IN P_RA_ENTRY_INFO_T pRaEntry,
-    IN P_RA_COMMON_INFO_T pRaCfg,
-    IN P_RA_INTERNAL_INFO_T pRaInternal
-    )
-{
-    UINT_32 rate[8];
-    UINT_8 stbc, nsts, preamble, ucVhtNss;
-    BOOL fgSpeEn = FALSE;
-    UINT_8 ucIndex;
-    BOOL fgBFOn = FALSE;
-    //CHAR rssi;
-
-    if (pRaCfg->fgShortPreamble == TRUE)
-    {   
-        preamble = SHORT_PREAMBLE;
-    }
-    else
-    {   
-        preamble = LONG_PREAMBLE;
-    }
-
-    stbc = raStbcSettingCheck(pRaEntry->TxPhyCfg.STBC, 
-                pRaEntry->TxPhyCfg.MODE, 
-                pRaEntry->TxPhyCfg.MCS, 
-                pRaEntry->TxPhyCfg.VhtNss,
-                fgBFOn,
-                pRaCfg->force_one_tx_stream);
-
-    nsts = get_nsts_by_mcs(pRaEntry->TxPhyCfg.MODE, pRaEntry->TxPhyCfg.MCS, stbc, pRaEntry->TxPhyCfg.VhtNss);
-
-    if (((pRaEntry->ucMmpsMode != MMPS_STATIC) || ( pRaEntry->TxPhyCfg.MODE < MODE_HTMIX ))
-            && (pRaCfg->force_one_tx_stream == FALSE)
-            )
-    {
-        //rssi = raMaxRssi(pRaCfg, pRaEntry->AvgRssiSample[0], pRaEntry->AvgRssiSample[1], pRaEntry->AvgRssiSample[2]);
-        //if (rssi < -50 )
-        {
-            fgSpeEn = TRUE;
-        }
-    }
-
-    rate[0] = tx_rate_to_tmi_rate(pRaEntry->TxPhyCfg.MODE,
-                                    pRaEntry->TxPhyCfg.MCS,
-                                    nsts,
-                                    stbc,
-                                    preamble);
-    rate[0] &= 0xfff;
-
-    if ( pRaEntry->fgAutoTxRateSwitch == TRUE )
-    {
-        BOOL fgLowestRate = FALSE;
-        UCHAR DownRateIdx, CurrRateIdx;
-        UCHAR mode, mcs;
-
-        CurrRateIdx = pRaInternal->ucCurrTxRateIndex;
-        DownRateIdx = CurrRateIdx;
-
-        for ( ucIndex = 1; ucIndex < 8 ; ucIndex++ )
-        {
-            if (ADAPT_RATE_TABLE(pRaInternal->pucTable))
-            {
-                RTMP_RA_GRP_TB *pCurrTxRate;
-
-                if ( ucIndex == 7 )
-                {
-                    if (fgLowestRate == FALSE)
-                    {
-                        do {
-                            CurrRateIdx = DownRateIdx;
-                            DownRateIdx = raSelectDownRate(pRaEntry, pRaCfg, pRaInternal, CurrRateIdx);
-                        } while ( CurrRateIdx != DownRateIdx );
-                    }
-                }
-				else
-                {
-                    if (fgLowestRate == FALSE)
-                    {
-                        DownRateIdx = raSelectDownRate(pRaEntry, pRaCfg, pRaInternal, CurrRateIdx);
-                    }
-                }
-
-                if (pRaEntry->TxPhyCfg.ShortGI)
-                {
-                    pCurrTxRate = PTX_RA_GRP_ENTRY(pRaInternal->pucTable, DownRateIdx);
-
-                    if ( pCurrTxRate->CurrMCS == pRaEntry->TxPhyCfg.MCS )
-                    {
-                        CurrRateIdx = DownRateIdx;
-                        DownRateIdx = raSelectDownRate(pRaEntry, pRaCfg, pRaInternal, CurrRateIdx);
-                    }
-                }
-
-                pCurrTxRate = PTX_RA_GRP_ENTRY(pRaInternal->pucTable, DownRateIdx);
-                mode = pCurrTxRate->Mode;
-                mcs = pCurrTxRate->CurrMCS;
-                ucVhtNss = pRaEntry->TxPhyCfg.MODE == MODE_VHT ? pCurrTxRate->dataRate : 0;
-            }
-            else 
-            {
-                mode = MODE_CCK;
-                mcs = 0;
-                DownRateIdx = 0;
-                ucVhtNss = 0;
-                MTWF_LOG(DBG_CAT_RA, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s: Not support legacy table.\n", __FUNCTION__));
-            }
-
-            stbc = raStbcSettingCheck(pRaEntry->TxPhyCfg.STBC, 
-                        mode, 
-                        mcs, 
-                        ucVhtNss,
-                        fgBFOn,
-                        pRaCfg->force_one_tx_stream);
-
-            nsts = get_nsts_by_mcs(mode, mcs, stbc, ucVhtNss);
-            rate[ucIndex] = tx_rate_to_tmi_rate(mode,
-                                                mcs,
-                                                nsts,
-                                                stbc,
-                                                preamble);
-
-            rate[ucIndex] &= 0xfff;
-
-            if (CurrRateIdx == DownRateIdx)
-            {
-                fgLowestRate = TRUE;
-            }
-            else
-            {
-                CurrRateIdx = DownRateIdx;
-            }
-
-        }
-    }
-    else
-    {
-        rate[1] = rate[2] = rate[3] = rate[4] = rate[5] = rate[6] = rate[7] = rate[0];
-    }
-
-    MtAsicTxCapAndRateTableUpdate(pAd, pRaEntry->ucWcid, &pRaEntry->TxPhyCfg, rate, 7, fgSpeEn);
-
-    MTWF_LOG(DBG_CAT_RA, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s():WCID=%d\n",
-            __FUNCTION__, pRaEntry->ucWcid));
-
-    MTWF_LOG(DBG_CAT_RA, DBG_SUBCAT_ALL, DBG_LVL_TRACE, 
-		("\tCurTxRateIdx=%d, Mode/BW/MCS/STBC/LDPC/SGI=%d/%d/%d/%d/%d/%d\n\n",
-            pRaInternal->ucCurrTxRateIndex,
-            pRaEntry->TxPhyCfg.MODE,
-            pRaEntry->TxPhyCfg.BW,
-            pRaEntry->TxPhyCfg.MCS,
-            pRaEntry->TxPhyCfg.STBC,
-            pRaEntry->TxPhyCfg.ldpc,
-            pRaEntry->TxPhyCfg.ShortGI));
-}
-#endif /* NEW_RATE_ADAPT_SUPPORT */
 
 
 #if defined(RATE_ADAPT_AGBS_SUPPORT) && (!defined(RACTRL_FW_OFFLOAD_SUPPORT) || defined(WIFI_BUILD_RAM))

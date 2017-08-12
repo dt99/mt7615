@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,7 +14,7 @@
 	Module Name:
 	mt_fwdump.c
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 #ifdef FW_DUMP_SUPPORT	

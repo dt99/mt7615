@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,7 +14,7 @@
 	Module Name:
 	ate.h
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __ATE_H__
 #define __ATE_H__
 #include "LoopBack.h"
@@ -57,7 +58,7 @@ INT32 ATEExit(struct _RTMP_ADAPTER *pAd);
 #define fATE_FFT_ENABLE				(1 << 7)
 #define fATE_EXIT					(1 << 8)
 #define fATE_IN_RFTEST				(1 << 9)
-#define fATE_IN_BF				(1 << 10)
+#define fATE_IN_BF				    (1 << 10)
 #define fATE_IN_ICAPOVERLAP			(1 << 11)
 /* Stop Transmission */
 #define ATE_TXSTOP                  ((~(fATE_TX_ENABLE))&(~(fATE_TXCONT_ENABLE))&(~(fATE_TXCARR_ENABLE))&(~(fATE_TXCARRSUPP_ENABLE))&(~(fATE_MPS)))
@@ -101,9 +102,20 @@ INT32 ATEExit(struct _RTMP_ADAPTER *pAd);
 #define WF1_TX_ONE_TONE_10M		0x5
 #define WF0_TX_ONE_TONE_DC		0x6
 #define WF1_TX_ONE_TONE_DC		0x7
-#define MAX_TEST_PKT_LEN	1496
-#define MIN_TEST_PKT_LEN	25
-#define MAX_TEST_BKCR_NUM	20
+
+#define MAX_TEST_PKT_LEN        1496
+#define MIN_TEST_PKT_LEN        25
+#define MAX_TEST_BKCR_NUM       20
+
+#define HT_AMPDU_MAX_LEN        65000
+#define VHT_MPDU_MAX_LEN        6700 // 11454
+#define MPDU_DEFAULT_LEN        4096
+#define MSDU_MAX_LEN            2304
+#define MSDU_MIN_LEN            22
+#define MAC_HDR_DEFAULT_LEN     24
+#define MAC_HDR_QOS_LEN         26
+
+
 #if defined(MT7615)
 #define ATE_TESTPKT_LEN	13311	//Setting max packet length to 13311 on MT7615
 #else
@@ -124,6 +136,11 @@ struct _RX_BLK;
 #define IS_ATE_DBDC(_pAd) FALSE
 #define TESTMODE_BAND_NUM 1
 #endif
+
+/* Antenna mode */
+#define ANT_MODE_DEFAULT 0
+#define ANT_MODE_SPE_IDX 1
+
 #if !defined(COMPOS_TESTMODE_WIN) && !defined(COMPOS_WIN)
 /* Allow Sleep */
 #define TESTMODE_SEM struct semaphore
@@ -174,9 +191,12 @@ typedef struct _ATE_OPERATION {
 	INT32 (*GetTxFreqOffset)(struct _RTMP_ADAPTER *pAd, UINT32 *FreqOffset);
 	INT32 (*SetChannel)(struct _RTMP_ADAPTER *pAd, INT16 Value, UINT32 band_idx, UINT32 pri_sel, UINT32 reason, UINT32 Ch_Band);
 	INT32 (*SetBW)(struct _RTMP_ADAPTER *pAd, INT16 Value, UINT32 band_idx);
+	INT32 (*SetDutyCycle)(struct _RTMP_ADAPTER *pAd, UINT32 value, UINT32 band_idx);
+	INT32 (*SetPktTxTime)(struct _RTMP_ADAPTER *pAd, UINT32 value, UINT32 band_idx);
 	INT32 (*SampleRssi)(struct _RTMP_ADAPTER *pAd, struct _RX_BLK *pRxBlk);
     INT32 (*SetAIFS)(struct _RTMP_ADAPTER *pAd, CHAR Value);
 	INT32 (*SetSlotTime)(struct _RTMP_ADAPTER *pAd, UINT32 SlotTime, UINT32 SifsTime, UINT32 BandIdx);
+    INT32 (*SetPowerDropLevel)(struct _RTMP_ADAPTER *pAd, UINT32 PowerDropLevel, UINT32 BandIdx);
     INT32 (*SetTSSI)(struct _RTMP_ADAPTER *pAd, CHAR WFSel, CHAR Setting);
 	INT32 (*LowPower)(struct _RTMP_ADAPTER *pAd, UINT32 Control);
     INT32 (*SetDPD)(struct _RTMP_ADAPTER *pAd, CHAR WFSel, CHAR Setting);
@@ -190,11 +210,16 @@ typedef struct _ATE_OPERATION {
 	INT32 (*RfRegWrite)(struct _RTMP_ADAPTER *pAd, UINT32 WFSel, UINT32 Offset, UINT32 Value);
 	INT32 (*RfRegRead)(struct _RTMP_ADAPTER *pAd, UINT32 WFSel, UINT32 Offset, UINT32 *Value);
 	INT32 (*GetFWInfo)(struct _RTMP_ADAPTER *pAd, UCHAR *FWInfo);
-#ifdef CAL_TO_FLASH_SUPPORT
-	INT32 (*RxSetlfTest)(struct _RTMP_ADAPTER *pAd, RTMP_STRING *arg);
+#ifdef PRE_CAL_TRX_SET1_SUPPORT
+	INT32 (*RxSelfTest)(struct _RTMP_ADAPTER *pAd, RTMP_STRING *arg);
 	INT32 (*TxDPDTest)(struct _RTMP_ADAPTER *pAd, RTMP_STRING *arg);
-#endif /* CAL_TO_FLASH_SUPPORT */
-
+#endif /* PRE_CAL_TRX_SET1_SUPPORT */
+#ifdef PRE_CAL_TRX_SET2_SUPPORT
+	INT32 (*PreCalTest)(struct _RTMP_ADAPTER *pAd, UINT8 CalId, UINT32 ChGrpId);    
+#endif /* PRE_CAL_TRX_SET2_SUPPORT */
+#ifdef PA_TRIM_SUPPORT
+    INT32 (*PATrim)(struct _RTMP_ADAPTER *pAd, PUINT32 pData);
+#endif/* PA_TRIM_SUPPORT */
 #if defined(TXBF_SUPPORT) && defined(MT_MAC)
 	INT32 (*SetATETxSoundingProc)(struct _RTMP_ADAPTER *pAd, UCHAR SoundingMode);
 	INT32 (*StartTxSKB)(struct _RTMP_ADAPTER *pAd, UINT32 band_idx);
@@ -390,6 +415,7 @@ typedef struct _BAND_INFO{
 	UCHAR Ch_Band;
 	UCHAR ControlChl;
 	UCHAR PriSel;
+    UINT32 OutBandFreq;	
 	UCHAR Nss;
 	UCHAR BW;
 	UCHAR PerPktBW;
@@ -408,6 +434,15 @@ typedef struct _BAND_INFO{
 	UINT32 RFFreqOffset;
 	UINT32 IPG;
 	UINT32 thermal_val;
+	UINT32 duty_cycle;
+	UINT32 pkt_tx_time;
+    UINT32 pkt_tx_len;
+    UINT32 pkt_msdu_len;
+    UINT32 pkt_hdr_len;
+    UINT32 pkt_ampdu_cnt;
+    UINT8 pkt_need_qos;
+    UINT8 pkt_need_amsdu;
+    UINT8 pkt_need_ampdu;
 #ifdef TXBF_SUPPORT
 	UCHAR eTxBf;
 	UCHAR iTxBf;
@@ -426,6 +461,11 @@ typedef struct _BAND_INFO{
 	USHORT HLen;		/* Header Length */
 	USHORT seq;
 	HQA_MPS_CB mps_cb;
+
+    BOOLEAN  fgTxPowerSKUEn;        /* SKU On/Off status */
+    BOOLEAN  fgTxPowerPercentageEn; /* Power Percentage On/Off status */
+    BOOLEAN  fgTxPowerBFBackoffEn;  /* BF Backoff On/Off status */
+    UINT32   PercentageLevel;       /* TxPower Percentage Level */
 } BAND_INFO;
 #endif
 
@@ -478,6 +518,7 @@ typedef struct _ATE_CTRL {
 	UCHAR Ch_Band;
 	UCHAR ControlChl;
 	UCHAR PriSel;
+    UINT32 OutBandFreq;	
 	UCHAR Nss;
 	UCHAR BW;
 	UCHAR PerPktBW;
@@ -497,8 +538,18 @@ typedef struct _ATE_CTRL {
 	UINT32 RFFreqOffset;
 	UINT32 IPG;
 	UINT32 thermal_val;
+	UINT32 duty_cycle;
+	UINT32 pkt_tx_time;
+    UINT32 pkt_tx_len;
+    UINT32 pkt_msdu_len;
+    UINT32 pkt_hdr_len;
+    UINT32 pkt_ampdu_cnt;
+    UINT8 pkt_need_qos;
+    UINT8 pkt_need_amsdu;
+    UINT8 pkt_need_ampdu;
 #ifdef TXBF_SUPPORT
     BOOLEAN fgEBfEverEnabled;
+    BOOLEAN fgBw160;
 	UCHAR eTxBf;
 	UCHAR iTxBf;
 	UCHAR *txbf_info;
@@ -555,6 +606,11 @@ typedef struct _ATE_CTRL {
 	ULONG PeriodicRound;
 	OS_NDIS_SPIN_LOCK TssiSemLock;
 #endif
+
+    BOOLEAN  fgTxPowerSKUEn;        /* SKU On/Off status */
+    BOOLEAN  fgTxPowerPercentageEn; /* Power Percentage On/Off status */
+    BOOLEAN  fgTxPowerBFBackoffEn;  /* BF Backoff On/Off status */
+    UINT32   PercentageLevel;       /* TxPower Percentage Level */
 } ATE_CTRL;
 
 

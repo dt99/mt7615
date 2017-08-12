@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -26,7 +27,7 @@
 	--------    ----------    ----------------------------------------------
 	Arvin Tai     2012/05/02
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 REG_PAIR RT6352_VGA_TABLE[] =
@@ -370,6 +371,7 @@ VOID RtmpKickOutHwNullFrame(
 			mac_info.TxRate = 15;
 			mac_info.Txopmode = IFS_HTTXOP;
 			mac_info.Preamble = LONG_PREAMBLE;
+			mac_info.IsAutoRate = FALSE;
 			mac_info.SpeEn = 1;
 		
 #ifdef MT_MAC	

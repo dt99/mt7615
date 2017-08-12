@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,7 +14,7 @@
 	Module Name:
 	fwdl.c
 */
-
+#endif /* MTK_LICENSE */
 #ifdef COMPOS_WIN
 #include "MtConfig.h"
 #if defined(EVENT_TRACING)
@@ -1159,7 +1160,7 @@ NDIS_STATUS AndesMTLoadRomMethodFwDlRing(RTMP_ADAPTER *ad)
         goto release_sem;
 
     /* 3. ROM patch start negotiation phase */
-    ret = MtCmdPatchFinishReq(ad);
+    MtCmdPatchFinishReq(ad);
 
     MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("Send checksum req..\n"));
 
@@ -1172,8 +1173,6 @@ NDIS_STATUS AndesMTLoadRomMethodFwDlRing(RTMP_ADAPTER *ad)
             MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_OFF, 
                 ("checksum fail!, local(0x%x) <> fw(0x%x)\n", 
                     total_checksum, pChipOps->AndesMTGetCrc(ad)));
-
-            ret = NDIS_STATUS_FAILURE;
         }
         MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_OFF, 
             ("checksum=0x%x\n", pChipOps->AndesMTGetCrc(ad)));
@@ -1417,8 +1416,6 @@ NDIS_STATUS AndesMTLoadRomPatchMath1(RTMP_ADAPTER *ad)
 		if (total_checksum != pChipOps->AndesMTGetCrc(ad)) {
 			MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("checksum fail!, local(0x%x) <> fw(0x%x)\n", total_checksum,
 											pChipOps->AndesMTGetCrc(ad)));
-
-			ret = NDIS_STATUS_FAILURE;
 		}
 		MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("checksum=0x%x\n", pChipOps->AndesMTGetCrc(ad)));
 	}

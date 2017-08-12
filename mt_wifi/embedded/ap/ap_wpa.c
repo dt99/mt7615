@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -26,6 +27,7 @@
     Jan Lee     03-07-22        Initial
     Rory Chen   04-11-29        Add WPA2PSK
 */
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 extern UCHAR	EAPOL[];

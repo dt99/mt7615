@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -26,7 +27,7 @@
 	--------	----------		----------------------------------------------
 	Fonchi		2006-6-23		modified for rt61-APClinent
 */
-
+#endif /* MTK_LICENSE */
 #ifdef APCLI_SUPPORT
 
 #include "rt_config.h"
@@ -94,6 +95,49 @@ DECLARE_TIMER_FUNCTION(ApCliWpaDisassocApAndBlockAssoc);
 BUILD_TIMER_FUNCTION(ApCliWpaDisassocApAndBlockAssoc);
 #endif /* APCLI_CERT_SUPPORT */
 
+#ifdef FAST_EAPOL_WAR
+static VOID ApCliAssocDeleteMacEntry(
+	IN	PRTMP_ADAPTER	pAd,
+	IN  UCHAR ifIndex,
+	IN  UCHAR CliIdx)
+{
+	
+	PAPCLI_STRUCT pApCliEntry = NULL;
+	
+#ifdef MAC_REPEATER_SUPPORT
+	PREPEATER_CLIENT_ENTRY pReptEntry = NULL;	
+	if (CliIdx != 0xff) {
+		pReptEntry = &pAd->ApCfg.pRepeaterCliPool[CliIdx];
+		pApCliEntry = &pAd->ApCfg.ApCliTab[ifIndex];
+	} else 
+#endif
+	{
+		pApCliEntry = &pAd->ApCfg.ApCliTab[ifIndex];
+	}
+
+#ifdef MAC_REPEATER_SUPPORT
+	if (CliIdx != 0xFF) {
+		if ((pReptEntry->pre_entry_alloc == TRUE) && 
+				(pReptEntry->CliValid == FALSE)) {
+			UCHAR	MacTabWCID;
+			MacTabWCID = pReptEntry->MacTabWCID;
+			MacTableDeleteEntry(pAd, MacTabWCID, pAd->MacTab.Content[MacTabWCID].Addr);
+			pReptEntry->MacTabWCID = 0xFF;
+			pReptEntry->pre_entry_alloc = FALSE;
+		}
+	} else
+#endif
+	{
+		if ((pApCliEntry->pre_entry_alloc == TRUE) && 
+				(pApCliEntry->Valid == FALSE)) {
+			UCHAR	MacTabWCID;
+			MacTabWCID = pApCliEntry->MacTabWCID;
+			MacTableDeleteEntry(pAd, MacTabWCID, APCLI_ROOT_BSSID_GET(pAd, MacTabWCID));
+			pApCliEntry->pre_entry_alloc = FALSE;
+		}
+	}
+}
+#endif /*FAST_EAPOL_WAR*/
 /*
     ==========================================================================
     Description:
@@ -145,7 +189,7 @@ VOID ApCliAssocStateMachineInit(
 		RTMPInitTimer(pAd,
 				&pAd->ApCfg.ApCliTab[i].MlmeAux.WpaDisassocAndBlockAssocTimer, 
 				GET_TIMER_FUNCTION(ApCliWpaDisassocApAndBlockAssoc),
-				pAd,
+				(PVOID)pApCliEntry,
 				FALSE);
 #endif /* APCLI_CERT_SUPPORT */
 	}
@@ -191,15 +235,14 @@ static VOID ApCliWpaDisassocApAndBlockAssoc(
     IN PVOID SystemSpecific3) 
 {
 
-	RTMP_ADAPTER *pAd = (PRTMP_ADAPTER)FunctionContext;
-	MLME_DISASSOC_REQ_STRUCT DisassocReq;
-	APCLI_STRUCT *pApCliEntry;
+	APCLI_STRUCT *pApCliEntry = (APCLI_STRUCT *)FunctionContext;
+	RTMP_ADAPTER *pAd = (RTMP_ADAPTER *)pApCliEntry->pAd;
 
-	pAd->ApCfg.ApCliTab[0].bBlockAssoc = TRUE;
+	MLME_DISASSOC_REQ_STRUCT DisassocReq;
+
+	pApCliEntry->bBlockAssoc = TRUE;
 	MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE,
 		("(%s) disassociate with current AP after sending second continuous EAPOL frame.\n", __FUNCTION__));
-
-	pApCliEntry = &pAd->ApCfg.ApCliTab[0];
 
 	DisassocParmFill(pAd, &DisassocReq, pApCliEntry->MlmeAux.Bssid, REASON_MIC_FAILURE);
 
@@ -258,8 +301,12 @@ static VOID ApCliMlmeAssocReqAction(
 	struct wifi_dev *wdev;
 #ifdef MAC_REPEATER_SUPPORT
     REPEATER_CLIENT_ENTRY *pReptEntry = NULL;
-	UCHAR CliIdx = 0xFF;
 #endif /* MAC_REPEATER_SUPPORT */
+
+#if defined(FAST_EAPOL_WAR) || defined (MAC_REPEATER_SUPPORT)
+	UCHAR CliIdx = 0xFF;
+#endif /* defined(FAST_EAPOL_WAR) || defined (MAC_REPEATER_SUPPORT) */
+
 #if defined(TXBF_SUPPORT) && defined(VHT_TXBF_SUPPORT)
     UCHAR ucETxBfCap;
 #endif /* TXBF_SUPPORT && VHT_TXBF_SUPPORT */
@@ -381,24 +428,68 @@ static VOID ApCliMlmeAssocReqAction(
 			NdisMoveMemory(&HtCapabilityTmp, &apcli_entry->MlmeAux.HtCapability, apcli_entry->MlmeAux.HtCapabilityLen);
 			
 #ifdef TXBF_SUPPORT
-            //if ((HcIsBfCapSupport(wdev) == FALSE) ||
-            //    (CliIdx != 0xFF)) // Just ApCli entry could have Ber and BFee capbility
             if (HcIsBfCapSupport(wdev) == FALSE)
             {
                 UCHAR ucEBfCap;
 
                 ucEBfCap = pAd->CommonCfg.ETxBfEnCond;
-                pAd->CommonCfg.ETxBfEnCond = 0;
+                pAd->CommonCfg.ETxBfEnCond = SUBF_OFF;
             
-                mt_WrapSetETxBFCap(pAd, &HtCapabilityTmp.TxBFCap);
+                mt_WrapSetETxBFCap(pAd, wdev, &HtCapabilityTmp.TxBFCap);
 
                 pAd->CommonCfg.ETxBfEnCond = ucEBfCap;
             }
+#ifdef MAC_REPEATER_SUPPORT
+            else if (pAd->ApCfg.bMACRepeaterEn)
+            {
+                UCHAR ucEBfCap;
+
+                ucEBfCap = pAd->CommonCfg.ETxBfEnCond;
+                pAd->CommonCfg.ETxBfEnCond = SUBF_BFER;
+                
+                /* Just first cloned STA has full BF capability */
+		        if ((pReptEntry != NULL) && (pAd->fgClonedStaWithBfeeSelected == FALSE))
+		        {
+		            MAC_TABLE_ENTRY *pEntry = (MAC_TABLE_ENTRY *)NULL;
+		            
+		            pEntry = MacTableLookup(pAd, pReptEntry->OriginalAddress);
+
+		            if (pEntry == NULL)
+		            {
+		                MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s : HT This entry isn't belong to cloned STA!!!=============== \n", 
+		                                                                   __FUNCTION__));
+		            }
+
+		            if ((pEntry) && (HcIsBfCapSupport(pEntry->wdev) == TRUE))
+		            {
+		                pAd->CommonCfg.ETxBfEnCond = SUBF_ALL;
+
+		                if (WMODE_HT_ONLY(apcli_entry->wdev.PhyMode))
+		                {
+		                    pAd->fgClonedStaWithBfeeSelected = TRUE;
+		                    pAd->ReptClonedStaEntry_CliIdx   = CliIdx;
+		                }
+
+		                //MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s : HT Cloned STA's CliIdx = %d=============== \n", 
+		                //                                                  __FUNCTION__, CliIdx));
+		            }
+		        }
+		        mt_WrapSetETxBFCap(pAd, wdev, &HtCapabilityTmp.TxBFCap);
+
+                pAd->CommonCfg.ETxBfEnCond = ucEBfCap;
+		    }   
+#endif /* MAC_REPEATER_SUPPORT */
+            
 #endif /* TXBF_SUPPORT */ 
 
 #ifdef DOT11N_SS3_SUPPORT
 			HtCapabilityTmp.MCSSet[2] = (apcli_entry->MlmeAux.HtCapability.MCSSet[2] & apcli_entry->RxMcsSet[2]);
 #endif /* DOT11N_SS3_SUPPORT */
+
+#ifdef APCLI_CERT_SUPPORT
+			if (pAd->bApCliCertTest == TRUE)
+				HtCapabilityTmp.HtCapInfo.GF = 1;
+#endif /* APCLI_CERT_SUPPORT */
 
 #ifdef RT_BIG_ENDIAN
         		*(USHORT *)(&HtCapabilityTmp.HtCapInfo) = SWAP16(*(USHORT *)(&HtCapabilityTmp.HtCapInfo));
@@ -416,17 +507,49 @@ static VOID ApCliMlmeAssocReqAction(
             vht_ie_info.frame_subtype = SUBTYPE_ASSOC_REQ;
             vht_ie_info.channel = apcli_entry->wdev.channel;
             vht_ie_info.phy_mode = apcli_entry->wdev.PhyMode;
+	    vht_ie_info.wdev = &apcli_entry->wdev;
 
 #if defined(TXBF_SUPPORT) && defined(VHT_TXBF_SUPPORT)
             ucETxBfCap = pAd->CommonCfg.ETxBfEnCond;
             if (HcIsBfCapSupport(wdev) == FALSE)
             {
-                pAd->CommonCfg.ETxBfEnCond = 0;
+                pAd->CommonCfg.ETxBfEnCond = SUBF_OFF;
             }
+#ifdef MAC_REPEATER_SUPPORT
+            else if (pAd->ApCfg.bMACRepeaterEn)
+            {                
+                pAd->CommonCfg.ETxBfEnCond = SUBF_BFER;
+                
+                /* Just first cloned STA has full BF capability */
+		        if ((pReptEntry != NULL) && (pAd->fgClonedStaWithBfeeSelected == FALSE))
+		        {
+		            MAC_TABLE_ENTRY *pEntry = (MAC_TABLE_ENTRY *)NULL;
+
+                    MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s : OriginalAddress[0~5] = %x:%x:%x:%x:%x:%x\n",
+                                                                       __FUNCTION__,
+                                                                       pReptEntry->OriginalAddress[0], pReptEntry->OriginalAddress[1],
+                                                                       pReptEntry->OriginalAddress[2], pReptEntry->OriginalAddress[3],
+                                                                       pReptEntry->OriginalAddress[4], pReptEntry->OriginalAddress[5]));
+		            
+		            pEntry = MacTableLookup(pAd, pReptEntry->OriginalAddress);
+		            if ((pEntry) && (HcIsBfCapSupport(pEntry->wdev) == TRUE))
+		            {
+		                pAd->CommonCfg.ETxBfEnCond       = SUBF_ALL;
+		                pAd->fgClonedStaWithBfeeSelected = TRUE;
+		                pAd->ReptClonedStaEntry_CliIdx   = CliIdx;
+		                //MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s : VHT Cloned STA's CliIdx = %d=============== \n", 
+		                //                                                 __FUNCTION__, CliIdx));
+		            }
+		        }
+		    }   
+#endif /* MAC_REPEATER_SUPPORT */            
 #endif /* TXBF_SUPPORT && VHT_TXBF_SUPPORT */ 
 
             FrameLen += build_vht_ies(pAd, &vht_ie_info);
 
+#if defined(TXBF_SUPPORT) && defined(VHT_TXBF_SUPPORT)
+		    pAd->CommonCfg.ETxBfEnCond = ucETxBfCap;
+#endif /* TXBF_SUPPORT && VHT_TXBF_SUPPORT */ 
 #endif /* DOT11_VHT_AC */
 		}
 
@@ -633,6 +756,86 @@ static VOID ApCliMlmeAssocReqAction(
 		}
 #endif /* WSC_AP_SUPPORT */
 
+#ifdef FAST_EAPOL_WAR
+/* 
+ * insert WTBL here,unicast wcid can be found after associate request sent out 
+ * The purpose is to let eapol packet can be received in rx tasklet.
+ * Otherwisw, eapol packet will be dropped since mac entry does not inserted yet
+ */
+{
+	PAPCLI_STRUCT pApCliEntry;
+	PMAC_TABLE_ENTRY pMacEntry = NULL;
+	pApCliEntry = &pAd->ApCfg.ApCliTab[ifIndex];
+#ifdef MAC_REPEATER_SUPPORT
+#if defined(RTMP_MAC) || defined(RLT_MAC)
+	if ((pAd->ApCfg.bMACRepeaterEn) &&
+			(pAd->chipCap.hif_type == HIF_RLT ||
+			 pAd->chipCap.hif_type == HIF_RTMP)
+	   )
+	{
+		pMacEntry = RTMPInsertRepeaterMacEntry(
+						pAd,
+						(PUCHAR)(pApCliEntry->MlmeAux.Bssid),
+						pReptEntry->wdev,
+						(ifIndex + MIN_NET_DEVICE_FOR_APCLI),
+						CliIdx,
+						TRUE);
+	}
+	else 
+#endif /* RTMP_MAC || RLT_MAC  */
+		if ((pAd->ApCfg.bMACRepeaterEn) &&
+				(pAd->chipCap.hif_type == HIF_MT) &&
+				(CliIdx != 0xFF))
+		{
+			if (pReptEntry->pre_entry_alloc == TRUE) {
+				ApCliAssocDeleteMacEntry(pAd,ifIndex,CliIdx);
+			} 
+			
+			{
+				pMacEntry = MacTableInsertEntry(
+								pAd,
+								(PUCHAR)(pApCliEntry->MlmeAux.Bssid),
+								pReptEntry->wdev,
+								ENTRY_REPEATER,
+								OPMODE_AP,
+								TRUE);
+				if (pMacEntry) {
+					pReptEntry->MacTabWCID = pMacEntry->wcid;
+					pReptEntry->pre_entry_alloc = TRUE;
+				} else {
+					MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_ERROR, ("repeater pEntry insert fail"));
+					MlmeFreeMemory(pOutBuffer);
+					return;
+				}
+			}
+		}
+		else
+#endif /* MAC_REPEATER_SUPPORT */
+		{
+			if (pApCliEntry->pre_entry_alloc == TRUE) {
+				ApCliAssocDeleteMacEntry(pAd,ifIndex,CliIdx);
+			}
+			{
+				pMacEntry = MacTableInsertEntry(
+								pAd, 
+								(PUCHAR)(pApCliEntry->MlmeAux.Bssid),
+								&pApCliEntry->wdev, 
+								ENTRY_APCLI,
+								OPMODE_AP, 
+								TRUE);
+				if (pMacEntry) {
+					pApCliEntry->pre_entry_alloc = TRUE;
+					pApCliEntry->MacTabWCID = pMacEntry->wcid;
+				} else {
+					MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_ERROR, ("apcli pEntry insert fail"));
+					MlmeFreeMemory(pOutBuffer);
+					return;
+				}
+			}
+		}
+}
+#endif /* FAST_EAPOL_WAR */
+
 		MiniportMMRequest(pAd, QID_AC_BE, pOutBuffer, FrameLen);
 		MlmeFreeMemory( pOutBuffer);
 
@@ -704,6 +907,9 @@ static VOID ApCliMlmeDisassocReqAction(
 #endif /* MAC_REPEATER_SUPPORT */
 		pCurrState = &pAd->ApCfg.ApCliTab[ifIndex].AssocCurrState;
 
+#ifdef FAST_EAPOL_WAR
+	ApCliAssocDeleteMacEntry(pAd,ifIndex,CliIdx);
+#endif /* FAST_EAPOL_WAR */
 	/* skip sanity check */
 	pDisassocReq = (PMLME_DISASSOC_REQ_STRUCT)(Elem->Msg);
 
@@ -794,8 +1000,12 @@ static VOID ApCliPeerAssocRspAction(
 	PAPCLI_STRUCT pApCliEntry = NULL;
 #ifdef MAC_REPEATER_SUPPORT
 	REPEATER_CLIENT_ENTRY *pReptEntry = NULL;
-	UCHAR CliIdx = 0xFF;
 #endif /* MAC_REPEATER_SUPPORT */
+
+#if defined(FAST_EAPOL_WAR) || defined(MAC_REPEATER_SUPPORT)
+	UCHAR CliIdx = 0xFF;
+#endif  /* defined(FAST_EAPOL_WAR) || defined(MAC_REPEATER_SUPPORT) */
+
 	IE_LISTS *ie_list = NULL;
 
 	if ((ifIndex >= MAX_APCLI_NUM)
@@ -850,6 +1060,30 @@ static VOID ApCliPeerAssocRspAction(
 
 			MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("APCLI_ASSOC - receive ASSOC_RSP to me (status=%d)\n", Status));
 
+#ifdef NR_PD_DETECTION
+            /* Enable Ap-clinet link to RootAp Flag */
+            pAd->fgApclientLink = TRUE;
+
+            if (pAd->CommonCfg.dbdc_mode)
+            {
+                /* Back to 4T mode */
+                MtCmdLinkTestTxCtrl(pAd, FALSE, CHANNEL_BAND_2G);
+                MtCmdLinkTestTxCtrl(pAd, FALSE, CHANNEL_BAND_5G);
+            
+                /* Restore Tx Power */
+                MtCmdLinkTestTxPwrCtrl(pAd, FALSE, BAND0, CHANNEL_BAND_2G);
+                MtCmdLinkTestTxPwrCtrl(pAd, FALSE, BAND0, CHANNEL_BAND_5G);
+            }
+            else
+            {
+                /* Back to 4T mode */
+                MtCmdLinkTestTxCtrl(pAd, FALSE, pAd->ucCmwChannelBand);
+            
+                /* Restore Tx Power */
+                MtCmdLinkTestTxPwrCtrl(pAd, FALSE, BAND0, pAd->ucCmwChannelBand);
+            }
+#endif /* NR_PD_DETECTION */
+
 #ifdef MAC_REPEATER_SUPPORT
 			if (CliIdx != 0xFF)
 				RTMPCancelTimer(&pReptEntry->ApCliAssocTimer, &Cancelled);
@@ -865,7 +1099,7 @@ static VOID ApCliPeerAssocRspAction(
 				{
 					ApCliAssocPostProc(pAd, Addr2, CapabilityInfo, ifIndex, SupRate, SupRateLen,
 						ExtRate, ExtRateLen, &EdcaParm, &HtCapability, HtCapabilityLen, &AddHtInfo);
-					pAd->ApCfg.ApCliTab[0].MlmeAux.Aid = Aid;
+					pAd->ApCfg.ApCliTab[ifIndex].MlmeAux.Aid = Aid;
 #ifdef DOT11_VHT_AC
 					RTMPZeroMemory(&pApCliEntry->MlmeAux.vht_cap, sizeof(VHT_CAP_IE));
 					RTMPZeroMemory(&pApCliEntry->MlmeAux.vht_op, sizeof(VHT_OP_IE));
@@ -881,6 +1115,8 @@ static VOID ApCliPeerAssocRspAction(
 					}
 #endif /* DOT11_VHT_AC */
 				}
+				/* For Repeater get correct wmm valid setting */
+				pApCliEntry->MlmeAux.APEdcaParm.bValid = EdcaParm.bValid;
 
 				ApCliCtrlMsg.Status = MLME_SUCCESS;
 #ifdef MAC_REPEATER_SUPPORT
@@ -895,6 +1131,9 @@ static VOID ApCliPeerAssocRspAction(
 			}
 			else
 			{
+#ifdef FAST_EAPOL_WAR
+				ApCliAssocDeleteMacEntry(pAd,ifIndex,CliIdx);
+#endif /* FAST_EAPOL_WAR */
 				ApCliCtrlMsg.Status = Status;
 				MlmeEnqueue(pAd, APCLI_CTRL_STATE_MACHINE, APCLI_CTRL_ASSOC_RSP,
 							sizeof(APCLI_CTRL_MSG_STRUCT), &ApCliCtrlMsg, ifIndex);
@@ -931,10 +1170,15 @@ static VOID ApCliPeerDisassocAction(
 	USHORT        Reason;
 	USHORT ifIndex = (USHORT)(Elem->Priv);
 	ULONG *pCurrState = NULL;
+	ULONG *pDisconnect_Sub_Reason = NULL;
 #ifdef MAC_REPEATER_SUPPORT
-	UCHAR CliIdx = 0xFF;
     REPEATER_CLIENT_ENTRY *pReptEntry = NULL;
 #endif /* MAC_REPEATER_SUPPORT */
+
+#if defined(FAST_EAPOL_WAR) || defined (MAC_REPEATER_SUPPORT)
+	UCHAR CliIdx = 0xFF;
+#endif /* defined(FAST_EAPOL_WAR) || defined (MAC_REPEATER_SUPPORT) */
+
 
 	if ((ifIndex >= MAX_APCLI_NUM)
 #ifdef MAC_REPEATER_SUPPORT
@@ -950,13 +1194,19 @@ static VOID ApCliPeerDisassocAction(
 		pReptEntry = &pAd->ApCfg.pRepeaterCliPool[CliIdx];
 		ifIndex = pReptEntry->wdev->func_idx;
 		pCurrState = &pReptEntry->AssocCurrState;
+		pDisconnect_Sub_Reason = &pReptEntry->Disconnect_Sub_Reason;
 	}
 	else
 #endif /* MAC_REPEATER_SUPPORT */
+	{
 		pCurrState = &pAd->ApCfg.ApCliTab[ifIndex].AssocCurrState;
-
+		pDisconnect_Sub_Reason = &pAd->ApCfg.ApCliTab[ifIndex].Disconnect_Sub_Reason;
+	}
 	if(PeerDisassocSanity(pAd, Elem->Msg, Elem->MsgLen, Addr2, &Reason))
 	{
+#ifdef FAST_EAPOL_WAR
+		ApCliAssocDeleteMacEntry(pAd,ifIndex,CliIdx);
+#endif /* FAST_EAPOL_WAR */
 		if (MAC_ADDR_EQUAL(pAd->ApCfg.ApCliTab[ifIndex].MlmeAux.Bssid, Addr2))
 		{
 			*pCurrState = APCLI_ASSOC_IDLE;
@@ -964,6 +1214,7 @@ static VOID ApCliPeerDisassocAction(
 #ifdef MAC_REPEATER_SUPPORT
 			ifIndex = (USHORT)(Elem->Priv);
 #endif /* MAC_REPEATER_SUPPORT */
+			*pDisconnect_Sub_Reason = (ULONG)Reason;
 			MlmeEnqueue(pAd, APCLI_CTRL_STATE_MACHINE, APCLI_CTRL_PEER_DISCONNECT_REQ, 0, NULL, ifIndex);
 			RTMP_MLME_HANDLER(pAd);
         }
@@ -990,8 +1241,11 @@ static VOID ApCliAssocTimeoutAction(
 	PULONG pCurrState = NULL;
 #ifdef MAC_REPEATER_SUPPORT
 	REPEATER_CLIENT_ENTRY *pReptEntry = NULL;
-	UCHAR CliIdx = 0xFF;
 #endif /* MAC_REPEATER_SUPPORT */
+
+#if defined(FAST_EAPOL_WAR) || defined (MAC_REPEATER_SUPPORT)
+	UCHAR CliIdx = 0xFF;
+#endif /* defined(FAST_EAPOL_WAR) || defined (MAC_REPEATER_SUPPORT) */
 
 	MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("APCLI_ASSOC - ApCliAssocTimeoutAction\n"));
 
@@ -1013,6 +1267,10 @@ static VOID ApCliAssocTimeoutAction(
 	else
 #endif /* MAC_REPEATER_SUPPORT */
 		pCurrState = &pAd->ApCfg.ApCliTab[ifIndex].AssocCurrState;
+
+#ifdef FAST_EAPOL_WAR
+	ApCliAssocDeleteMacEntry(pAd,ifIndex,CliIdx);
+#endif /* FAST_EAPOL_WAR */
 
 	*pCurrState = APCLI_ASSOC_IDLE;
 
@@ -1039,8 +1297,12 @@ static VOID ApCliInvalidStateWhenAssoc(
 	PULONG pCurrState = NULL;
 #ifdef MAC_REPEATER_SUPPORT
 	REPEATER_CLIENT_ENTRY *pReptEntry = NULL;
-	UCHAR CliIdx = 0xFF;
 #endif /* MAC_REPEATER_SUPPORT */
+
+#if defined(FAST_EAPOL_WAR) || defined (MAC_REPEATER_SUPPORT)
+	UCHAR CliIdx = 0xFF;
+#endif /* defined(FAST_EAPOL_WAR) || defined (MAC_REPEATER_SUPPORT) */
+
 
 	if ((ifIndex >= MAX_APCLI_NUM)
 #ifdef MAC_REPEATER_SUPPORT
@@ -1064,6 +1326,9 @@ static VOID ApCliInvalidStateWhenAssoc(
 	MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE,
                 ("APCLI_ASSOC - ApCliInvalidStateWhenAssoc(state=%ld), reset APCLI_ASSOC state machine\n",
                     *pCurrState));
+#ifdef FAST_EAPOL_WAR
+	ApCliAssocDeleteMacEntry(pAd,ifIndex,CliIdx);
+#endif /* FAST_EAPOL_WAR */
 
 	*pCurrState = APCLI_ASSOC_IDLE;
 
@@ -1093,8 +1358,12 @@ static VOID ApCliInvalidStateWhenDisassociate(
 	ULONG *pCurrState = NULL;
 #ifdef MAC_REPEATER_SUPPORT
 	REPEATER_CLIENT_ENTRY *pReptEntry = NULL;
-	UCHAR CliIdx = 0xFF;
 #endif /* MAC_REPEATER_SUPPORT */
+
+#if defined(FAST_EAPOL_WAR) || defined (MAC_REPEATER_SUPPORT)
+	UCHAR CliIdx = 0xFF;
+#endif /* defined(FAST_EAPOL_WAR) || defined (MAC_REPEATER_SUPPORT) */
+
 
 	if ((ifIndex >= MAX_APCLI_NUM)
 #ifdef MAC_REPEATER_SUPPORT
@@ -1114,7 +1383,9 @@ static VOID ApCliInvalidStateWhenDisassociate(
 	else
 #endif /* MAC_REPEATER_SUPPORT */
 		pCurrState = &pAd->ApCfg.ApCliTab[ifIndex].AssocCurrState;
-
+#ifdef FAST_EAPOL_WAR
+	ApCliAssocDeleteMacEntry(pAd,ifIndex,CliIdx);
+#endif /* FAST_EAPOL_WAR */
 	MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE,
                     ("APCLI_ASSOC - InvalidStateWhenApCliDisassoc(state=%ld), reset APCLI_ASSOC state machine\n",
                     *pCurrState));
@@ -1180,7 +1451,17 @@ static VOID ApCliAssocPostProc(
 
 #ifdef DOT11_N_SUPPORT
 	if (HtCapabilityLen > 0 && WMODE_CAP_N(pApCliEntry->wdev.PhyMode))
+	{
+		ADD_HTINFO2 *ht_info2 = &pApCliEntry->MlmeAux.AddHtInfo.AddHtInfo2;
+		ADD_HT_INFO_IE *addht;
+		ht_info2->OperaionMode = pAddHtInfo->AddHtInfo2.OperaionMode;
+		ht_info2->NonGfPresent = pAddHtInfo->AddHtInfo2.NonGfPresent;
 		ApCliCheckHt(pAd, IfIndex, pHtCapability, pAddHtInfo);
+		addht = wlan_operate_get_addht(&pApCliEntry->wdev);
+		if (addht) { /* sync addht information into wlan operation addht */
+			*addht = pApCliEntry->MlmeAux.AddHtInfo;
+		}
+	}
 #endif /* DOT11_N_SUPPORT */
 
 }

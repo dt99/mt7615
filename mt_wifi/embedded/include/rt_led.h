@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -22,7 +23,7 @@
     Who          When          What
     ---------    ----------    ----------------------------------------------
  */
- 
+#endif /* MTK_LICENSE */
 #ifndef __RT_LED_H__
 #define __RT_LED_H__
 

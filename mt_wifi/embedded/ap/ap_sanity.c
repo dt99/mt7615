@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -25,6 +26,6 @@
      John Chang  08-14-2003    created for 11g soft-AP
      John Chang  12-30-2004    merge with STA driver for RT2600
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,7 +14,7 @@
 	Module Name:
 	hw_init.c
 */
-
+#endif /* MTK_LICENSE */
 #ifdef COMPOS_WIN
 #include "MtConfig.h"
 #if defined(EVENT_TRACING)
@@ -385,8 +386,15 @@ static INT mt_hif_sys_pci_init(RTMP_ADAPTER *pAd)
 #endif /* RTMP_MAC */
 
 #ifdef MT_MAC
-	if (pAd->chipCap.hif_type == HIF_MT)
+	if (pAd->chipCap.hif_type == HIF_MT){
 		mt_asic_init_txrx_ring(pAd);
+		if (pAd->chipOps.hif_set_pcie_read_params
+			#ifdef ERR_RECOVERY
+			&& (IsErrRecoveryInIdleStat(pAd) == FALSE)
+			#endif /* ERR_RECOVERY*/
+			)
+			pAd->chipOps.hif_set_pcie_read_params(pAd);
+	}
 #endif /* MT_MAC */
 
 	HIF_IO_READ32(pAd, MT_WPDMA_GLO_CFG, &mac_val);
@@ -492,6 +500,10 @@ static INT32 WfTopHwInit(RTMP_ADAPTER *pAd)
 static INT32 WfMcuHwInit(RTMP_ADAPTER *pAd)
 {
 	INT32 ret = NDIS_STATUS_SUCCESS;
+    
+#ifdef INTERNAL_CAPTURE_SUPPORT    
+	UINT32 Value;
+#endif /* INTERNAL_CAPTURE_SUPPORT */
 
 #ifdef COMPOS_WIN
 //#elif defined (COMPOS_TESTMODE_WIN)
@@ -524,7 +536,33 @@ retry_dl_fw:
     #endif
     }
 #endif
+
+#ifdef INTERNAL_CAPTURE_SUPPORT	
+	/* Refer to profile setting to decide the sysram partition format */
+    MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("%s: Before NICLoadFirmware, check IcapMode=%d\n", __FUNCTION__, pAd->IcapMode));
+
+    if (pAd->IcapMode == 2)/* Wifi-spectrum */
+    {
+        HW_IO_READ32(pAd,CONFG_COM_REG3, &Value);
+
+        Value = Value | CONFG_COM_REG3_FWOPMODE;
+
+        HW_IO_WRITE32(pAd,CONFG_COM_REG3, Value);
+        
+    }
+    else
+    {
+        HW_IO_READ32(pAd,CONFG_COM_REG3, &Value);
+
+        Value = Value & (~CONFG_COM_REG3_FWOPMODE);
+
+        HW_IO_WRITE32(pAd,CONFG_COM_REG3, Value);      
+    }
+#endif /* INTERNAL_CAPTURE_SUPPORT */
+    
 	ret = NICLoadFirmware(pAd);
+
 	if (ret != NDIS_STATUS_SUCCESS)
 	{
 		MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
@@ -563,11 +601,6 @@ retry_dl_fw:
 	if (pAd->IcapMode == 1) /* Internal capture */
 	{
 		MtCmdRfTestSwitchMode(pAd, OPERATION_ICAP_MODE, 0, 
-								RF_TEST_DEFAULT_RESP_LEN);
-	}
-	else if (pAd->IcapMode == 2) /* Wifi spectrum */
-	{
-		MtCmdRfTestSwitchMode(pAd, OPERATION_WIFI_SPECTRUM, 0, 
 								RF_TEST_DEFAULT_RESP_LEN);
 	}	
 #endif /* INTERNAL_CAPTURE_SUPPORT */
@@ -739,12 +772,25 @@ INT32 WfInit(RTMP_ADAPTER *pAd)
 
 	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("MCU Init Done!\n"));
 	
+#ifdef RLM_CAL_CACHE_SUPPORT
+	rlmCalCacheApply(pAd, pAd->rlmCalCache);
+#endif /* RLM_CAL_CACHE_SUPPORT */
+	
 	/*Adjust eeprom + config => apply to HW*/
 	if((ret = WfEPROMInit(pAd))!=NDIS_STATUS_SUCCESS)
 	{
 		goto err2;
 	}
 
+#ifdef SINGLE_SKU_V2
+    /* Load SKU table to Host Driver */
+    RTMPSetSingleSKUParameters(pAd);
+#if defined(MT_MAC) && defined(TXBF_SUPPORT)
+    /* Load BF Backoff table to Host Driver */
+    RTMPSetBfBackOffParameters(pAd);
+#endif /* defined(MT_MAC) && defined(TXBF_SUPPORT) */
+#endif /* SINGLE_SKU_V2 */
+	
 	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("EEPROM Init Done!\n"));
 
 	if((ret = WfMacInit(pAd))!=NDIS_STATUS_SUCCESS)

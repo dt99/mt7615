@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -27,6 +28,7 @@
 	John Chang  2004-09-06      modified for RT2600
 
 */
+#endif /* MTK_LICENSE */
 #ifndef __MLME_H__
 #define __MLME_H__
 
@@ -36,6 +38,10 @@
 #include "common/link_list.h"
 #include "ft_cmm.h"
 #endif /* DOT11R_FT_SUPPORT */
+
+#ifdef DOT11K_RRM_SUPPORT
+#include "dot11r_ft.h"
+#endif /* DOT11K_RRM_SUPPORT */
 
 /* maximum supported capability information - */
 /* ESS, IBSS, Privacy, Short Preamble, Spectrum mgmt, Short Slot */
@@ -440,7 +446,7 @@ typedef struct GNU_PACKED _SEC_CHA_OFFSET_IE{
 	UCHAR			SecondaryChannelOffset;	 /* 1: Secondary above, 3: Secondary below, 0: no Secondary */
 } SEC_CHA_OFFSET_IE, *PSEC_CHA_OFFSET_IE;
 
-/* 802.11mc D3.0 8.4.2.20 */
+/* 802.11mc D4.3 8.4.2.20 */
 typedef struct GNU_PACKED _MEASUREMENT_REQ
 {
 	UCHAR ID;
@@ -450,7 +456,7 @@ typedef struct GNU_PACKED _MEASUREMENT_REQ
 	UCHAR Type;
 } MEASUREMENT_REQ;
 
-/* 802.11mc D3.0 8.4.2.21 */
+/* 802.11mc D4.3 8.4.2.21 */
 typedef struct GNU_PACKED _MEASUREMENT_REPORT
 {
 	UCHAR ID;
@@ -460,7 +466,7 @@ typedef struct GNU_PACKED _MEASUREMENT_REPORT
 	UCHAR Type;
 } MEASUREMENT_REPORT;
 
-/* 802.11mc D4.0 8.4.2.166 */
+/* 802.11mc D4.3 8.4.2.166 */
 /* Length: 9 bytes */
 typedef struct GNU_PACKED _FTM_PARAMETER{
 	/* byte 0 */
@@ -475,26 +481,17 @@ typedef struct GNU_PACKED _FTM_PARAMETER{
 	/* byte 3~4 */
 	USHORT partial_tsf_timer;
 	/* byte 5 */
-	UCHAR rsv_2:1;
+	UCHAR tsf_no_preference:1;
 	UCHAR asap_capable:1;
 	UCHAR asap:1;
 	UCHAR ftms_per_burst:5;
 	/* byte 6 */
-	UCHAR rsv_3:2;
+	UCHAR rsv_2:2;
 	UCHAR ftm_format_and_bw:6;
 	/* byte 7~8 */
 	USHORT burst_period;	/* unit: 100 ms */
 } FTM_PARAMETER, *PFTM_PARAMETER;
 
-#ifdef FTM_SUPPORT
-/* 802.11mc D3.0 8.4.2.166 */
-typedef struct GNU_PACKED _FTM_PARM_IE
-{
-	UCHAR ID;
-	UCHAR Length;
-	FTM_PARAMETER p;
-} FTM_PARM_IE, *PFTM_PARM_IE;
-#endif /* FTM_SUPPORT */
 
 /* This structure is extracted from struct RT_HT_CAPABILITY and RT_VHT_CAP */
 typedef struct _RT_PHY_INFO{
@@ -534,7 +531,7 @@ typedef struct _RT_VHT_CAP{
 */
 typedef struct {
 #ifdef RT_BIG_ENDIAN
-	USHORT	rsv:5;
+	USHORT	rsv:6;
 	USHORT	AmsduSize:1;	/* Max receiving A-MSDU size */
 	USHORT	AmsduEnable:1;	/* Enable to transmit A-MSDU. Suggest disable. We should use A-MPDU to gain best benifit of 802.11n */
 	USHORT	RxSTBC:2;
@@ -543,9 +540,7 @@ typedef struct {
 	USHORT	ShortGIfor20:1;
 	USHORT	GF:1;	/*green field */
 	USHORT	MimoPs:2;/*mimo power safe MMPS_ */
-	USHORT	ChannelWidth:1;
 #else
-	USHORT	ChannelWidth:1;
 	USHORT	MimoPs:2;/*mimo power safe MMPS_ */
 	USHORT	GF:1;	/*green field */
 	USHORT	ShortGIfor20:1;
@@ -554,12 +549,11 @@ typedef struct {
 	USHORT	RxSTBC:2;	/* 2 bits */
 	USHORT	AmsduEnable:1;	/* Enable to transmit A-MSDU. Suggest disable. We should use A-MPDU to gain best benifit of 802.11n */
 	USHORT	AmsduSize:1;	/* Max receiving A-MSDU size */
-	USHORT	rsv:5;
+	USHORT	rsv:6;
 #endif
 
 	/*Substract from Addiont HT INFO IE */
 #ifdef RT_BIG_ENDIAN
-	UCHAR	RecomWidth:1;
 	UCHAR	ExtChanOffset:2;	/* Please not the difference with following 	UCHAR	NewExtChannelOffset; from 802.11n */
 	UCHAR	MpduDensity:3;
 	UCHAR	MaxRAmpduFactor:2;
@@ -567,7 +561,6 @@ typedef struct {
 	UCHAR	MaxRAmpduFactor:2;
 	UCHAR	MpduDensity:3;
 	UCHAR	ExtChanOffset:2;	/* Please not the difference with following 	UCHAR	NewExtChannelOffset; from 802.11n */
-	UCHAR	RecomWidth:1;
 #endif
 
 #ifdef RT_BIG_ENDIAN
@@ -595,6 +588,23 @@ typedef struct  GNU_PACKED _NEW_EXT_CHAN_IE{
 	UCHAR				NewExtChanOffset;
 } NEW_EXT_CHAN_IE, *PNEW_EXT_CHAN_IE;
 
+#ifdef DOT11U_INTERWORKING_IE_SUPPORT
+typedef struct GNU_PACKED _INTERWORKING_IE{
+#ifdef RT_BIG_ENDIAN
+	UCHAR	UESA:1;
+	UCHAR	ESR:1;
+	UCHAR	ASRA:1;
+	UCHAR	Internet:1;
+	UCHAR	AccessNwType:4;
+#else
+	UCHAR	AccessNwType:4;
+	UCHAR	Internet:1;
+	UCHAR	ASRA:1;
+	UCHAR	ESR:1;
+	UCHAR	UESA:1;
+#endif
+}INTERWORKING_IE, *PINTERWORKING_IE;
+#endif /* DOT11U_INTERWORKING_IE_SUPPORT */
 typedef struct GNU_PACKED _FRAME_802_11 {
     HEADER_802_11   Hdr;
     UCHAR            Octet[1];
@@ -903,6 +913,8 @@ struct _vendor_ie_cap {
     ULONG brcm_cap;
     BOOLEAN ldpc;
     BOOLEAN sgi;
+    BOOLEAN is_rlt;
+    BOOLEAN is_mtk;
 };
 
 /* EDCA configuration from AP's BEACON/ProbeRsp */
@@ -938,8 +950,10 @@ typedef struct _WMM_CFG {
 enum _tx_burst_prio {
     PRIO_DEFAULT=0,
     PRIO_RDG,
+    PRIO_MULTI_CLIENT,
     PRIO_2G_INFRA,
     PRIO_MU_MIMO,
+	PRIO_PEAK_TP,
     PRIO_APCLI_REPEATER,
     PRIO_CCI,
     PRIO_WMM,
@@ -960,6 +974,19 @@ struct _tx_burst_cfg {
     UINT8 ac_type;
     UINT16 txop_level;
     UINT8 enable;
+};
+
+
+struct pbc_ctrl {
+	struct wifi_dev *wdev;
+	struct _MAC_TABLE_ENTRY *entry;
+	UCHAR type;
+};
+
+struct rts_thld {
+	struct wifi_dev *wdev;
+	UCHAR pkt_thld;
+	UINT32 len_thld;
 };
 
 #define TXOP_0          (0x0)
@@ -1078,6 +1105,7 @@ typedef struct _BSS_ENTRY{
 	UCHAR Privacy;			/* Indicate security function ON/OFF. Don't mess up with auth mode. */
 	UCHAR Hidden;
 
+	BOOLEAN FromBcnReport; //source from beacon report
 	USHORT DtimPeriod;
 	USHORT CapabilityInfo;
 
@@ -1142,17 +1170,27 @@ typedef struct _BSS_ENTRY{
 	UINT8 CondensedPhyType;
 	UINT8 RSNI;
 #endif /* DOT11K_RRM_SUPPORT */
+#ifdef CUSTOMER_DCC_FEATURE
+	ULONG LastBeaconRxTimeT;
+    UCHAR  Snr[4];
+    CHAR   rssi[4];
+    UCHAR  vendorOUI0[3];
+    UCHAR  vendorOUI1[3];
+#endif
 } BSS_ENTRY;
 
 typedef struct {
-    UCHAR           BssNr;
-    UCHAR           BssOverlapNr;
+    UCHAR          BssNr;
+    UCHAR          BssOverlapNr;
     BSS_ENTRY       BssEntry[MAX_LEN_OF_BSS_TABLE];
 } BSS_TABLE, *PBSS_TABLE;
 
 
 struct raw_rssi_info{
 	CHAR raw_rssi[4];
+#ifdef CUSTOMER_DCC_FEATURE
+	UCHAR raw_Snr[4];
+#endif
 	UCHAR raw_snr;
 	UCHAR Channel;
 };
@@ -1170,6 +1208,7 @@ typedef struct _MLME_QUEUE_ELEM {
 	BOOLEAN Occupied;
 	UCHAR OpMode;
 	ULONG Priv;
+	UCHAR RxPhyMode;
 } MLME_QUEUE_ELEM, *PMLME_QUEUE_ELEM;
 
 typedef struct _MLME_QUEUE {
@@ -1299,7 +1338,7 @@ typedef struct _MLME_AUX {
 
 	UINT32 AKMMap;
 	UINT32 PairwiseCipher;
-	UCHAR GroupCipher;
+	UINT32 GroupCipher;
 } MLME_AUX, *PMLME_AUX;
 
 
@@ -1307,7 +1346,6 @@ typedef struct _MLME_AUX {
 /* StaActive.SupportedHtPhy.MCSSet is copied from AP beacon.  Don't need to update here. */
 #define COPY_HTSETTINGS_FROM_MLME_AUX_TO_ACTIVE_CFG(_pAd, _pEntry, _pStaCfg)                                 \
 {                                                                                       \
-	_pStaCfg->StaActive.SupportedHtPhy.ChannelWidth = _pStaCfg->MlmeAux.HtCapability.HtCapInfo.ChannelWidth;      \
 	_pStaCfg->StaActive.SupportedHtPhy.MimoPs = _pStaCfg->MlmeAux.HtCapability.HtCapInfo.MimoPs;      \
 	_pStaCfg->StaActive.SupportedHtPhy.GF = _pStaCfg->MlmeAux.HtCapability.HtCapInfo.GF;      \
 	_pStaCfg->StaActive.SupportedHtPhy.ShortGIfor20 = _pStaCfg->MlmeAux.HtCapability.HtCapInfo.ShortGIfor20;      \
@@ -1315,7 +1353,6 @@ typedef struct _MLME_AUX {
 	_pStaCfg->StaActive.SupportedHtPhy.TxSTBC = _pStaCfg->MlmeAux.HtCapability.HtCapInfo.TxSTBC;      \
 	_pStaCfg->StaActive.SupportedHtPhy.RxSTBC = _pStaCfg->MlmeAux.HtCapability.HtCapInfo.RxSTBC;      \
 	_pStaCfg->StaActive.SupportedHtPhy.ExtChanOffset = _pStaCfg->MlmeAux.AddHtInfo.AddHtInfo.ExtChanOffset;      \
-	_pStaCfg->StaActive.SupportedHtPhy.RecomWidth = _pStaCfg->MlmeAux.AddHtInfo.AddHtInfo.RecomWidth;      \
 	_pStaCfg->StaActive.SupportedHtPhy.OperaionMode = _pStaCfg->MlmeAux.AddHtInfo.AddHtInfo2.OperaionMode;      \
 	_pStaCfg->StaActive.SupportedHtPhy.NonGfPresent = _pStaCfg->MlmeAux.AddHtInfo.AddHtInfo2.NonGfPresent;      \
 	NdisMoveMemory((_pEntry)->HTCapability.MCSSet, (_pStaCfg)->StaActive.SupportedPhyInfo.MCSSet, sizeof(UCHAR) * 16);\
@@ -1392,6 +1429,12 @@ typedef struct _MLME_SCAN_REQ_STRUCT {
     UCHAR      ScanType;
     UCHAR      SsidLen;
     CHAR       Ssid[MAX_LEN_OF_SSID];
+#ifdef CONFIG_AP_SUPPORT
+#ifdef CUSTOMER_DCC_FEATURE
+	UINT	   Channel;
+	UINT	   Timeout;
+#endif
+#endif	
 } MLME_SCAN_REQ_STRUCT, *PMLME_SCAN_REQ_STRUCT;
 
 typedef struct _MLME_START_REQ_STRUCT {
@@ -1464,6 +1507,9 @@ typedef enum _AuthState {
 	AS_AUTHENTICATING   /* STA is waiting for AUTH seq#3 using SHARED KEY */
 } AUTH_STATE;
 
+struct peer_ie_info {
+	VHT_CAP_IE vht_cap;
+};
 
 struct _build_ie_info {
     UCHAR *frame_buf;
@@ -1471,6 +1517,8 @@ struct _build_ie_info {
     BOOLEAN g_band_256_qam;
     UCHAR channel;
     UCHAR phy_mode;
+    struct wifi_dev *wdev;	
+    struct peer_ie_info peer_info;
 };
 
 
@@ -1482,6 +1530,7 @@ struct _op_info {
 
 
 typedef struct _IE_lists {
+	UCHAR Addr1[MAC_ADDR_LEN];
 	UCHAR Addr2[MAC_ADDR_LEN];
 	UCHAR ApAddr[MAC_ADDR_LEN];
 	USHORT CapabilityInfo;
@@ -1495,9 +1544,9 @@ typedef struct _IE_lists {
 	UCHAR RSN_IE[MAX_LEN_OF_RSNIE];
 	UCHAR RSNIE_Len;
 	BOOLEAN bWmmCapable;
-#ifdef WSC_AP_SUPPORT
+#if defined(WSC_AP_SUPPORT) || defined(RT_CFG80211_SUPPORT)
 	BOOLEAN bWscCapable;
-#endif /* WSC_AP_SUPPORT */
+#endif /* defined(WSC_AP_SUPPORT) || defined(RT_CFG80211_SUPPORT) */
     struct _vendor_ie_cap vendor_ie;
 	EXT_CAP_INFO_ELEMENT ExtCapInfo;
 #ifdef DOT11R_FT_SUPPORT
@@ -1561,6 +1610,11 @@ typedef struct _bcn_ie_list {
 	UCHAR vht_op_len;
 	WIDE_BW_CH_SWITCH_ELEMENT wb_info;
 #endif /* DOT11_VHT_AC */
+	BOOLEAN  FromBcnReport;
+#ifdef CUSTOMER_DCC_FEATURE
+	UCHAR	VendorID0[3];
+	UCHAR	VendorID1[3];
+#endif
 }BCN_IE_LIST;
 
 VOID MlmeHandler(struct _RTMP_ADAPTER *pAd);

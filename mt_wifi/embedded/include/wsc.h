@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -26,7 +27,7 @@
 	Name		Date			Modification logs
 	Paul Lin	06-08-08		Initial
 */
-
+#endif /* MTK_LICENSE */
 #ifndef	__WSC_H__
 #define	__WSC_H__
 
@@ -58,6 +59,24 @@ enum {
 	CON_WPS_APCLI_BAND_5G,
 	CON_WPS_APCLI_BAND_MAX,
 };
+
+enum {
+        CON_WPS_APCLI_AUTO_PREFER_IFACE0,
+        CON_WPS_APCLI_AUTO_PREFER_IFACE1,
+        CON_WPS_APCLI_AUTO_PREFER_IFACE_MAX,
+};
+
+enum {
+        CON_WPS_APCLI_SCANDONE_STATUS_NOTRIGGER,
+        CON_WPS_APCLI_SCANDONE_STATUS_ONGOING,
+        CON_WPS_APCLI_SCANDONE_STATUS_FINISH,
+};
+
+#ifdef CON_WPS
+#define CON_WPS_STATUS_DISABLED      0x00
+#define CON_WPS_STATUS_AP_RUNNING    0x01
+#define CON_WPS_STATUS_APCLI_RUNNING 0x02
+#endif /* CON_WPS */
 
 VOID ConWpsApCliMonitorTimeout(
     IN PVOID SystemSpecific1,
@@ -126,7 +145,11 @@ static inline BOOLEAN WscCheckWSCHeader(UCHAR *pData)
 /* WSC HDR PSH BTN FUNC */
 /* WSC hardware push button function 0811 */
 #define WSC_HDR_BTN_CHECK_PERIOD	MLME_TASK_EXEC_INTV /* unit: ms, check pin every 100ms */
+#ifdef VENDOR_FEATURE6_SUPPORT
+#define WSC_HDR_BTN_PRESS_TIME		3000	/* unit: ms, press button for 3s */
+#else
 #define WSC_HDR_BTN_PRESS_TIME		2000	/* unit: ms, press button for 2s */
+#endif
 #define WSC_HDR_BTN_CONT_TIMES		(WSC_HDR_BTN_PRESS_TIME/WSC_HDR_BTN_CHECK_PERIOD)
 #define WSC_HDR_BTN_GPIO_0			((UINT32)0x00000001) /* bit 0 for RT2860/RT2870 */
 #define WSC_HDR_BTN_GPIO_3			((UINT32)0x00000008) /* bit 3 for RT2860/RT2870 */
@@ -222,6 +245,8 @@ static inline BOOLEAN WscCheckWSCHeader(UCHAR *pData)
 #define WSC_UPNP_DATA_SUB_WSC_ACK		0x0D
 #define WSC_UPNP_DATA_SUB_WSC_NACK		0x0E
 #define WSC_UPNP_DATA_SUB_WSC_DONE		0x0F
+#define WSC_UPNP_DATA_SUB_PBC_OVERLAP		0x10
+#define WSC_UPNP_DATA_SUB_WSC_TIMEOUT		0x20
 #define WSC_UPNP_DATA_SUB_WSC_UNKNOWN	0xff
 
 
@@ -360,6 +385,11 @@ static inline BOOLEAN WscCheckWSCHeader(UCHAR *pData)
 #ifdef CONFIG_AP_SUPPORT
 #define	AP_WSC_MODEL_NAME		"Ralink Wireless Access Point"
 #define	AP_WSC_DEVICE_NAME		"RalinkAPS"
+#ifdef VENDOR_FEATURE6_SUPPORT
+#define AP_WSC_DEVICE_NAME_5G	"ARRIS_5GAP"
+#define AP_WSC_DEVICE_NAME_2G	"ARRIS_24GAP"
+#define AP_WSC_DEVICE_NAME_OOB	"un-configured"
+#endif
 #endif /* CONFIG_AP_SUPPORT */
 #define	WSC_MODEL_NUMBER	"RT2860"
 #define	WSC_MODEL_SERIAL	"12345678"
@@ -667,6 +697,11 @@ typedef	struct	_WSC_CTRL
     RALINK_TIMER_STRUCT     WscScanTimer;
 	BOOLEAN                 WscProfileRetryTimerRunning;
 	RALINK_TIMER_STRUCT		WscProfileRetryTimer;
+#ifdef CON_WPS
+        BOOLEAN                 ConWscApcliScanDoneCheckTimerRunning;
+        RALINK_TIMER_STRUCT     ConWscApcliScanDoneCheckTimer;
+	INT conWscStatus;            /* 0x0 Disabled, 0x01 ApRunning, 0x02 ApCliRunning */		
+#endif /*CON_WPS*/
 #ifdef WSC_LED_SUPPORT
 	ULONG					WscLEDMode; /* WPS LED mode: LED_WPS_XXX definitions. */
 	ULONG					WscLastWarningLEDMode; /* LED_WPS_ERROR or LED_WPS_SESSION_OVERLAP_DETECTED */
@@ -749,6 +784,10 @@ typedef	struct	_WSC_CTRL
 #ifdef CONFIG_AP_SUPPORT
 	BOOLEAN				bWscAutoTriggerDisable; /* Default setting is FALSE */
 #endif /* CONFIG_AP_SUPPORT */
+#ifdef APCLI_SUPPORT
+	UCHAR               WscApCliScanMode; /* Only for ApClient , default setting is full scan */
+#endif /* APCLI_SUPPORT */
+	char                    IfName[IFNAMSIZ];
 }	WSC_CTRL, *PWSC_CTRL;
 
 typedef struct GNU_PACKED _WSC_CONFIGURED_VALUE {
@@ -760,6 +799,16 @@ typedef struct GNU_PACKED _WSC_CONFIGURED_VALUE {
 	UCHAR	WscWPAKey[64 + 1];
 } WSC_CONFIGURED_VALUE;
 
+typedef struct GNU_PACKED _WSC_CONFIGURED_VALUE_2 {
+	USHORT WscConfigured; /* 1 un-configured; 2 configured */
+	UCHAR	WscSsid[32];
+	UCHAR	WscSsidLen;	
+	USHORT WscAuthMode;	/* mandatory, 0x01: open, 0x02: wpa-psk, 0x04: shared, 0x08:wpa, 0x10: wpa2, 0x20: wpa2-psk */
+	USHORT	WscEncrypType;	/* 0x01: none, 0x02: wep, 0x04: tkip, 0x08: aes */
+	UCHAR	DefaultKeyIdx;
+	UCHAR	WscWPAKey[64];
+	UCHAR	WscWPAKeyLen;	
+} WSC_CONFIGURED_VALUE_2;
 /* 
 	Following definitions are used for UPnP module to communicate msg.
 */

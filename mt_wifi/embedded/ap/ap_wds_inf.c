@@ -1,4 +1,4 @@
-
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -27,6 +27,7 @@
     ------    ----------      ----------------------------------------------
     Fonchi    02-13-2007      created
 */
+#endif /* MTK_LICENSE */
 #define RTMP_MODULE_OS
 
 #ifdef WDS_SUPPORT
@@ -65,12 +66,14 @@ INT WdsVirtualIF_open(PNET_DEV dev)
 {
 	VOID *pAd;
 
-
 	MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s: ===> VirtualIF_open\n", RTMP_OS_NETDEV_GET_DEVNAME(dev)));
 
 	pAd = RTMP_OS_NETDEV_GET_PRIV(dev);
-	if (VIRTUAL_IF_UP(pAd) != 0)
+	
+	if (VIRTUAL_IF_UP(pAd, dev) != 0)
 		return -1;
+
+	RTMP_AP_IoctlHandle(pAd, NULL, CMD_RTPRIV_IOCTL_WDS_OPEN, 0, dev, 0);
 
 	/* increase MODULE use count */
 	RT_MOD_INC_USE_COUNT();
@@ -92,8 +95,10 @@ INT WdsVirtualIF_close(PNET_DEV dev)
 
 	//RTMP_OS_NETDEV_CARRIER_OFF(dev);
 	RTMP_OS_NETDEV_STOP_QUEUE(dev);
-	
-	VIRTUAL_IF_DOWN(pAd);
+
+	RTMP_AP_IoctlHandle(pAd, NULL, CMD_RTPRIV_IOCTL_WDS_CLOSE, 0, dev, 0);
+
+	VIRTUAL_IF_DOWN(pAd, dev);
 
     RT_MOD_HNAT_DEREG(dev);
 	RT_MOD_DEC_USE_COUNT();

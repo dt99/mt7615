@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,7 +14,7 @@
 	Module Name:
 	trace.c
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 #ifdef CONFIG_TRACE_SUPPORT

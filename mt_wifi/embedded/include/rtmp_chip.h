@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #ifndef	__RTMP_CHIP_H__
 #define	__RTMP_CHIP_H__
 
@@ -633,17 +634,18 @@ struct _RSSI_SAMPLE;
 struct _EXT_CMD_EFUSE_BUFFER_MODE_T;
 
 
-#define RTMP_CHIP_ENABLE_AP_MIMOPS(__pAd, __ReduceCorePower)	\
+#define RTMP_CHIP_ENABLE_GREENAP(__pAd, __greenap_on_off)	\
 do {	\
 		if (__pAd->chipOps.EnableAPMIMOPS != NULL)	\
-			__pAd->chipOps.EnableAPMIMOPS(__pAd, __ReduceCorePower);	\
+			__pAd->chipOps.EnableAPMIMOPS(__pAd, __greenap_on_off);	\
 } while (0)
 
-#define RTMP_CHIP_DISABLE_AP_MIMOPS(__pAd)	\
+#define RTMP_CHIP_DISABLE_GREENAP(__pAd, __greenap_on_off)	\
 do {	\
 		if (__pAd->chipOps.DisableAPMIMOPS != NULL)	\
-			__pAd->chipOps.DisableAPMIMOPS(__pAd);	\
+			__pAd->chipOps.DisableAPMIMOPS(__pAd, __greenap_on_off);	\
 } while (0)
+
 
 #define PWR_SAVING_OP(__pAd, __PwrOP, __PwrLevel, __ListenInterval, \
 						__PreTBTTLeadTime, __TIMByteOffset, __TIMBytePattern)	\
@@ -763,8 +765,10 @@ do {	\
 
 #define RTMP_CAL_FREE_DATA_GET(__pAd)	\
 do {	\
-		if (__pAd->chipOps.cal_free_data_get != NULL)	\
+		if (__pAd->chipOps.cal_free_data_get != NULL) {	\
 			__pAd->chipOps.cal_free_data_get(__pAd);	\
+			__pAd->E2pCtrl.e2pSource |= E2P_SRC_FROM_EFUSE; \
+		} \
 } while (0)
 #endif /* CAL_FREE_IC_SUPPORT */
 
@@ -1036,10 +1040,64 @@ VOID HWAntennaDiversityEnable(struct _RTMP_ADAPTER *pAd);
 #endif /* ANT_DIVERSITY_SUPPORT */
 
 #ifdef GREENAP_SUPPORT
-VOID EnableAPMIMOPSv2(struct _RTMP_ADAPTER *pAd, BOOLEAN ReduceCorePower);
-VOID DisableAPMIMOPSv2(struct _RTMP_ADAPTER *pAd);
-VOID EnableAPMIMOPSv1(struct _RTMP_ADAPTER *pAd, BOOLEAN ReduceCorePower);
-VOID DisableAPMIMOPSv1(struct _RTMP_ADAPTER *pAd);
+struct greenap_ctrl;
+struct greenap_on_off_ctrl;
+VOID greenap_init(
+    struct greenap_ctrl *greenap);
+VOID greenap_exit(
+    struct _RTMP_ADAPTER *pAd, 
+    struct wifi_dev *wdev, 
+    struct greenap_ctrl *greenap);
+VOID greenap_show(
+    struct _RTMP_ADAPTER *pAd, 
+    struct greenap_ctrl *greenap);
+VOID greenap_check_when_if_down_up(
+    struct _RTMP_ADAPTER *pA, 
+    struct greenap_ctrl *greenap);
+VOID greenap_check_peer_connection_status(
+    struct _RTMP_ADAPTER *pAd, 
+    UINT8 band_idx, 
+    BOOLEAN previous_greenap_active,
+    BOOLEAN greenap_allow);
+VOID greenap_check_peer_connection_at_link_up_down(
+    struct _RTMP_ADAPTER *pAd,
+    struct wifi_dev *wdev,
+    struct greenap_ctrl *greenap);
+BOOLEAN greenap_get_suspend_status(
+    struct greenap_ctrl *greenap);
+VOID greenap_suspend(
+    struct _RTMP_ADAPTER *pAd, 
+    struct greenap_ctrl *greenap,
+    UINT32 reason);
+VOID greenap_resume(
+    struct _RTMP_ADAPTER *pAd, 
+    struct greenap_ctrl *greenap,
+    UINT32 reason);
+VOID greenap_check_allow_status(
+    struct _RTMP_ADAPTER *pAd, 
+    struct greenap_ctrl *greenap);
+BOOLEAN greenap_get_allow_status(
+    struct greenap_ctrl *greenap);
+VOID greenap_set_capability(
+    struct greenap_ctrl *greenap, 
+    BOOLEAN greenap_cap);
+BOOLEAN greenap_get_capability(
+    struct greenap_ctrl *greenap);
+VOID greenap_proc(
+    struct _RTMP_ADAPTER *pAd, 
+    struct greenap_ctrl *greenap, 
+    BOOLEAN greenap_cap_on);
+
+VOID enable_greenap(
+    struct _RTMP_ADAPTER *pAd, 
+    struct greenap_on_off_ctrl *greenap_on_off);
+VOID disable_greenap(
+    struct _RTMP_ADAPTER *pAd, 
+    struct greenap_on_off_ctrl *greenap_on_off);
+VOID EnableAPMIMOPSv2(struct _RTMP_ADAPTER *pAd, struct greenap_on_off_ctrl *greenap_on_off);
+VOID DisableAPMIMOPSv2(struct _RTMP_ADAPTER *pAd, struct greenap_on_off_ctrl *greenap_on_off);
+VOID EnableAPMIMOPSv1(struct _RTMP_ADAPTER *pAd, struct greenap_on_off_ctrl *greenap_on_off);
+VOID DisableAPMIMOPSv1(struct _RTMP_ADAPTER *pAd, struct greenap_on_off_ctrl *greenap_on_off);
 #endif /* GREENAP_SUPPORT */
 
 #ifdef RTMP_MAC

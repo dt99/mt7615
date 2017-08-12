@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
 	Who         When          What
 	--------    ----------    ----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #ifndef __EEPROM_H__
 #define __EEPROM_H__
 
@@ -46,6 +48,13 @@
 #define E2P_BIN_MODE				0x04
 #define NUM_OF_E2P_MODE			0x05
 
+#define E2P_SRC_FROM_EFUSE		BIT(0)
+#define E2P_SRC_FROM_FLASH		BIT(1)
+#define E2P_SRC_FROM_EEPROM		BIT(2)
+#define E2P_SRC_FROM_BIN		BIT(3)
+#define E2P_SRC_FROM_FLASH_AND_EFUSE    (BIT(1) | BIT(3)) //merge mode
+#define E2P_SRC_FROM_BIN_AND_EFUSE      (BIT(0) | BIT(3)) //merge mode
+
 #ifdef RTMP_MAC_PCI
 #ifdef MT7615
 #define MAX_EEPROM_BIN_FILE_SIZE	1024
@@ -62,12 +71,24 @@
 #define EEPROM_DEFULT_BIN_FILE	"RT30xxEEPROM.bin"
 #ifdef BB_SOC
 #define BIN_FILE_PATH				"/etc/RT30xxEEPROM.bin"
+#if defined(PRE_CAL_TRX_SET1_SUPPORT) || defined(PRE_CAL_TRX_SET2_SUPPORT) || defined(RLM_CAL_CACHE_SUPPORT)
+#define CAL_FILE_PATH				"/etc/CALDATA_default.bin"
+#endif /* defined(PRE_CAL_TRX_SET1_SUPPORT) || defined(PRE_CAL_TRX_SET2_SUPPORT) || defined(RLM_CAL_CACHE_SUPPORT) */
+#ifdef PA_TRIM_SUPPORT 
+#define CAL_BIN_FILE_PATH           "/etc/CALIBRATION_DATA.bin"
+#endif /* PA_TRIM_SUPPORT */
 #else
 //#define BIN_FILE_PATH				"/tmp/RT30xxEEPROM.bin"
 #ifdef WCX_SUPPORT
 #define BIN_FILE_PATH				"/data/nvram/APCFG/APRDEB/WIFI"
 #else
 #define BIN_FILE_PATH				"/etc/RT30xxEEPROM.bin"
+#if defined(PRE_CAL_TRX_SET1_SUPPORT) || defined(PRE_CAL_TRX_SET2_SUPPORT) || defined(RLM_CAL_CACHE_SUPPORT)
+#define CAL_FILE_PATH				"/etc/CALDATA_default.bin"
+#endif /* defined(PRE_CAL_TRX_SET1_SUPPORT) || defined(PRE_CAL_TRX_SET2_SUPPORT) || defined(RLM_CAL_CACHE_SUPPORT) */
+#ifdef PA_TRIM_SUPPORT 
+#define CAL_BIN_FILE_PATH           "/etc/CALIBRATION_DATA.bin"
+#endif /* PA_TRIM_SUPPORT */
 #endif /* WCX_SUPPORT */
 #endif /* BB_SOC */
 
@@ -300,6 +321,22 @@ typedef union _EEPROM_TX_PWR_OFFSET_STRUC
 	USHORT		word;
 } EEPROM_TX_PWR_OFFSET_STRUC, *PEEPROM_TX_PWR_OFFSET_STRUC;
 #endif /* RT_BIG_ENDIAN */
+
+typedef struct _EEPROM_CONTROL
+{
+	UCHAR e2pCurMode;
+	UCHAR e2pSource;
+	RTMP_STRING *BinSource;
+} EEPROM_CONTROL, *PEEPROM_CONTROL;
+
+#ifdef RF_LOCKDOWN
+typedef struct _EPPROM_PROPERTY_TYPE
+{
+    USHORT  Offset;
+    BOOLEAN RFlcok;
+    BOOLEAN CalFree;
+} EPPROM_PROPERTY_TYPE, *P_EPPROM_PROPERTY_TYPE;
+#endif /* RF_LOCKDOWN */
 
 #define NIC_CONFIGURE_0 0x34
 #define EXTERNAL_PA_MASK (0x3 << 8)
@@ -698,6 +735,10 @@ typedef union _EEPROM_TX_PWR_OFFSET_STRUC
 #define BT_VCDL_CALIBRATION 0x13C
 #define BT_PMUCFG 0x13E
 
+#define PA_TRIM_START_ADDR1   0x338
+#define PA_TRIM_START_ADDR2   0x3B3
+#define PA_TRIM_BLOCK_SIZE        4
+
 struct _RTMP_ADAPTER;
 
 #ifdef RTMP_PCI_SUPPORT
@@ -757,7 +798,9 @@ INT rtmp_ee_load_from_bin(
 
 INT rtmp_ee_write_to_bin(
 	IN struct _RTMP_ADAPTER *pAd);
-
+#ifdef VENDOR_FEATURE6_SUPPORT
+int rtmp_ee_bin_write_with_range(struct _RTMP_ADAPTER *pAd, USHORT start, USHORT Length, UCHAR *pbuf);
+#endif
 INT rtmp_ee_write_to_prom(struct _RTMP_ADAPTER *pAd);
 	
 INT Set_LoadEepromBufferFromBin_Proc(struct _RTMP_ADAPTER *pAd, RTMP_STRING *arg);
@@ -765,6 +808,41 @@ INT Set_LoadEepromBufferFromBin_Proc(struct _RTMP_ADAPTER *pAd, RTMP_STRING *arg
 INT Set_EepromBufferWriteBack_Proc(struct _RTMP_ADAPTER *pAd, RTMP_STRING *arg);
 
 INT Set_bufferMode_Proc(struct _RTMP_ADAPTER *pAd, RTMP_STRING *arg);
+
+INT show_e2pinfo_proc(struct _RTMP_ADAPTER *pAd, RTMP_STRING *arg);
+
+#if defined(PRE_CAL_TRX_SET1_SUPPORT) || defined(PRE_CAL_TRX_SET2_SUPPORT) || defined(RLM_CAL_CACHE_SUPPORT)
+NDIS_STATUS rtmp_cal_load_from_bin(
+	IN struct _RTMP_ADAPTER *pAd,
+	IN UCHAR *buf,
+	IN ULONG offset,
+	IN ULONG len);
+
+NDIS_STATUS rtmp_cal_write_to_bin(
+	IN struct _RTMP_ADAPTER *pAd,
+	IN UCHAR *buf,
+	IN ULONG offset,
+	IN ULONG len);
+#endif /* defined(PRE_CAL_TRX_SET1_SUPPORT) || defined(PRE_CAL_TRX_SET2_SUPPORT) || defined(RLM_CAL_CACHE_SUPPORT) */
+
+#ifdef PA_TRIM_SUPPORT
+INT Cal_Data_Write_To_Bin(
+	IN struct _RTMP_ADAPTER *pAd,
+	IN UINT8 *Buf,
+	IN UINT32 Offset,
+	IN UINT32 Len);
+
+INT Cal_Data_Load_From_Bin(
+	IN struct _RTMP_ADAPTER *pAd,
+	IN UINT8 *Buf,
+	IN UINT32 Offset,
+	IN UINT32 Len);
+#endif /* PA_TRIM_SUPPORT */
+
+#ifdef CAL_FREE_IC_SUPPORT
+INT Set_LoadCalFreeData_Proc(struct _RTMP_ADAPTER *pAd, RTMP_STRING *arg);
+INT Set_CheckCalFree_Proc(struct _RTMP_ADAPTER *pAd, RTMP_STRING *arg);
+#endif
 
 /*************************************************************************
   *	Public function declarations for prom operation callback functions setting

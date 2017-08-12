@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 
 #ifndef __WF_RMAC_H__
@@ -211,6 +212,7 @@ typedef union _RMAC_CBxR1_STRUC {
 
 #define RMAC_MAR0               (WF_RMAC_BASE + 0x25c)	/* 0x2145c */
 #define RMAC_MAR1               (WF_RMAC_BASE + 0x260)	/* 0x21460 */
+#define RMAC_RSVD0              (WF_RMAC_BASE + 0x2e0)  /* 0x214e0 */
 #define RMAC_DEBUG_CR       (WF_RMAC_BASE + 0x2e4)
 typedef struct _RMAC_MAR0_STRUC{
         UINT32 addr_31_0;
@@ -228,6 +230,9 @@ typedef union _RMAC_MAR1_STRUC{
         } field;
         UINT32 word;
 }RMAC_MAR1_STRUC;
+
+
+#define RX_EIFS_TIME_ZERO   (1 << 21)
 
 #define RMAC_MBSSIDEXT1_0               (WF_RMAC_BASE + 0x300)
 #define RMAC_MBSSIDEXT1_1               (WF_RMAC_BASE + 0x304)

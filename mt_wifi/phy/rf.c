@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc. 
@@ -13,7 +14,7 @@
 	Module Name:
 	rf.c
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 VOID InitRFRegisters(RTMP_ADAPTER *pAd)

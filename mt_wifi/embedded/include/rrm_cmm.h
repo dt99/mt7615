@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -14,7 +15,7 @@
  * way altering	the	source code	is stricitly prohibited, unless	the	prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
 	Abstract:
 
@@ -87,6 +88,7 @@ typedef struct _RRM_MLME_BCN_REQ_INFO
 	UINT8 MeasureMode;
 	RRM_BCN_REQ_CAP BcnReqCapFlag;
 	UINT8 ChRepRegulatoryClass[MAX_NUM_OF_REGULATORY_CLASS];
+	UINT8 ChRepList[MAX_NUM_OF_CHS];
 } RRM_MLME_BCN_REQ_INFO, *PRRM_MLME_BCN_REQ_INFO;
 
 typedef struct _RRM_MLME_TRANSMIT_REQ_INFO

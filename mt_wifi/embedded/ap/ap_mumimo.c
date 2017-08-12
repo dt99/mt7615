@@ -7,6 +7,7 @@
      This file contains IOCTL for MU-MIMO specfic commands
  */
 
+#ifdef MTK_LICENSE
 /*******************************************************************************
  * Copyright (c) 2014 MediaTek Inc.
  * 
@@ -48,7 +49,7 @@
  * (ICC).
  * ******************************************************************************
  */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 #ifdef CFG_SUPPORT_MU_MIMO
 /* For debugging, Not for ATE */
@@ -122,12 +123,6 @@ INT SetMuProfileProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     param.index = simple_strtol(pIdx, 0, 10);
     param.baMask = simple_strtol(pBaMask, 0, 16);
     param.wlanIdx = simple_strtol(pWlanIdx, 0, 10);
-
-    param.index = cpu2le32(param.index);
-    param.baMask = cpu2le32(param.baMask);
-    param.wlanIdx = cpu2le32(param.wlanIdx);
-    param.valid = cpu2le32(param.valid);
-
    
     // Allocate memory for msg
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
@@ -147,7 +142,9 @@ INT SetMuProfileProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
 
     AndesInitCmdMsg(msg, attr);
-
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -201,6 +198,9 @@ INT ShowMuProfileProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *) &cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *) &index, sizeof(index));
 
@@ -523,33 +523,9 @@ INT SetGroupTblEntryProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     param.NS1 = simple_strtol(pNs1, 0, 10);
     param.NS2 = simple_strtol(pNs2, 0, 10);
     param.NS3 = simple_strtol(pNs3, 0, 10);
-
+#ifdef RT_BIG_ENDIAN
     param.index = cpu2le32(param.index);
-    param.numUser = cpu2le32(param.numUser);
-    param.BW = cpu2le32(param.BW);
-    param.PFIDUser0 = cpu2le32(param.PFIDUser0);
-    param.PFIDUser1 = cpu2le32(param.PFIDUser1);
-    param.PFIDUser2 = cpu2le32(param.PFIDUser2);
-    param.PFIDUser3 = cpu2le32(param.PFIDUser3);
-    param.fgIsShortGI = cpu2le32(param.fgIsShortGI);
-    param.fgIsUsed = cpu2le32(param.fgIsUsed);
-    param.fgIsDisable = cpu2le32(param.fgIsDisable);
-    
-    param.initMcsUser0 = cpu2le32(param.initMcsUser0);
-    param.initMcsUser1 = cpu2le32(param.initMcsUser1);
-    param.initMcsUser2 = cpu2le32(param.initMcsUser2);
-    param.initMcsUser3 = cpu2le32(param.initMcsUser3);
-    
-    param.dMcsUser0 = cpu2le32(param.dMcsUser0);
-    param.dMcsUser1 = cpu2le32(param.dMcsUser1);
-    param.dMcsUser2 = cpu2le32(param.dMcsUser2);
-    param.dMcsUser3 = cpu2le32(param.dMcsUser3);
-
-    param.NS0 = cpu2le32(param.NS0);
-    param.NS1 = cpu2le32(param.NS1);
-    param.NS2 = cpu2le32(param.NS2);
-    param.NS3 = cpu2le32(param.NS3);
-
+#endif
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_INFO, 
             ("#################### %s\n", __FUNCTION__));
 
@@ -580,6 +556,9 @@ INT SetGroupTblEntryProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(CMD_MU_SET_GROUP_TBL_ENTRY));
     AndesSendCmdMsg(pAd, msg);
@@ -635,6 +614,9 @@ INT ShowGroupTblEntryProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&index, sizeof(index));
     AndesSendCmdMsg(pAd, msg);
@@ -746,8 +728,6 @@ INT SetClusterTblEntryProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     }
 
     param.index = simple_strtol(pIndex, 0, 10);
-    param.index = cpu2le32(param.index);
-
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_INFO, 
             ("#################### %s\n", __FUNCTION__));
     // do we need change edian?
@@ -757,13 +737,14 @@ INT SetClusterTblEntryProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     param.gidUserPosition[1] = simple_strtol(pLowGidUserPosition1, 0, 16);
     param.gidUserPosition[2] = simple_strtol(pHighGidUserPosition0, 0, 16);
     param.gidUserPosition[3] = simple_strtol(pHighGidUserPosition1, 0, 16);
+#ifdef RT_BIG_ENDIAN
     param.gidUserMemberStatus[0] = cpu2le32(param.gidUserMemberStatus[0]);
     param.gidUserMemberStatus[1] = cpu2le32(param.gidUserMemberStatus[1]);
     param.gidUserPosition[0] = cpu2le32(param.gidUserPosition[0]);
     param.gidUserPosition[1] = cpu2le32(param.gidUserPosition[1]);
     param.gidUserPosition[2] = cpu2le32(param.gidUserPosition[2]);
     param.gidUserPosition[3] = cpu2le32(param.gidUserPosition[3]);
-
+#endif
 
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_INFO, 
         ("Values: %d %d %d %d %d %d %d\n", param.index, 
@@ -787,7 +768,9 @@ INT SetClusterTblEntryProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
-
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(CMD_MU_SET_CLUSTER_TBL_ENTRY));
     AndesSendCmdMsg(pAd, msg);
@@ -847,6 +830,9 @@ INT ShowClusterTblEntryProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *) &cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *) &index, sizeof(index));
     AndesSendCmdMsg(pAd, msg);
@@ -876,8 +862,6 @@ INT SetMuEnableProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     CMD_MU_SET_ENABLE param = {0};
     struct _CMD_ATTRIBUTE attr = {0};
     value = simple_strtol(arg, NULL, 10);
-    value = cpu2le32(value);
-
     param.fgIsEnable = value;
     // Allocate memory for msg
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(CMD_MU_SET_ENABLE));
@@ -895,6 +879,9 @@ INT SetMuEnableProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *) &cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *) &value, sizeof(value));
 
@@ -932,6 +919,9 @@ INT ShowMuEnableProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *) &cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 
@@ -986,10 +976,6 @@ INT SetGroupUserThresholdProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
                 ("Min < 2 and Max > 4 is NOT allowed\n"));
         goto error;
     }
-    
-    param.min = cpu2le32(param.min);
-    param.max = cpu2le32(param.max);
-
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_INFO, 
             ("#################### %s\n", __FUNCTION__));
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_INFO, 
@@ -1012,7 +998,9 @@ INT SetGroupUserThresholdProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
-
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
 
@@ -1051,6 +1039,9 @@ INT ShowGroupUserThresholdProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 
@@ -1100,6 +1091,9 @@ INT SetCalculateInitMCSProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *) &cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *) &index, sizeof(index));
     Ret = AndesSendCmdMsg(pAd, msg);
@@ -1156,9 +1150,6 @@ INT SetGroupNssThresholdProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 
     param.min = simple_strtol(pMinVal, 0, 10);
     param.max = simple_strtol(pMaxVal, 0, 10);
-    param.min = cpu2le32(param.min);
-    param.max = cpu2le32(param.max);
-    
 
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_INFO, 
             ("#################### %s\n", __FUNCTION__));
@@ -1181,6 +1172,9 @@ INT SetGroupNssThresholdProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -1214,6 +1208,9 @@ INT ShowGroupNssThresholdProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 
@@ -1241,9 +1238,7 @@ INT SetTxReqMinTimeProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     UINT32 cmd = MU_SET_TXREQ_MIN_TIME;
     struct _CMD_ATTRIBUTE attr = {0};
     value = simple_strtol(arg, 0, 16);
-    value = cpu2le32(value);
-    param.value = value;
-
+    param.value = cpu2le16(value);
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_INFO, 
             ("#################### %s\n", __FUNCTION__));
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_INFO, 
@@ -1264,6 +1259,9 @@ INT SetTxReqMinTimeProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -1299,6 +1297,9 @@ INT ShowTxReqMinTimeProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 
@@ -1355,6 +1356,9 @@ INT ShowCalcInitMCSProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&index, sizeof(index));
     AndesSendCmdMsg(pAd, msg);
@@ -1388,8 +1392,6 @@ INT SetSuNssCheckProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     {    
         return FALSE;
     }
-    
-    value = cpu2le32(value); 
     param.fgIsEnable = value;
 
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
@@ -1407,6 +1409,9 @@ INT SetSuNssCheckProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -1446,6 +1451,9 @@ INT ShowSuNssCheckProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 error:
@@ -1512,11 +1520,11 @@ INT SetTriggerGIDMgmtFrameProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     }
 
     param.wlanIndex = simple_strtol(pWlanIdx, 0, 10);
-    param.wlanIndex = cpu2le32(param.wlanIndex);
+#ifdef RT_BIG_ENDIAN
+    param.wlanIndex = cpu2le16(param.wlanIndex);
+#endif
     param.gid = simple_strtol(pGid, 0, 10);
-    param.gid = cpu2le32(param.gid);
     param.up = simple_strtol(pUp, 0, 10);
-    param.up = cpu2le32(param.up);
 
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(value));
     if (!msg) 
@@ -1533,6 +1541,9 @@ INT SetTriggerGIDMgmtFrameProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -1566,6 +1577,9 @@ INT SetTriggerSndProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -1582,17 +1596,16 @@ INT SetTriggerBbpProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     struct cmd_msg *msg = NULL;
     UINT32 cmd = MU_SET_TRIGGER_BBP;
     CMD_SET_TRIGGER_BBP param = {0};
-    UINT8 value = 0;
+    UINT16 value = 0;
     struct _CMD_ATTRIBUTE attr = {0};
     value = simple_strtol(arg, 0, 10);
-    value = cpu2le32(value);
     if (value > 2048) 
     {
         Ret = FALSE;
         goto error;
     }
 
-    param.u2GroupIndex = value; /* 0~3: 1 to 4 user grouping */
+    param.u2GroupIndex = cpu2le16(value); /* 0~3: 1 to 4 user grouping */
 
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
     if (!msg) 
@@ -1609,6 +1622,9 @@ INT SetTriggerBbpProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -1630,7 +1646,6 @@ INT SetTriggerGroupProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     UINT8 value = 0;
     struct _CMD_ATTRIBUTE attr = {0};
     value = simple_strtol(arg, 0, 10);
-    value = cpu2le32(value);
     if (value < 2) 
     {
         Ret = FALSE;
@@ -1654,6 +1669,9 @@ INT SetTriggerGroupProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -1675,7 +1693,6 @@ INT SetTriggerDegroupProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     UINT8 value = 0;
     struct _CMD_ATTRIBUTE attr = {0};
     value = simple_strtol(arg, 0, 10);
-    value = cpu2le32(value);
     param.ucMuProfileIndex = value;
 
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
@@ -1693,6 +1710,9 @@ INT SetTriggerDegroupProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -1766,13 +1786,9 @@ INT SetTriggerMuTxProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     }
 
     param.ucAcIndex = simple_strtol(pAcIndex, 0, 10);
-    param.ucAcIndex = cpu2le32(param.ucAcIndex);
     param.fgIsRandomPattern = simple_strtol(pRandom, 0, 10);
     param.u4NumOfSTAs = simple_strtol(pNumOfStas, 0, 10);
-    param.u4NumOfSTAs = cpu2le32(param.u4NumOfSTAs);
     param.u4Round = simple_strtol(pRound, 0, 10);
-    param.u4Round = cpu2le32(param.u4Round);
-
     for (index = 0; index < param.u4NumOfSTAs; index++) 
     {
 	    pch = strsep(&arg, "_");
@@ -1787,7 +1803,6 @@ INT SetTriggerMuTxProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 	    }
 
 	    param.aucWlanIndexArray[index] = simple_strtol(pWlanIndex, 0, 10);
-	    param.aucWlanIndexArray[index] = cpu2le32(param.aucWlanIndexArray[index]);
     }
 
     for (index = 0; index < param.u4NumOfSTAs; index++) 
@@ -1838,6 +1853,11 @@ INT SetTriggerMuTxProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &param);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+	param.u4NumOfSTAs = cpu2le32(param.u4NumOfSTAs);
+	param.u4Round = cpu2le32(param.u4Round);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -1857,7 +1877,7 @@ error:
  */
 INT SetTxopDefaultProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 {
-    UINT16 value = 0;
+    UINT32 value = 0;
     INT32 Ret = TRUE;
     // prepare command message
     struct cmd_msg *msg = NULL;
@@ -1867,8 +1887,7 @@ INT SetTxopDefaultProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 
 
     value = simple_strtol(arg, 0, 10);
-    value = cpu2le32(value);
-    param.value = value;
+    param.value = cpu2le32(value);
 
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
     if (!msg) 
@@ -1885,6 +1904,9 @@ INT SetTxopDefaultProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -1925,6 +1947,9 @@ INT ShowTxopDefaultProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 error:
@@ -1952,8 +1977,7 @@ INT SetSuLossThresholdProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     UINT32 cmd = MU_SET_SU_LOSS_THRESHOLD;
     struct _CMD_ATTRIBUTE attr = {0};
     value = simple_strtol(arg, 0, 10);
-    value = cpu2le32(value);
-    param.value = value;
+    param.value = cpu2le16(value);
 
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
     if (!msg) 
@@ -1970,6 +1994,9 @@ INT SetSuLossThresholdProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -2010,7 +2037,9 @@ INT ShowSuLossThresholdProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
-
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 error:
@@ -2038,8 +2067,7 @@ INT SetMuGainThresholdProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     UINT32 cmd = MU_SET_MU_GAIN_THRESHOLD;
     struct _CMD_ATTRIBUTE attr = {0};
     value = simple_strtol(arg, 0, 10);
-    value = cpu2le32(value);
-    param.value = value;
+    param.value = cpu2le16(value);
 
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
     if (!msg) 
@@ -2056,6 +2084,9 @@ INT SetMuGainThresholdProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -2095,6 +2126,9 @@ INT ShowMuGainThresholdProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 error:
@@ -2122,8 +2156,7 @@ INT SetSecondaryAcPolicyProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     UINT32 cmd = MU_SET_SECONDARY_AC_POLICY;
     struct _CMD_ATTRIBUTE attr = {0};
     value = simple_strtol(arg, 0, 10);
-    value = cpu2le32(value);
-    param.value = value;
+    param.value = cpu2le16(value);
 
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param ));
     if (!msg) 
@@ -2140,6 +2173,9 @@ INT SetSecondaryAcPolicyProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -2178,6 +2214,9 @@ INT ShowSecondaryAcPolicyProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *) &cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 error:
@@ -2196,7 +2235,7 @@ error:
  */
 INT SetGroupTblDmcsMaskProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 {
-    UINT16 value = 0;
+    UINT8 value = 0;
     INT32 Ret = TRUE;
     // prepare command message
     struct cmd_msg *msg = NULL;
@@ -2204,7 +2243,6 @@ INT SetGroupTblDmcsMaskProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     UINT32 cmd = MU_SET_GROUP_TBL_DMCS_MASK;
     struct _CMD_ATTRIBUTE attr = {0};
     value = simple_strtol(arg, 0, 10);
-    value = cpu2le32(value);
     param.value = value;
 
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
@@ -2222,6 +2260,9 @@ INT SetGroupTblDmcsMaskProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -2261,6 +2302,9 @@ INT ShowGroupTblDmcsMaskProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 error:
@@ -2280,7 +2324,7 @@ error:
  */
 INT SetMaxGroupSearchCntProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 {
-    UINT16 value = 0;
+    UINT32 value = 0;
     INT32 Ret = TRUE;
     // prepare command message
     struct cmd_msg *msg = NULL;
@@ -2288,8 +2332,7 @@ INT SetMaxGroupSearchCntProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     UINT32 cmd = MU_SET_MAX_GROUP_SEARCH_CNT;
     struct _CMD_ATTRIBUTE attr = {0};
     value = simple_strtol(arg, 0, 10);
-    value = cpu2le32(value);
-    param.value = value;
+    param.value = cpu2le32(value);
 
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
     if (!msg) 
@@ -2307,6 +2350,9 @@ INT SetMaxGroupSearchCntProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
 
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -2346,6 +2392,9 @@ INT ShowMaxGroupSearchCntProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
 
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 error:
@@ -2361,7 +2410,7 @@ INT ShowMuProfileTxStsCntProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     struct cmd_msg *msg = NULL;
     PCHAR pch = NULL;
     PCHAR pIndex = NULL;
-    UINT32 index = 0;
+    UINT16 index = 0;
     CMD_GET_MU_PFID_TXS_CNT param = {0};
     EVENT_MU_GET_MUPROFILE_TX_STATUS_CNT result = {0};
     UINT32 cmd = MU_GET_MU_PROFILE_TX_STATUS_CNT;    
@@ -2377,8 +2426,7 @@ INT ShowMuProfileTxStsCntProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
         goto error;
     }
     index = simple_strtol(pIndex, 0, 10);
-    index = cpu2le32(index);
-    param.u2PfidIndex = index;
+    param.u2PfidIndex = cpu2le16(index);
     
 
     // Allocate memory for msg
@@ -2397,6 +2445,9 @@ INT ShowMuProfileTxStsCntProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &result);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -2758,22 +2809,22 @@ hqa_wifi_test_mu_cal_init_mcs (
     UINT32 cmd = MU_HQA_SET_CALC_INIT_MCS;
     CMD_HQA_SET_INIT_MCS param = {0};    
     struct _CMD_ATTRIBUTE attr = {0};
-    param.num_of_user  = cpu2le32(pParams->num_of_user);
-    param.bandwidth    = cpu2le32(pParams->bandwidth);
-    param.nss_of_user0 = cpu2le32(pParams->nss_of_user0);
-    param.nss_of_user1 = cpu2le32(pParams->nss_of_user1);
-    param.nss_of_user2 = cpu2le32(pParams->nss_of_user2);
-    param.nss_of_user3 = cpu2le32(pParams->nss_of_user3);
+    param.num_of_user  = pParams->num_of_user;
+    param.bandwidth    = pParams->bandwidth;
+    param.nss_of_user0 = pParams->nss_of_user0;
+    param.nss_of_user1 = pParams->nss_of_user1;
+    param.nss_of_user2 = pParams->nss_of_user2;
+    param.nss_of_user3 = pParams->nss_of_user3;
 
 
-    param.pf_mu_id_of_user0 = cpu2le32(pParams->pf_mu_id_of_user0);
-    param.pf_mu_id_of_user1 = cpu2le32(pParams->pf_mu_id_of_user1);
-    param.pf_mu_id_of_user2 = cpu2le32(pParams->pf_mu_id_of_user2);
-    param.pf_mu_id_of_user3 = cpu2le32(pParams->pf_mu_id_of_user3);
+    param.pf_mu_id_of_user0 = pParams->pf_mu_id_of_user0;
+    param.pf_mu_id_of_user1 = pParams->pf_mu_id_of_user1;
+    param.pf_mu_id_of_user2 = pParams->pf_mu_id_of_user2;
+    param.pf_mu_id_of_user3 = pParams->pf_mu_id_of_user3;
 
-    param.spe_index = cpu2le32(pParams->spe_index);
+    param.spe_index = pParams->spe_index;
 
-    param.num_of_txer = cpu2le32(pParams->num_of_txer);
+    param.num_of_txer = pParams->num_of_txer;
     param.group_index = cpu2le32(pParams->group_index); 
         
     
@@ -2801,6 +2852,9 @@ hqa_wifi_test_mu_cal_init_mcs (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -2820,6 +2874,7 @@ static VOID hqa_wifi_test_mu_get_init_mcs_callback(struct cmd_msg *msg,
     {
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("%s: error !! event fill null!!\n", __FUNCTION__));
+        return;
     }
     if (msg->attr.rsp.wb_buf_in_calbk == NULL)
     {
@@ -2894,6 +2949,9 @@ hqa_wifi_test_mu_get_init_mcs (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, poutput);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -2914,20 +2972,21 @@ hqa_wifi_test_mu_cal_lq (
     struct cmd_msg *msg = NULL;
     UINT32 cmd = MU_HQA_SET_CALC_LQ;
     CMD_HQA_SET_MU_CALC_LQ param = {0};
-    struct _CMD_ATTRIBUTE attr = {0};  
-    param.num_of_user = cpu2le32(pParams->num_of_user);
-    param.bandwidth = cpu2le32(pParams->bandwidth);
-    param.nss_of_user0 = cpu2le32(pParams->nss_of_user0);
-    param.nss_of_user1 = cpu2le32(pParams->nss_of_user1);
-    param.nss_of_user2 = cpu2le32(pParams->nss_of_user2);
-    param.nss_of_user3 = cpu2le32(pParams->nss_of_user3);
-    param.pf_mu_id_of_user0 = cpu2le32(pParams->pf_mu_id_of_user0);
-    param.pf_mu_id_of_user1 = cpu2le32(pParams->pf_mu_id_of_user1);
-    param.pf_mu_id_of_user2 = cpu2le32(pParams->pf_mu_id_of_user2);    
-    param.pf_mu_id_of_user3 = cpu2le32(pParams->pf_mu_id_of_user3);
-    param.spe_index = cpu2le32(pParams->spe_index);
+    struct _CMD_ATTRIBUTE attr = {0};
+  
+    param.num_of_user = pParams->num_of_user;
+    param.bandwidth = pParams->bandwidth;
+    param.nss_of_user0 = pParams->nss_of_user0;
+    param.nss_of_user1 = pParams->nss_of_user1;
+    param.nss_of_user2 = pParams->nss_of_user2;
+    param.nss_of_user3 = pParams->nss_of_user3;
+    param.pf_mu_id_of_user0 = pParams->pf_mu_id_of_user0;
+    param.pf_mu_id_of_user1 = pParams->pf_mu_id_of_user1;
+    param.pf_mu_id_of_user2 = pParams->pf_mu_id_of_user2;    
+    param.pf_mu_id_of_user3 = pParams->pf_mu_id_of_user3;
+    param.spe_index = pParams->spe_index;
 
-    param.num_of_txer = cpu2le32(pParams->num_of_txer);
+    param.num_of_txer = pParams->num_of_txer;
     param.group_index = cpu2le32(pParams->group_index);   
    
 
@@ -2974,6 +3033,9 @@ hqa_wifi_test_mu_cal_lq (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -2996,13 +3058,13 @@ hqa_wifi_test_su_cal_lq (
     UINT32 cmd = MU_HQA_SET_CALC_SU_LQ;
     CMD_HQA_SET_SU_CALC_LQ param = {0};
     struct _CMD_ATTRIBUTE attr = {0};
-    param.num_of_user       = cpu2le32(pParams->num_of_user);
-    param.bandwidth         = cpu2le32(pParams->bandwidth);
-    param.nss_of_user0      = cpu2le32(pParams->nss_of_user0);
-    param.pf_mu_id_of_user0 = cpu2le32(pParams->pf_mu_id_of_user0);
-    param.num_of_txer       = cpu2le32(pParams->num_of_txer);
+    param.num_of_user       = pParams->num_of_user;
+    param.bandwidth         = pParams->bandwidth;
+    param.nss_of_user0      = pParams->nss_of_user0;
+    param.pf_mu_id_of_user0 = pParams->pf_mu_id_of_user0;
+    param.num_of_txer       = pParams->num_of_txer;
     param.group_index       = cpu2le32(pParams->group_index); 
-    param.spe_index         = cpu2le32(pParams->spe_index);
+    param.spe_index         = pParams->spe_index;
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
         ("%s: CMD_HQA_SET_SU_CALC_LQ\n", __FUNCTION__));
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
@@ -3032,6 +3094,9 @@ hqa_wifi_test_su_cal_lq (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -3053,6 +3118,7 @@ static VOID hqa_wifi_test_mu_get_su_lq_callback(struct cmd_msg *msg,
     {
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("%s: error !! event fill null!!\n", __FUNCTION__));
+        return;
     }
     if (msg->attr.rsp.wb_buf_in_calbk == NULL)
     {
@@ -3118,6 +3184,9 @@ hqa_wifi_test_su_get_lq (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, pOutput);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *) &cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 error:
@@ -3134,6 +3203,7 @@ static VOID hqa_wifi_test_mu_get_lq_callback(struct cmd_msg *msg,
     {
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("%s: error !! event fill null!!\n", __FUNCTION__));
+        return;
     }
     if (msg->attr.rsp.wb_buf_in_calbk == NULL)
     {
@@ -3272,7 +3342,9 @@ hqa_wifi_test_mu_get_lq (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, pOutput);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
-    
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesSendCmdMsg(pAd, msg);
 
@@ -3294,7 +3366,7 @@ hqa_wifi_test_snr_offset_set (
     UINT32 cmd = MU_HQA_SET_SNR_OFFSET;
     CMD_HQA_SET_MU_SNR_OFFSET param = {0};
     struct _CMD_ATTRIBUTE attr = {0};
-    param.offset = cpu2le32(val);
+    param.offset = val;
 
     MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
 		    ("%s, offset:0x%x\n", __FUNCTION__, val));
@@ -3314,6 +3386,9 @@ hqa_wifi_test_snr_offset_set (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -3336,7 +3411,7 @@ hqa_wifi_test_mu_set_zero_nss (
     CMD_HQA_SET_MU_NSS_ZERO param = {0};
     UINT32 cmd = MU_HQA_SET_ZERO_NSS;
     struct _CMD_ATTRIBUTE attr = {0};
-    param.ucValue = cpu2le32(val);
+    param.ucValue = val;
 
     MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
 		        ("%s, val:%u\n", __FUNCTION__,  val));
@@ -3356,6 +3431,9 @@ hqa_wifi_test_mu_set_zero_nss (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -3376,7 +3454,7 @@ hqa_wifi_test_mu_speed_up_lq (
     CMD_HQA_SET_MU_LQ_SPEED_UP param = {0};
     UINT32 cmd = MU_HQA_SET_SPEED_UP_LQ;
     struct _CMD_ATTRIBUTE attr = {0};
-    param.ucValue = cpu2le32(val);  
+    param.ucValue = val;  
     MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
             ("%s, val:%d\n", __FUNCTION__, val));
     msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
@@ -3394,6 +3472,9 @@ hqa_wifi_test_mu_speed_up_lq (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -3411,7 +3492,7 @@ hqa_wifi_test_mu_table_set (
 {
         INT Ret = 0;
         struct cmd_msg *msg = NULL;
-        UINT32 cmd = (ptr->type == SU) ? MU_HQA_SET_SU_TABLE : MU_HQA_SET_MU_TABLE;
+        UINT32 cmd = 0;
         P_CMD_HQA_SET_MU_METRIC_TABLE pMuParam = NULL;
         P_CMD_HQA_SET_SU_METRIC_TABLE pSuParam = NULL;
         UINT32 i = 0;
@@ -3424,6 +3505,7 @@ hqa_wifi_test_mu_table_set (
                 Ret = -1;
                 goto error;
         }
+        cmd = (ptr->type == SU) ? MU_HQA_SET_SU_TABLE : MU_HQA_SET_MU_TABLE;
 
         if (ptr->type == SU) {
                 os_alloc_mem(pAd, (UCHAR **)&pSuParam, sizeof(*pSuParam));
@@ -3442,7 +3524,7 @@ hqa_wifi_test_mu_table_set (
                         NdisCopyMemory(pSuParam->metric_table, ptr->prTable, ptr->length);
                 } else {
                         MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
-                                ("length(%u) error!!should < su_metric_tbl(%u)\n",
+                                ("length(%u) error!!should < su_metric_tbl(%zu)\n",
                                         ptr->length, sizeof(pSuParam->metric_table)));
                         Ret = -1;
                         goto error;
@@ -3452,7 +3534,7 @@ hqa_wifi_test_mu_table_set (
                         NdisCopyMemory(pMuParam->metric_table, ptr->prTable, ptr->length);
                 } else {
                         MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
-                                ("length(%u) error!!should < mu_metric_tbl(%u)\n",
+                                ("length(%u) error!!should < mu_metric_tbl(%zu)\n",
                                         ptr->length, sizeof(pSuParam->metric_table)));
                         Ret = -1;
                         goto error;
@@ -3500,7 +3582,9 @@ hqa_wifi_test_mu_table_set (
         SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
         SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
         AndesInitCmdMsg(msg, attr);
-
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
         AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
 
         AndesAppendCmdMsg(msg, (ptr->type == SU) ? (char *)pSuParam : (char *)pMuParam, 
@@ -3509,6 +3593,7 @@ hqa_wifi_test_mu_table_set (
         AndesSendCmdMsg(pAd, msg);
 
 error:
+	if (ptr) {
         if (ptr->type == SU) {
                 if (pSuParam) {
                         os_free_mem(pSuParam);
@@ -3518,9 +3603,10 @@ error:
                         os_free_mem(pMuParam);
                 }
         }
+	}
 
-        MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
-                ("%s:(Ret = %d\n", __FUNCTION__, Ret));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+			("%s:(Ret = %d\n", __FUNCTION__, Ret));
 
 	return Ret;
 }
@@ -3606,7 +3692,7 @@ hqa_wifi_test_mu_group_set (
         CMD_HQA_SET_MU_GROUP param = {0};
         struct _CMD_ATTRIBUTE attr = {0};
 
-        param.groupIndex        = mu_group->groupIndex;        
+    param.groupIndex = cpu2le32(mu_group->groupIndex);
         param.numOfUser         = mu_group->numOfUser;
         param.fgUser0Ldpc       = mu_group->user0Ldpc;
         param.fgUser1Ldpc       = mu_group->user1Ldpc;
@@ -3646,6 +3732,9 @@ hqa_wifi_test_mu_group_set (
         SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
         SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
         AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
         AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
         AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
         AndesSendCmdMsg(pAd, msg);
@@ -3666,6 +3755,7 @@ static VOID hqa_wifi_test_mu_get_qd_callback(struct cmd_msg *msg,
     {
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("%s: error !! event fill null!!\n", __FUNCTION__));
+        return;
     }
 
     if (msg->attr.rsp.wb_buf_in_calbk == NULL)
@@ -3770,6 +3860,9 @@ hqa_wifi_test_mu_get_qd (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, pOutput);
     SET_CMD_ATTR_RSP_HANDLER(attr, eventDispatcher);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -3791,7 +3884,7 @@ hqa_wifi_test_mu_set_enable (
     CMD_HQA_SET_MU_ENABLE param = {0};
     UINT32 cmd = MU_HQA_SET_ENABLE;
     struct _CMD_ATTRIBUTE attr = {0};
-    param.fgIsEnable = cpu2le32(val);
+    param.fgIsEnable = val;
 
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
                         ("%s:(param.fgIsEnable = %d_\n", 
@@ -3812,6 +3905,9 @@ hqa_wifi_test_mu_set_enable (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -3836,8 +3932,10 @@ hqa_wifi_test_mu_trigger_mu_tx (
     UINT32 cmd = MU_SET_TRIGGER_MU_TX;
     struct _CMD_ATTRIBUTE attr = {0};
     param.ucAcIndex = 1;
-    param.fgIsRandomPattern = cpu2le32(pParam->fgIsRandomPattern);
-    param.u4NumOfSTAs   = cpu2le32(pParam->u4NumOfSTAs + 1);
+    param.fgIsRandomPattern = pParam->fgIsRandomPattern;
+    param.u4NumOfSTAs = cpu2le32(pParam->u4NumOfSTAs + 1);
+
+
     param.u4Round = cpu2le32(pParam->u4MuPacketCount);
       
 
@@ -3895,6 +3993,9 @@ hqa_wifi_test_mu_trigger_mu_tx (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -3909,13 +4010,15 @@ error:
 static VOID eventDispatcher(struct cmd_msg *msg, char *rsp_payload, 
 							                UINT16 rsp_payload_len)
 {
-    UINT32 u4EventId = (*(UINT32 *)rsp_payload);
+    UINT32 u4EventId = *(UINT32 *)rsp_payload;
     char *pData = (rsp_payload);
     UINT16 len = (rsp_payload_len);
 
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
         ("%s: u4EventId = %u, len = %u\n", __FUNCTION__, u4EventId, len));
-    
+ #ifdef RT_BIG_ENDIAN
+	u4EventId = cpu2le32(u4EventId);
+ #endif
     switch (u4EventId) 
     {
         case MU_EVENT_MU_ENABLE:
@@ -4048,7 +4151,6 @@ INT32 hqa_mu_get_init_mcs(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
 
 	gid = simple_strtoul(arg, 0, 10);
 
-	gid = cpu2le32(gid);
 
 	os_zero_mem(&init_mcs, sizeof(init_mcs));
 
@@ -4176,22 +4278,22 @@ INT32 hqa_mu_cal_init_mcs(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
 
         os_zero_mem(&param, sizeof(param));
 
-        param.num_of_user     = cpu2le32(num_of_user);
-        param.bandwidth     = cpu2le32(bandwidth);
-        param.nss_of_user0 = cpu2le32(nss_of_user0);
-        param.nss_of_user1 = cpu2le32(nss_of_user1);
-        param.nss_of_user2 = cpu2le32(nss_of_user2);
-        param.nss_of_user3 = cpu2le32(nss_of_user3);
+	param.num_of_user     = num_of_user;
+    param.bandwidth     = bandwidth;
+    param.nss_of_user0 = nss_of_user0;
+    param.nss_of_user1 = nss_of_user1;
+    param.nss_of_user2 = nss_of_user2;
+    param.nss_of_user3 = nss_of_user3;
 
 
-        param.pf_mu_id_of_user0 = cpu2le32(pf_mu_id_of_user0);
-        param.pf_mu_id_of_user1 = cpu2le32(pf_mu_id_of_user1);
-        param.pf_mu_id_of_user2 = cpu2le32(pf_mu_id_of_user2);
-        param.pf_mu_id_of_user3 = cpu2le32(pf_mu_id_of_user3);
+    param.pf_mu_id_of_user0 = pf_mu_id_of_user0;
+    param.pf_mu_id_of_user1 = pf_mu_id_of_user1;
+    param.pf_mu_id_of_user2 = pf_mu_id_of_user2;
+    param.pf_mu_id_of_user3 = pf_mu_id_of_user3;
 
 
-        param.num_of_txer= cpu2le32(num_of_txer);
-        param.group_index    = cpu2le32(group_index); 
+    param.num_of_txer= num_of_txer;
+    param.group_index    = group_index; 
 
 
         Ret = hqa_wifi_test_mu_cal_init_mcs(pAd, &param);
@@ -4292,21 +4394,23 @@ INT32 hqa_mu_cal_lq(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
                         ("%s: gid = %u, num_txer = %u\n",
                         __FUNCTION__, group_index,num_of_txer));
 
-        os_zero_mem(&param, sizeof(param));
+    os_zero_mem(&param, sizeof(param));
+	param.num_of_user  = num_of_user;
+    param.bandwidth    = bandwidth;
+    param.nss_of_user0 = nss_of_user0;
+    param.nss_of_user1 = nss_of_user1;
+    param.nss_of_user2 = nss_of_user2;
+    param.nss_of_user3 = nss_of_user3;
 
-        param.num_of_user  = cpu2le32(num_of_user);
-        param.bandwidth    = cpu2le32(bandwidth);
-        param.nss_of_user0 = cpu2le32(nss_of_user0);
-        param.nss_of_user1 = cpu2le32(nss_of_user1);
-        param.nss_of_user2 = cpu2le32(nss_of_user2);
-        param.nss_of_user3 = cpu2le32(nss_of_user3);
-        param.pf_mu_id_of_user0 = cpu2le32(pf_mu_id_of_user0);
-        param.pf_mu_id_of_user1 = cpu2le32(pf_mu_id_of_user1);
-        param.pf_mu_id_of_user2 = cpu2le32(pf_mu_id_of_user2);
-        param.pf_mu_id_of_user3 = cpu2le32(pf_mu_id_of_user3);
-        param.num_of_txer = cpu2le32(num_of_txer);
-        param.group_index = cpu2le32(group_index); 
 
+    param.pf_mu_id_of_user0 = pf_mu_id_of_user0;
+    param.pf_mu_id_of_user1 = pf_mu_id_of_user1;
+    param.pf_mu_id_of_user2 = pf_mu_id_of_user2;
+    param.pf_mu_id_of_user3 = pf_mu_id_of_user3;
+
+
+    param.num_of_txer = num_of_txer;
+    param.group_index = group_index; 
 
 	Ret = hqa_wifi_test_mu_cal_lq(pAd, (P_MU_STRUCT_SET_CALC_LQ)&param);
 
@@ -4433,17 +4537,17 @@ INT32 hqa_su_cal_lq(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
                         ("%s: gid = %u, num_txer = %u\n",
                         __FUNCTION__, group_index ,num_of_txer));
 
-        os_zero_mem(&param, sizeof(param));
+    os_zero_mem(&param, sizeof(param));
+ 
+    param.num_of_user     = num_of_user;
+    param.bandwidth     = bandwidth;
+    param.nss_of_user0 = nss_of_user0;
 
-        param.num_of_user     = cpu2le32(num_of_user);
-        param.bandwidth     = cpu2le32(bandwidth);
-        param.nss_of_user0 = cpu2le32(nss_of_user0);
+    param.pf_mu_id_of_user0 = pf_mu_id_of_user0;
 
-        param.pf_mu_id_of_user0 = cpu2le32(pf_mu_id_of_user0);
-
-        param.num_of_txer= cpu2le32(num_of_txer);
-        param.group_index    = cpu2le32(group_index); 
-
+    param.num_of_txer= num_of_txer;
+    param.group_index    = group_index; 
+   
 
         Ret = hqa_wifi_test_su_cal_lq(pAd, (P_MU_STRUCT_SET_SU_CALC_LQ)&param);
 
@@ -4494,8 +4598,7 @@ INT32 hqa_mu_set_snr_offset(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
         MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_OFF,
         	("%s: arg = %s\n", __FUNCTION__, arg));
 
-        offset = simple_strtol(arg, 0, 10);
-        offset = cpu2le32(offset);
+    offset = simple_strtol(arg, 0, 10);
 
         MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
         	("%s, offset:0x%x\n", __FUNCTION__, offset));
@@ -4515,8 +4618,7 @@ INT32 hqa_mu_set_zero_nss(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
         MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_OFF,
                 ("%s: arg = %s\n", __FUNCTION__, arg));
 
-        zero_nss = simple_strtoul(arg, 0, 10);
-        zero_nss = cpu2le32(zero_nss);
+    zero_nss = simple_strtoul(arg, 0, 10);
 
         MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
         	("%s, zero_nss:0x%x\n", __FUNCTION__,  zero_nss));
@@ -4533,9 +4635,8 @@ INT32 hqa_mu_set_speedup_lq(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
         INT32 Ret = 0;
         INT32 spdup_lq = 0;
 
-
-        spdup_lq = simple_strtol(arg, 0, 10);
-        spdup_lq = cpu2le32(spdup_lq);
+    
+    spdup_lq = simple_strtol(arg, 0, 10);
 
         MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
                 ("%s: spdup_lq:%x\n", __FUNCTION__, spdup_lq));
@@ -4553,48 +4654,55 @@ INT32 hqa_mu_set_speedup_lq(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
 /* 1024:*/
 INT32 hqa_mu_set_mu_table(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
 {
-        INT32 Ret = 0;
-        MU_STRUCT_MU_TABLE info;
-        UINT32 type = 0;
-        UCHAR *type_ptr = NULL;
-        UINT32 specific_metric_content = 0;
-        UINT32 length = 0;
-        UINT32 i = 0;
-        struct _CMD_HQA_SET_MU_METRIC_TABLE mu_metric_table;
-        struct _CMD_HQA_SET_SU_METRIC_TABLE su_metric_table;
+    INT32 Ret = 0;
+    MU_STRUCT_MU_TABLE info;
+    UINT32 type = 0;
+    UCHAR *type_ptr = NULL;
+    UINT32 specific_metric_content = 0;
+    UINT32 length = 0;
+    UINT32 i = 0;
+    struct _CMD_HQA_SET_MU_METRIC_TABLE mu_metric_table;
+    struct _CMD_HQA_SET_SU_METRIC_TABLE su_metric_table;
 
-        type_ptr = strsep(&arg, ":");
-        type = simple_strtoul(type_ptr, 0, 10);
-        type = cpu2le32(type);
-        specific_metric_content = simple_strtoul(arg, 0, 10);
-        specific_metric_content = cpu2le32(specific_metric_content);
-        
-        if (type_ptr == NULL || arg == NULL) {
-                MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-                        ("%s: Invalid parameters\n", __FUNCTION__));
-                return -1;
-        }
+    if (arg == NULL)
+    {
+        MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+            ("%s: Invalid parameters\n", __FUNCTION__));
+        return -1;
+    }
 
-        if (type == MU) {
-                length = sizeof(struct _CMD_HQA_SET_MU_METRIC_TABLE);
-                length = cpu2le32(length);
-                NdisFillMemory(&mu_metric_table, length, specific_metric_content);
-        }
-        else if (type == SU) {
-                length = sizeof(struct _CMD_HQA_SET_SU_METRIC_TABLE);
-                length = cpu2le32(length);
-                NdisFillMemory(&su_metric_table, length, specific_metric_content);
-        } 
-        else
-        {
-                MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-                        ("%s: Type error(%u)!!! neither MU nor SU\n", 
-                                                __FUNCTION__, type));
-                return -1;
-        }
+    type_ptr = strsep(&arg, ":");
+    if (type_ptr == NULL)
+    {
+        MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+            ("%s: Invalid parameters\n", __FUNCTION__));
+        return -1;
+    }
+    type = simple_strtoul(type_ptr, 0, 10);
+
+    specific_metric_content = simple_strtoul(arg, 0, 10);
+
+    specific_metric_content = cpu2le32(specific_metric_content);
+
+    if (type == MU)
+    {
+        length = sizeof(struct _CMD_HQA_SET_MU_METRIC_TABLE);
+        NdisFillMemory(&mu_metric_table, length, specific_metric_content);
+    }
+    else if (type == SU)
+    {
+        length = sizeof(struct _CMD_HQA_SET_SU_METRIC_TABLE);
+        NdisFillMemory(&su_metric_table, length, specific_metric_content);
+    } 
+    else
+    {
+        MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+            ("%s: Type error(%u)!!! neither MU nor SU\n", __FUNCTION__, type));
+        return -1;
+    }
 
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-                ("%s: type:%u, length:%u, data = %d\n", 
+                ("%s: type:%u, length:%u, data = %zu\n", 
                         __FUNCTION__, type, length, type == MU ? 
                         sizeof(mu_metric_table) : sizeof(su_metric_table)));
         MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
@@ -4695,8 +4803,7 @@ INT32 hqa_mu_get_qd(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
         MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
         		("%s: arg = %s\n", __FUNCTION__, arg));
 
-        subcarrier_idx = simple_strtoul(arg, 0, 10);
-        subcarrier_idx = cpu2le32(subcarrier_idx);
+	subcarrier_idx = simple_strtoul(arg, 0, 10);
 
         Ret = hqa_wifi_test_mu_get_qd(pAd, subcarrier_idx, (P_MU_STRUCT_MU_QD)&qd);
         if (Ret == 0) {
@@ -4743,16 +4850,16 @@ INT32 hqa_mu_set_enable(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
         INT32 Ret = 0;
         UINT32 is_enable = 0;
 
-        is_enable = simple_strtoul(arg, 0, 10);
-        is_enable = cpu2le32(is_enable);
+    is_enable = simple_strtoul(arg, 0, 10);
 
-        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-                        ("%s,MU is %s\n", __FUNCTION__, 
-                        is_enable == 1 ? "Enable":"Disable"));
-        Ret = hqa_wifi_test_mu_set_enable( pAd, is_enable);
-        MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-                                ("%s:CMD %s\n", __FUNCTION__, 
-                                Ret == 0 ? "Success":"Fail"));
+    
+	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+		("%s,MU is %s\n", __FUNCTION__, is_enable == 1 ? "Enable":"Disable"));
+	
+	Ret = hqa_wifi_test_mu_set_enable( pAd, is_enable);
+
+    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+        ("%s:CMD %s\n", __FUNCTION__, Ret == 0 ? "Success":"Fail"));
 
         return Ret;
 }
@@ -4847,17 +4954,11 @@ INT32 hqa_mu_set_gid_up(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
         } 
 
         gid_0 = simple_strtol(gid_0_ptr, 0, 10);
-        gid_0 = cpu2le32(gid_0);
         gid_1 = simple_strtol(gid_1_ptr, 0, 10);
-        gid_1 = cpu2le32(gid_1);
         up_0 = simple_strtol(up_0_ptr, 0, 10);
-        up_0 = cpu2le32(up_0);
         up_1 = simple_strtol(up_1_ptr, 0, 10);
-        up_1 = cpu2le32(up_1);
         up_2 = simple_strtol(up_2_ptr, 0, 10);
-        up_2 = cpu2le32(up_2);
         up_3 = simple_strtol(up_3_ptr, 0, 10);
-        up_3 = cpu2le32(up_3);
 
         param.gid[0] = gid_0;
         param.gid[1] = gid_1;
@@ -4978,36 +5079,28 @@ INT32 hqa_mu_set_trigger_mu_tx(PRTMP_ADAPTER pAd, RTMP_STRING *arg)
                 goto error;
         } 
 
-        fgIsRandomPattern   = simple_strtol(fgIsRandomPattern_ptr, 0, 10);
-        fgIsRandomPattern   = cpu2le32(fgIsRandomPattern);
+    fgIsRandomPattern   = simple_strtol(fgIsRandomPattern_ptr, 0, 10);
 
-        msduPayloadLength0  = simple_strtol(msduPayloadLength0_ptr, 0, 10);
-        msduPayloadLength0  = cpu2le32(msduPayloadLength0);
+    msduPayloadLength0  = simple_strtol(msduPayloadLength0_ptr, 0, 10);
 
-        msduPayloadLength1  = simple_strtol(msduPayloadLength1_ptr, 0, 10);
-        msduPayloadLength1  = cpu2le32(msduPayloadLength1);
+    msduPayloadLength1  = simple_strtol(msduPayloadLength1_ptr, 0, 10);
+	
+    msduPayloadLength2  = simple_strtol(msduPayloadLength2_ptr, 0, 10);
 
-        msduPayloadLength2  = simple_strtol(msduPayloadLength2_ptr, 0, 10);
-        msduPayloadLength2  = cpu2le32(msduPayloadLength2);
+    msduPayloadLength3  = simple_strtol(msduPayloadLength3_ptr, 0, 10);
 
+    u4MuPacketCount     = simple_strtol(u4MuPacketCount_ptr, 0, 10);
+ 
+    u4NumOfSTAs         = simple_strtol(u4NumOfSTAs_ptr, 0, 10);
 
-        msduPayloadLength3  = simple_strtol(msduPayloadLength3_ptr, 0, 10);
-        msduPayloadLength3  = cpu2le32(msduPayloadLength3);
-
-
-        u4MuPacketCount     = simple_strtol(u4MuPacketCount_ptr, 0, 10);
-        u4MuPacketCount     = cpu2le32(u4MuPacketCount);
-
-        u4NumOfSTAs         = simple_strtol(u4NumOfSTAs_ptr, 0, 10);
-        u4NumOfSTAs         = cpu2le32(u4NumOfSTAs);
-
-        param.fgIsRandomPattern     = fgIsRandomPattern;
-        param.msduPayloadLength0    = msduPayloadLength0;
-        param.msduPayloadLength1    = msduPayloadLength1;
-        param.msduPayloadLength2    = msduPayloadLength2;
-        param.msduPayloadLength3    = msduPayloadLength3;
-        param.u4MuPacketCount       = u4MuPacketCount;
-        param.u4NumOfSTAs           = u4NumOfSTAs;
+    
+    param.fgIsRandomPattern     = fgIsRandomPattern;
+    param.msduPayloadLength0    = msduPayloadLength0;
+    param.msduPayloadLength1    = msduPayloadLength1;
+    param.msduPayloadLength2    = msduPayloadLength2;
+    param.msduPayloadLength3    = msduPayloadLength3;
+    param.u4MuPacketCount       = u4MuPacketCount;
+    param.u4NumOfSTAs           = u4NumOfSTAs;
 
 
         param.macAddrs[0][0]        = 0x11;

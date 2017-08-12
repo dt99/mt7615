@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -24,7 +25,7 @@
     ---------  ----------    ----------------------------------------------
     Shiang Tu  01-11-2012    created for 11ac
  */
-
+#endif /* MTK_LICENSE */
 #ifdef DOT11_VHT_AC
 
 
@@ -291,6 +292,8 @@ typedef struct GNU_PACKED _VHT_CAP_INFO{
 #define VHT_MCS_CAP_8	1
 #define VHT_MCS_CAP_9	2
 #define VHT_MCS_CAP_NA	3
+#define MAX_VHT_MCS_CAP_MSK (VHT_MCS_CAP_NA)
+#define VHT_MAX_NSS_SUPPORT 8
 
 typedef struct GNU_PACKED _VHT_MCS_MAP{
 #ifdef RT_BIG_ENDIAN
@@ -341,19 +344,21 @@ typedef struct GNU_PACKED _VHT_MCS_MAP{
 // TODO: shiang-6590, check the layout of this data structure!!!!
 typedef struct GNU_PACKED _VHT_MCS_SET{
 #ifdef RT_BIG_ENDIAN
-	UINT16 rsv2:3;
+	UINT16 rsv2:2;
+	UINT16 ext_nss_bw_capable:1;
 	UINT16 tx_high_rate:13;
 	struct _VHT_MCS_MAP tx_mcs_map;
-	UINT16 rsv:3;
+	UINT16 max_nsts_total:3;
 	UINT16 rx_high_rate:13;
 	struct _VHT_MCS_MAP rx_mcs_map;	
 #else
 	struct _VHT_MCS_MAP rx_mcs_map;	
 	UINT16 rx_high_rate:13;
-	UINT16 rsv:3;
+	UINT16 max_nsts_total:3;
 	struct _VHT_MCS_MAP tx_mcs_map;
 	UINT16 tx_high_rate:13;
-	UINT16 rsv2:3;
+	UINT16 ext_nss_bw_capable:1;
+	UINT16 rsv2:2;
 #endif /* RT_BIG_ENDIAN */
 }VHT_MCS_SET;
 

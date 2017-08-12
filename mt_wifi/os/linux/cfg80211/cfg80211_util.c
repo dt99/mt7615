@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * Taiwan, R.O.C.
@@ -11,7 +12,7 @@
  * way altering the source code is stricitly prohibited, unless the prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
 
 	Abstract:
@@ -137,6 +138,9 @@ static const UINT32 CipherSuites[] = {
 	WLAN_CIPHER_SUITE_WEP104,
 	WLAN_CIPHER_SUITE_TKIP,
 	WLAN_CIPHER_SUITE_CCMP,
+#ifdef DOT11W_PMF_SUPPORT
+	WLAN_CIPHER_SUITE_AES_CMAC
+#endif /*DOT11W_PMF_SUPPORT*/
 };
 
 static BOOLEAN IsRadarChannel(UCHAR ch)
@@ -284,6 +288,10 @@ BOOLEAN CFG80211_SupBandInit(
 	else
 		NumOfRate = 4 + 8;
 
+#ifdef DBDC_MODE
+	NumOfRate = 4 + 8;
+#endif
+
 	CFG80211DBG(DBG_LVL_ERROR, ("80211> RFICType= %d, NumOfChan= %d\n", pDriverBandInfo->RFICType, NumOfChan));
 	CFG80211DBG(DBG_LVL_ERROR, ("80211> Number of rate = %d\n", NumOfRate));
 	
@@ -348,6 +356,8 @@ BOOLEAN CFG80211_SupBandInit(
 
 		pChannels[IdLoop].max_antenna_gain = 0xff;
 
+		pChannels[IdLoop].flags = 0;
+
 		/* if (RadarChannelCheck(pAd, Cfg80211_Chan[IdLoop])) */
 		if (IsRadarChannel(Cfg80211_Chan[IdLoop]))
 		{
@@ -388,6 +398,11 @@ BOOLEAN CFG80211_SupBandInit(
 	if (pDriverBandInfo->RFICType & RFIC_24GHZ)
 	{
 		pBand->n_channels = CFG80211_NUM_OF_CHAN_2GHZ;
+#ifdef DBDC_MODE
+		if (pDriverBandInfo->FlgIsBMode == TRUE)
+			pBand->n_bitrates = 4;
+		else
+#endif
 		pBand->n_bitrates = NumOfRate;
 		pBand->channels = pChannels;
 		pBand->bitrates = pRates;
@@ -456,6 +471,7 @@ BOOLEAN CFG80211_SupBandInit(
 		pBand->ht_cap.cap = IEEE80211_HT_CAP_SUP_WIDTH_20_40 |
 					        IEEE80211_HT_CAP_SM_PS |
 					        IEEE80211_HT_CAP_SGI_40 |
+					        IEEE80211_HT_CAP_SGI_20 |
 					        IEEE80211_HT_CAP_DSSSCCK40;
 		pBand->ht_cap.ampdu_factor = IEEE80211_HT_MAX_AMPDU_64K; /* 2 ^ 16 */
 		pBand->ht_cap.ampdu_density = pDriverBandInfo->MpduDensity; /* YF_TODO */
@@ -494,6 +510,52 @@ BOOLEAN CFG80211_SupBandInit(
 		pBand->ht_cap.mcs.rx_mask[4] = 0x01; /* 40MHz*/
 		pBand->ht_cap.mcs.tx_params = IEEE80211_HT_MCS_TX_DEFINED;
 #endif /* DOT11_N_SUPPORT */
+
+#ifdef DOT11_VHT_AC
+		pBand->vht_cap.vht_supported = true;
+		pBand->vht_cap.cap = IEEE80211_VHT_CAP_RXLDPC  |
+							IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_MASK |
+							IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_11454 |
+							IEEE80211_VHT_CAP_SHORT_GI_80  |
+							IEEE80211_VHT_CAP_TXSTBC |
+							IEEE80211_VHT_CAP_SU_BEAMFORMER_CAPABLE |
+							IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE |
+							IEEE80211_STA_RX_BW_80;
+		
+
+		switch(pDriverBandInfo->RxStream)
+		{
+			case 1:
+			default:
+				pBand->vht_cap.vht_mcs.rx_mcs_map = 0xFFFE;
+				pBand->vht_cap.vht_mcs.tx_mcs_map = 0xFFFE;
+				pBand->vht_cap.vht_mcs.rx_highest = cpu_to_le16(433);
+				pBand->vht_cap.vht_mcs.tx_highest = cpu_to_le16(433);
+				break;
+
+			case 2:
+				pBand->vht_cap.vht_mcs.rx_mcs_map = 0xFFFA;
+				pBand->vht_cap.vht_mcs.tx_mcs_map = 0xFFFA;
+				pBand->vht_cap.vht_mcs.rx_highest = cpu_to_le16(866);
+				pBand->vht_cap.vht_mcs.tx_highest = cpu_to_le16(866);
+				break;
+
+			case 3:
+				pBand->vht_cap.vht_mcs.rx_mcs_map = 0xFFEA;
+				pBand->vht_cap.vht_mcs.tx_mcs_map = 0xFFEA;
+				pBand->vht_cap.vht_mcs.rx_highest = cpu_to_le16(1300);
+				pBand->vht_cap.vht_mcs.tx_highest = cpu_to_le16(1300);
+				break;
+
+			case 4:
+				pBand->vht_cap.vht_mcs.rx_mcs_map = 0xFFAA;
+				pBand->vht_cap.vht_mcs.tx_mcs_map = 0xFFAA;
+				pBand->vht_cap.vht_mcs.rx_highest = cpu_to_le16(1733);
+				pBand->vht_cap.vht_mcs.tx_highest = cpu_to_le16(1733);
+				break;
+		}						
+#endif /* DOT11_VHT_AC */
+
 
 		pWiphy->bands[IEEE80211_BAND_5GHZ] = pBand;
 	}
@@ -860,6 +922,19 @@ VOID CFG80211OS_ScanEnd(
 	IN BOOLEAN FlgIsAborted)
 {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,30))
+	CFG80211_CB *pCfg80211_CB = (CFG80211_CB *)pCB;
+	NdisAcquireSpinLock(&pCfg80211_CB->scan_notify_lock);
+	if (pCfg80211_CB->pCfg80211_ScanReq)
+	{
+		CFG80211DBG(DBG_LVL_ERROR, ("80211> cfg80211_scan_done\n"));
+		cfg80211_scan_done(pCfg80211_CB->pCfg80211_ScanReq, FlgIsAborted);
+		pCfg80211_CB->pCfg80211_ScanReq = NULL;
+	}
+	else
+	{
+		CFG80211DBG(DBG_LVL_ERROR, ("80211> cfg80211_scan_done ==> NULL\n"));
+	}
+	NdisReleaseSpinLock(&pCfg80211_CB->scan_notify_lock);
 #endif /* LINUX_VERSION_CODE */
 }
 
@@ -1017,7 +1092,7 @@ VOID CFG80211OS_TxStatus(IN PNET_DEV pNetDev, IN INT32 cookie, IN PUCHAR frame, 
 
 }
 
-VOID CFG80211OS_NewSta(IN PNET_DEV pNetDev, IN const PUCHAR mac_addr, IN const PUCHAR assoc_frame, IN UINT32 assoc_len)
+VOID CFG80211OS_NewSta(IN PNET_DEV pNetDev, IN const PUCHAR mac_addr, IN const PUCHAR assoc_frame, IN UINT32 assoc_len, IN BOOLEAN isReassoc)
 {
 	struct station_info sinfo;
 	struct ieee80211_mgmt *mgmt;
@@ -1030,8 +1105,16 @@ VOID CFG80211OS_NewSta(IN PNET_DEV pNetDev, IN const PUCHAR mac_addr, IN const P
 	{
 		sinfo.filled = STATION_INFO_ASSOC_REQ_IES;
         	mgmt = (struct ieee80211_mgmt *) assoc_frame;   
-        	sinfo.assoc_req_ies_len = assoc_len - 24 - 4;
-        	sinfo.assoc_req_ies = mgmt->u.assoc_req.variable;
+		if(isReassoc)
+		{
+			sinfo.assoc_req_ies_len = assoc_len - 24 - 10;
+			sinfo.assoc_req_ies = mgmt->u.reassoc_req.variable;
+		}
+		else
+		{
+			sinfo.assoc_req_ies_len = assoc_len - 24 - 4;
+			sinfo.assoc_req_ies = mgmt->u.assoc_req.variable;
+		}
 	}
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34))	

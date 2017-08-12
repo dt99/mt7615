@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #ifndef __WF_LPON_TOP_H__
 #define __WF_LPON_TOP_H__

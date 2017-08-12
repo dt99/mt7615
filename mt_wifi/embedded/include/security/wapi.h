@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	--------	----------		----------------------------------------------
 	Albert		2008-4-3      	Supoort WAPI protocol
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __WAPI_H__
 #define __WAPI_H__
 
@@ -144,17 +145,30 @@ VOID RTMPWapiMskRekeyPeriodicExec(
     IN PVOID SystemSpecific2, 
     IN PVOID SystemSpecific3);
 
-VOID RTMPInitWapiRekeyTimerAction(
+VOID RTMPInitWapiRekeyTimerByWdev(
 	IN PRTMP_ADAPTER 	pAd,
 	IN PMAC_TABLE_ENTRY	pEntry);
 
-VOID RTMPStartWapiRekeyTimerAction(
+VOID RTMPInitWapiRekeyTimerByMacEntry(
 	IN PRTMP_ADAPTER 	pAd,
+	IN PMAC_TABLE_ENTRY	pEntry);
+
+VOID RTMPStartWapiRekeyTimerByWdev(
+	IN PRTMP_ADAPTER *pAd,
+	IN struct wifi_dev *wdev);
+
+VOID RTMPStartWapiRekeyTimerByMacEntry(
+	IN PRTMP_ADAPTER *pAd,
 	IN PMAC_TABLE_ENTRY pEntry);
 
-VOID RTMPCancelWapiRekeyTimerAction(
-	IN PRTMP_ADAPTER 	pAd,
+VOID  RTMPCancelWapiRekeyTimerByWdev(
+	IN PRTMP_ADAPTER *pAd,
+	IN struct wifi_dev *wdev);
+
+VOID RTMPCancelWapiRekeyTimerByMacEntry( 
+	IN PRTMP_ADAPTER *pAd, 
 	IN PMAC_TABLE_ENTRY pEntry);
+
 
 VOID RTMPGetWapiTxTscFromAsic(
 	IN  PRTMP_ADAPTER   pAd,

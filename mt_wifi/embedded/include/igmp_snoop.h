@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -22,7 +23,7 @@
     Who          When          What
     ---------    ----------    ----------------------------------------------
  */
- 
+#endif /* MTK_LICENSE */
 
 #ifndef __RTMP_IGMP_SNOOP_H__
 #define __RTMP_IGMP_SNOOP_H__
@@ -48,6 +49,13 @@
 #define IGMP_NONE		0
 #define IGMP_PKT		1
 #define IGMP_IN_GROUP	2
+#ifdef VENDOR_FEATURE6_SUPPORT
+#ifndef ETH_TYPE_VLAN
+#define ETH_TYPE_VLAN   0X8100
+#endif
+#endif
+#define IGMP_CFG_BAND0		(1 << 0)
+#define IGMP_CFG_BAND1		(1 << 1)
 
 
 VOID MulticastFilterTableInit(

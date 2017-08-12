@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -24,7 +25,7 @@
 	Who         When          What
 	--------    ----------    ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __CHLIST_H__
 #define __CHLIST_H__
 
@@ -60,6 +61,7 @@ typedef struct _CH_REGION {
 	UCHAR CountReg[3];
 	UCHAR DfsType;			/* 0: CE, 1: FCC, 2: JAP, 3:JAP_W53, JAP_W56 */
 	CH_DESP *pChDesp;
+    BOOLEAN edcca_on;
 } CH_REGION, *PCH_REGION;
 
 extern CH_REGION ChRegion[];
@@ -89,6 +91,8 @@ extern int CH_HZ_ID_MAP_NUM;
 /* Check if it is Japan W53(ch52,56,60,64) channel. */
 #define JapanChannelCheck(_ch)  ((_ch == 52) || (_ch == 56) || (_ch == 60) || (_ch == 64))
 
+BOOLEAN GetEDCCASupport(
+	IN PRTMP_ADAPTER pAd);
 
 #ifdef EXT_BUILD_CHANNEL_LIST
 VOID BuildChannelListEx(
@@ -104,16 +108,19 @@ VOID BuildBeaconChList(
 UCHAR GetCountryRegionFromCountryCode(PRTMP_ADAPTER pAd);
 
 #ifdef DOT11_N_SUPPORT
+BOOLEAN ExtChCheck(PRTMP_ADAPTER pAd, UCHAR Channel, UCHAR Direction);
 VOID N_ChannelCheck(RTMP_ADAPTER *pAd, UCHAR PhyMode,UCHAR Channel);
-UCHAR N_SetCenCh(RTMP_ADAPTER *pAd, UCHAR channel);
+UCHAR N_SetCenCh(RTMP_ADAPTER *pAd, UCHAR channel,UCHAR ht_bw);
 BOOLEAN N_ChannelGroupCheck(RTMP_ADAPTER *pAd, UCHAR channel);
 
 #endif /* DOT11_N_SUPPORT */
 
 UINT8 GetCuntryMaxTxPwr(
 	IN PRTMP_ADAPTER pAd,
+	IN struct wifi_dev *wdev,
 	IN UCHAR PhyMode,
-	IN UINT8 channel);
+	IN UINT8 channel,
+	IN UCHAR ht_bw);
 
 VOID RTMP_MapChannelID2KHZ(
 	IN UCHAR Ch,

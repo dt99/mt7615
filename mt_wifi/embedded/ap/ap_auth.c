@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -24,12 +25,15 @@
     --------    ----------    ----------------------------------------------
     John Chang  08-04-2003    created for 11g soft-AP
  */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 #ifdef DOT11R_FT_SUPPORT
 #include "ft.h"
 #endif /* DOT11R_FT_SUPPORT */
 
+#ifdef VENDOR_FEATURE6_SUPPORT
+#include "arris_wps_gpio_handler.h"
+#endif
 
 /*
     ==========================================================================
@@ -98,7 +102,18 @@ static VOID APMlmeDeauthReqAction(
 		ApLogEvent(pAd, pInfo->Addr, EVENT_DISASSOCIATED);
 
 		apidx = pEntry->func_tb_idx;
+#ifdef VENDOR_FEATURE6_SUPPORT		
+		{
+			UCHAR disassoc_event_msg[32] = {0};
 
+			if (WMODE_CAP_5G(pAd->ApCfg.MBSSID[apidx].wdev.PhyMode))
+				snprintf(disassoc_event_msg, sizeof(disassoc_event_msg), "%02x:%02x:%02x:%02x:%02x:%02x BSS(%d)", PRINT_MAC(pInfo->Addr), (pEntry->func_tb_idx) + WIFI_50_RADIO);
+			else
+				snprintf(disassoc_event_msg, sizeof(disassoc_event_msg), "%02x:%02x:%02x:%02x:%02x:%02x BSS(%d)", PRINT_MAC(pInfo->Addr), (pEntry->func_tb_idx) + WIFI_24_RADIO);
+
+			ARRISMOD_CALL(arris_event_send_hook, ATOM_HOST, WLAN_EVENT, STA_DISSOC, disassoc_event_msg, strlen(disassoc_event_msg));
+		}
+#endif
         /* 1. remove this STA from MAC table */
         MacTableDeleteEntry(pAd, Elem->Wcid, pInfo->Addr);
 
@@ -164,7 +179,7 @@ static VOID APPeerDeauthReqAction(
 				MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE,("da match,0x%02x%02x%02x%02x%02x%02x\n",
 				*tmp, *(tmp+1), *(tmp+2), *(tmp+3), *(tmp+4), *(tmp+5)));
 		}
-#ifdef DOT1X_SUPPORT
+#if defined(DOT1X_SUPPORT) && !defined(RADIUS_ACCOUNTING_SUPPORT)
 		/* Notify 802.1x daemon to clear this sta info */
 		if (IS_AKM_1X_Entry(pEntry)
 			|| IS_IEEE8021X_Entry(&pAd->ApCfg.MBSSID[pEntry->func_tb_idx].wdev))
@@ -181,6 +196,18 @@ static VOID APPeerDeauthReqAction(
 
 		/* send wireless event - for deauthentication */
 		RTMPSendWirelessEvent(pAd, IW_DEAUTH_EVENT_FLAG, Addr2, 0, 0);
+#ifdef VENDOR_FEATURE6_SUPPORT
+		{
+			UCHAR disassoc_event_msg[32] = {0};
+
+			if(WMODE_CAP_5G(pAd->ApCfg.MBSSID[pEntry->func_tb_idx].wdev.PhyMode))
+				snprintf(disassoc_event_msg, sizeof(disassoc_event_msg), "%02x:%02x:%02x:%02x:%02x:%02x BSS(%d)", PRINT_MAC(Addr2), (pEntry->func_tb_idx) + WIFI_50_RADIO);
+			else
+				snprintf(disassoc_event_msg, sizeof(disassoc_event_msg), "%02x:%02x:%02x:%02x:%02x:%02x BSS(%d)", PRINT_MAC(Addr2), (pEntry->func_tb_idx) + WIFI_24_RADIO);
+
+			ARRISMOD_CALL(arris_event_send_hook, ATOM_HOST, WLAN_EVENT, STA_DISSOC, disassoc_event_msg, strlen(disassoc_event_msg));
+		}
+#endif
 		ApLogEvent(pAd, Addr2, EVENT_DISASSOCIATED);
 
 		if (pEntry->CMTimerRunning == TRUE)
@@ -458,6 +485,12 @@ static VOID APPeerAuthReqAtIdleAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 	wdev = &pMbss->wdev;
 	ASSERT((wdev->func_idx == apidx));
 
+	if(!OPSTATUS_TEST_FLAG_WDEV(wdev, fOP_AP_STATUS_MEDIA_STATE_CONNECTED))
+	{
+		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("AP is not ready, disallow new Association\n"));
+		return;
+	}
+
 	if ((wdev->if_dev == NULL) || ((wdev->if_dev != NULL) &&
 		!(RTMP_OS_NETDEV_STATE_RUNNING(wdev->if_dev))))
 	{
@@ -545,17 +578,21 @@ SendAuth:
     }
 
 #ifdef BAND_STEERING
-	BND_STRG_CHECK_CONNECTION_REQ(	pAd,
-										wdev, 
-										auth_info.addr2,
-										Elem->MsgType,
-										Elem->rssi_info,
-										FALSE,
-										&bBndStrgCheck);
-	if (bBndStrgCheck == FALSE) {
-		APPeerAuthSimpleRspGenAndSend(pAd, pRcvHdr, auth_info.auth_alg, auth_info.auth_seq + 1, MLME_UNSPECIFY_FAIL);
-		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("AUTH - BndStrg check failed.\n"));
-		return;
+	if (pAd->ApCfg.BandSteering == TRUE) {
+		BND_STRG_CHECK_CONNECTION_REQ(	pAd,
+											wdev, 
+											auth_info.addr2,
+											Elem->MsgType,
+											Elem->rssi_info,
+											FALSE,
+											FALSE,
+											0,
+											&bBndStrgCheck);
+		if (bBndStrgCheck == FALSE) {
+			//APPeerAuthSimpleRspGenAndSend(pAd, pRcvHdr, auth_info.auth_alg, auth_info.auth_seq + 1, MLME_UNSPECIFY_FAIL);
+			MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("AUTH - BndStrg check failed.\n"));
+			return;
+		}
 	}
 #endif /* BAND_STEERING */
 
@@ -880,6 +917,16 @@ VOID APCls2errAction(RTMP_ADAPTER *pAd, RX_BLK *pRxBlk)
 			return;
 		}
 	}
+
+#if MT_DFS_SUPPORT
+			if(DfsIsClass2DeauthDisable(pAd))
+			{
+				MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+						("Do not send Class 2 Deauth under DFS Radar Detected scenario.\n"));
+		
+				return;
+			}
+#endif
 
 	/* send out DEAUTH frame */
 	NStatus = MlmeAllocateMemory(pAd, &pOutBuffer);

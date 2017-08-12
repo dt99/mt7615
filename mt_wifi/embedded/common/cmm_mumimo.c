@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*******************************************************************************
  * Copyright (c) 2014 MediaTek Inc.
  * 
@@ -39,7 +40,7 @@
  * (ICC).
  * ******************************************************************************
  */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 #ifdef CFG_SUPPORT_MU_MIMO
@@ -182,6 +183,9 @@ INT SetMuStaParamProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(CMD_MU_SET_STA_PARAM));
     AndesSendCmdMsg(pAd, msg);
@@ -237,6 +241,10 @@ hqa_wifi_test_mu_set_sta_gid_and_up (
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+	RTMPEndianChange((UCHAR *)&param.param,sizeof(MU_STRUCT_MU_STA_PARAM));
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);

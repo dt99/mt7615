@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -26,7 +27,7 @@
     --------------  ----------      ----------------------------------------------
     Arvin				11-16-2012      created
 */
-
+#endif /* MTK_LICENSE */
 #ifdef MAC_REPEATER_SUPPORT
 
 #include "rt_config.h"
@@ -69,9 +70,16 @@ INT Show_ReptTable_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 		printk("%-5lu", pReptCliEntry->SyncCurrState);
 		printk("%-5lu", pReptCliEntry->AuthCurrState);
 		printk("%-5lu", pReptCliEntry->AssocCurrState);
-		printk("%02X:%02X:%02X:%02X:%02X:%02X  ",
-			   pReptCliEntry->OriginalAddress[0], pReptCliEntry->OriginalAddress[1], pReptCliEntry->OriginalAddress[2],
-			   pReptCliEntry->OriginalAddress[3], pReptCliEntry->OriginalAddress[4], pReptCliEntry->OriginalAddress[5]);
+		if ((memcmp(pAd->MonitorAddr,pReptCliEntry->OriginalAddress,MAC_ADDR_LEN) == 0) && (pReptCliEntry->CliEnable)) {
+#define RED(_text)  "\033[1;31m"_text"\033[0m"
+			printk(RED("%02X:%02X:%02X:%02X:%02X:%02X  "),
+				   pReptCliEntry->OriginalAddress[0], pReptCliEntry->OriginalAddress[1], pReptCliEntry->OriginalAddress[2],
+				   pReptCliEntry->OriginalAddress[3], pReptCliEntry->OriginalAddress[4], pReptCliEntry->OriginalAddress[5]);
+		} else {
+			printk("%02X:%02X:%02X:%02X:%02X:%02X  ",
+				   pReptCliEntry->OriginalAddress[0], pReptCliEntry->OriginalAddress[1], pReptCliEntry->OriginalAddress[2],
+				   pReptCliEntry->OriginalAddress[3], pReptCliEntry->OriginalAddress[4], pReptCliEntry->OriginalAddress[5]);
+		}
 		printk("%02X:%02X:%02X:%02X:%02X:%02X  ",
 			   pReptCliEntry->CurrentAddress[0], pReptCliEntry->CurrentAddress[1], pReptCliEntry->CurrentAddress[2],
 			   pReptCliEntry->CurrentAddress[3], pReptCliEntry->CurrentAddress[4], pReptCliEntry->CurrentAddress[5]);
@@ -349,7 +357,35 @@ VOID RepeaterCtrlExit(RTMP_ADAPTER *pAd)
 {
     //TODO: check whole repeater control release.
     int wait_cnt = 0;
+	/* 
+		Add MacRepeater Entry De-Init Here, and let "iwpriv ra0 set MACRepeaterEn=0"
+		can do this instead of "iwpriv apcli0 set ApCliEnable=0"
+	*/
+	UCHAR CliIdx;
+	REPEATER_CLIENT_ENTRY *pReptEntry = NULL;
+	RTMP_CHIP_CAP *cap = &pAd->chipCap;
 
+	if (pAd->ApCfg.bMACRepeaterEn)
+	{
+		for(CliIdx = 0; CliIdx < GET_MAX_REPEATER_ENTRY_NUM(cap); CliIdx++)
+		{
+			pReptEntry = &pAd->ApCfg.pRepeaterCliPool[CliIdx];
+			/*disconnect the ReptEntry which is bind on the CliLink*/
+			if (pReptEntry->CliEnable)
+			{
+				RTMP_OS_INIT_COMPLETION(&pReptEntry->free_ack);
+				pReptEntry->Disconnect_Sub_Reason = APCLI_DISCONNECT_SUB_REASON_APCLI_IF_DOWN;
+				MlmeEnqueue(pAd,
+							APCLI_CTRL_STATE_MACHINE,
+							APCLI_CTRL_DISCONNECT_REQ,
+							0,
+							NULL,
+							(REPT_MLME_START_IDX + CliIdx));
+				RTMP_MLME_HANDLER(pAd);
+				ReptWaitLinkDown(pReptEntry);
+			}
+		}
+	}
     while (pAd->ApCfg.RepeaterCliSize > 0)
     {
         MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_OFF,
@@ -514,6 +550,26 @@ UINT32 ReptTxPktCheckHandler(
                             TRUE);
     if (pReptEntry  && pReptEntry->CliValid)
     {
+#if defined(CONFIG_WIFI_PKT_FWD) || defined(CONFIG_WIFI_PKT_FWD_MODULE)
+		if ((pReptEntry->MatchApCliIdx != pApCliEntry->ifIndex) &&					
+			(wf_fwd_check_active_hook && wf_fwd_check_active_hook()))
+		{
+			UCHAR apCliIdx, CliIdx;
+			apCliIdx = pReptEntry->MatchApCliIdx;
+			CliIdx = pReptEntry->MatchLinkIdx;
+
+			pReptEntry->Disconnect_Sub_Reason = APCLI_DISCONNECT_SUB_REASON_CHANGE_APCLI_IF;
+			MlmeEnqueue(pAd,
+						APCLI_CTRL_STATE_MACHINE,
+						APCLI_CTRL_DISCONNECT_REQ,
+						0,
+						NULL,
+						(REPT_MLME_START_IDX + CliIdx));
+			RTMP_MLME_HANDLER(pAd);
+			return INSERT_REPT_ENTRY;
+		}
+#endif /* CONFIG_WIFI_PKT_FWD */		
+	
         *pWcid = pReptEntry->MacTabWCID;
         return REPEATER_ENTRY_EXIST;
     }
@@ -526,13 +582,34 @@ UINT32 ReptTxPktCheckHandler(
             if ((tr_entry) &&
                 (tr_entry->PortSecured == WPA_802_1X_PORT_SECURED))
             {
+				RTMP_CHIP_CAP *cap = &pAd->chipCap;
+
+				if (pApCliEntry->InsRepCmdCount > GET_MAX_REPEATER_ENTRY_NUM(cap))
+				{
+					pApCliEntry->ReptFullCount++;
+					return INSERT_REPT_ENTRY;
+				}
+			
                 pMacEntry = MacTableLookup(pAd, (pSrcBufVA + MAC_ADDR_LEN));
                 if (pMacEntry && IS_ENTRY_CLIENT(pMacEntry))
                 {
+					STA_TR_ENTRY *sta_tr_entry;
+					sta_tr_entry = &pAd->MacTab.tr_entry[pMacEntry->wcid];
+					
+					if ((sta_tr_entry) &&
+							(sta_tr_entry->PortSecured != WPA_802_1X_PORT_SECURED)) {
+						MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE,
+								 (" wireless client is not ready !!!\n"));
+						return INSERT_REPT_ENTRY;
+					}
                     mbss_wdev = pMacEntry->wdev;
                     pMbssToCliLinkMap = &pAd->ApCfg.MbssToCliLinkMap[mbss_wdev->func_idx];
 
-                    if (pMbssToCliLinkMap->cli_link_wdev == cli_link_wdev)
+                    if (
+#if defined(CONFIG_WIFI_PKT_FWD) || defined(CONFIG_WIFI_PKT_FWD_MODULE)
+						(wf_fwd_check_active_hook && wf_fwd_check_active_hook()) ||
+#endif /* CONFIG_WIFI_PKT_FWD */						
+						(pMbssToCliLinkMap->cli_link_wdev == cli_link_wdev))
                     {
                         HW_ADD_REPT_ENTRY(pAd, cli_link_wdev, (pSrcBufVA + MAC_ADDR_LEN));
                         MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE,
@@ -644,6 +721,12 @@ VOID RTMPInsertRepeaterEntry(
 	pReptCliEntry->CliValid = FALSE;
 	pReptCliEntry->bEthCli = FALSE;
 	pReptCliEntry->MacTabWCID = 0xFF;
+#ifdef FAST_EAPOL_WAR
+	if (pReptCliEntry->pre_entry_alloc == TRUE) {
+		MTWF_LOG(DBG_CAT_RX, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s():Unexpected condition,check it (pReptCliEntry->pre_entry_alloc=%d)\n", __FUNCTION__,pReptCliEntry->pre_entry_alloc));
+	}
+	pReptCliEntry->pre_entry_alloc = FALSE;
+#endif /* FAST_EAPOL_WAR */
 	pReptCliEntry->AuthReqCnt = 0;
 	pReptCliEntry->AssocReqCnt = 0;
 	pReptCliEntry->CliTriggerTime = 0;
@@ -664,21 +747,34 @@ VOID RTMPInsertRepeaterEntry(
 	}
 	else if (pAd->ApCfg.MACRepeaterOuiMode == VENDOR_DEFINED_MAC_ADDR_OUI)
 	{
-		INT IdxToUse;
+		INT IdxToUse, i;
+		UCHAR checkMAC[MAC_ADDR_LEN];
+		COPY_MAC_ADDR(checkMAC, pAddr);
 
 		for (idx = 0; idx < rept_vendor_def_oui_table_size; idx++)
 		{
 			if (RTMPEqualMemory(VENDOR_DEFINED_OUI_ADDR[idx], pAddr, OUI_LEN))
-				break;
-		}
+				continue;
+			else
+			{
+				NdisCopyMemory(checkMAC, VENDOR_DEFINED_OUI_ADDR[idx], OUI_LEN);
 
+				for (i = 0; i < pAd->ApCfg.BssidNum; i++)
+				{
+					if (MAC_ADDR_EQUAL(pAd->ApCfg.MBSSID[i].wdev.if_addr, checkMAC))
+						break;			
+				}
+
+				if (i >= pAd->ApCfg.BssidNum)
+					break;
+			}
+		}
 		/*
-            If there is a matched one,
-            use the next one; otherwise,
-            use the first one.
-        */
-		if (idx >= 0  && idx < (rept_vendor_def_oui_table_size - 1))
-			IdxToUse = idx + 1;
+	            If there is a matched one can be used
+	            otherwise, use the first one.
+       	 */
+		if (idx >= 0 && idx < rept_vendor_def_oui_table_size)
+			IdxToUse = idx;
 		else
 			IdxToUse = 0;
 		NdisCopyMemory(tempMAC, VENDOR_DEFINED_OUI_ADDR[IdxToUse], OUI_LEN);
@@ -756,7 +852,7 @@ VOID RTMPRemoveRepeaterEntry(
 	BOOLEAN bVaild = TRUE;
     BOOLEAN Cancelled;
 
-	MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_ERROR, (" %s.\n", __FUNCTION__));
+	MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_ERROR, (" %s.CliIdx=%d\n", __FUNCTION__,CliIdx));
 
     AsicRemoveRepeaterEntry(pAd, CliIdx);
 
@@ -779,6 +875,11 @@ VOID RTMPRemoveRepeaterEntry(
                         __FUNCTION__, CliIdx));
         return;
     }
+	MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_ERROR, (" %s.CliIdx=%d,orig addr = %02X:%02X:%02X:%02X:%02X:%02X,fake addr = %02X:%02X:%02X:%02X:%02X:%02X, bandIdx = %d\n",
+						__FUNCTION__,CliIdx,
+						PRINT_MAC(pEntry->OriginalAddress),
+						PRINT_MAC(pEntry->CurrentAddress),
+						pEntry->BandIdx));
 
 	/*Release OMAC Idx*/
 	HcDelRepeaterEntry(pEntry->wdev,CliIdx);
@@ -870,6 +971,12 @@ VOID RTMPRemoveRepeaterEntry(
 done:
     RTMPReleaseTimer(&pEntry->ApCliAuthTimer, &Cancelled);
     RTMPReleaseTimer(&pEntry->ApCliAssocTimer, &Cancelled);
+#ifdef FAST_EAPOL_WAR
+	if (pEntry->pre_entry_alloc == TRUE) {
+		MTWF_LOG(DBG_CAT_RX, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s():Unexpected condition,check it (pEntry->pre_entry_alloc=%d)\n", __FUNCTION__,pEntry->pre_entry_alloc));
+	}
+	pEntry->pre_entry_alloc = FALSE;
+#endif /* FAST_EAPOL_WAR */
 	pEntry->CliConnectState = REPT_ENTRY_DISCONNT;
 	pEntry->CliValid = FALSE;
 	pEntry->CliEnable = FALSE;
@@ -1035,7 +1142,7 @@ MAC_TABLE_ENTRY *RTMPInsertRepeaterMacEntry(
 		HW_ADDREMOVE_KEYTABLE(pAd, &Info);
 
 		/* Add this entry into ASIC RX WCID search table */
-		RTMP_STA_ENTRY_ADD(pAd, pEntry->wcid,pEntry->Addr,FALSE);
+		RTMP_STA_ENTRY_ADD(pAd, pEntry->wcid,pEntry->Addr,FALSE, TRUE);
 
 #ifdef TXBF_SUPPORT
 		if (pAd->chipCap.FlgHwTxBfCap)
@@ -1078,6 +1185,72 @@ MAC_TABLE_ENTRY *RTMPInsertRepeaterMacEntry(
 }
 #endif /* RTMP_MAC || RLT_MAC  */
 
+VOID RTMPRepeaterReconnectionCheck(
+	IN PRTMP_ADAPTER pAd)
+{
+#ifdef APCLI_AUTO_CONNECT_SUPPORT
+	INT i;
+	PCHAR	pApCliSsid, pApCliCfgSsid;
+	UCHAR	CfgSsidLen;
+	NDIS_802_11_SSID Ssid;
+	ULONG timeDiff[MAX_APCLI_NUM];
+
+	if (pAd->ApCfg.bMACRepeaterEn &&
+		pAd->ApCfg.MACRepeaterOuiMode == VENDOR_DEFINED_MAC_ADDR_OUI &&
+		pAd->ScanCtrl.PartialScan.bScanning == FALSE)
+	{
+		for (i = 0; i < MAX_APCLI_NUM; i++)
+		{
+			if (!APCLI_IF_UP_CHECK(pAd, i) ||
+				(pAd->ApCfg.ApCliTab[i].Enable == FALSE))
+				continue;
+
+			MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, (" %s(): i=%d,%d,%d,%d,%d,%d\n",
+					 __FUNCTION__, (int)i,
+					 (int)ApScanRunning(pAd),
+					(int)pAd->ApCfg.ApCliAutoConnectRunning[i],
+					(int)pAd->ApCfg.ApCliAutoConnectType[i],
+					(int)pAd->ApCfg.bPartialScanEnable[i],
+					(int)(pAd->Mlme.OneSecPeriodicRound%23)));
+
+			if (ApScanRunning(pAd))
+				continue;
+			if (pAd->ApCfg.ApCliAutoConnectRunning[i] != FALSE)
+				continue;
+			if (pAd->ApCfg.ApCliTab[i].AutoConnectFlag == FALSE)
+				continue;
+			pApCliSsid = pAd->ApCfg.ApCliTab[i].Ssid;
+			pApCliCfgSsid = pAd->ApCfg.ApCliTab[i].CfgSsid;
+			CfgSsidLen = pAd->ApCfg.ApCliTab[i].CfgSsidLen;
+			if ((pAd->ApCfg.ApCliTab[i].CtrlCurrState < APCLI_CTRL_AUTH ||
+				!NdisEqualMemory(pApCliSsid, pApCliCfgSsid, CfgSsidLen)) &&
+				pAd->ApCfg.ApCliTab[i].CfgSsidLen > 0)
+			{
+				if (RTMP_TIME_AFTER(pAd->Mlme.Now32, pAd->ApCfg.ApCliIssueScanTime[i]))
+					timeDiff[i] = (pAd->Mlme.Now32 - pAd->ApCfg.ApCliIssueScanTime[i]);
+				else
+					timeDiff[i] = (pAd->ApCfg.ApCliIssueScanTime[i] - pAd->Mlme.Now32);
+				//will trigger scan after 23 sec
+				if (timeDiff[i] <= RTMPMsecsToJiffies(23000))
+					continue;
+				
+				MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_ERROR, (" %s(): Scan channels for AP (%s)\n",
+							__FUNCTION__, pApCliCfgSsid));
+				pAd->ApCfg.ApCliAutoConnectRunning[i] = TRUE;
+				if (pAd->ApCfg.bPartialScanEnable[i]) {
+					pAd->ApCfg.bPartialScanning[i] = TRUE;
+					pAd->ScanCtrl.PartialScan.pwdev = &pAd->ApCfg.ApCliTab[i].wdev;
+					pAd->ScanCtrl.PartialScan.bScanning = TRUE;
+				}
+				Ssid.SsidLength = CfgSsidLen;
+				NdisCopyMemory(Ssid.Ssid, pApCliCfgSsid, CfgSsidLen);
+				NdisGetSystemUpTime(&pAd->ApCfg.ApCliIssueScanTime[i]);
+				ApSiteSurvey_by_wdev(pAd, &Ssid, SCAN_ACTIVE, FALSE, &pAd->ApCfg.ApCliTab[i].wdev);
+			}
+		}
+	}
+#endif /* APCLI_AUTO_CONNECT_SUPPORT */
+}
 
 BOOLEAN RTMPRepeaterVaildMacEntry(
 	IN PRTMP_ADAPTER pAd,
@@ -1309,6 +1482,14 @@ INT Show_Repeater_Cli_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 {
 	INT i;
 	ULONG DataRate=0;
+	POS_COOKIE pObj = (POS_COOKIE) pAd->OS_Cookie;
+	struct wifi_dev *wdev = get_wdev_by_ioctl_idx_and_iftype(pAd,pObj->ioctl_if,pObj->ioctl_if_type);
+	ADD_HT_INFO_IE *addht;
+	
+	if(!wdev)
+		return FALSE;
+	
+	addht = wlan_operate_get_addht(wdev);
 
 	RETURN_ZERO_IF_PAD_NULL(pAd);
 
@@ -1318,7 +1499,7 @@ INT Show_Repeater_Cli_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 	printk("\n");
 
 #ifdef DOT11_N_SUPPORT
-	printk("HT Operating Mode : %d\n", pAd->CommonCfg.AddHTInfo.AddHtInfo2.OperaionMode);
+	printk("HT Operating Mode : %d\n", addht->AddHtInfo2.OperaionMode);
 	printk("\n");
 #endif /* DOT11_N_SUPPORT */
 

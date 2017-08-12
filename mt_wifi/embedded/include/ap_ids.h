@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -23,7 +24,7 @@
      Who         When          What
      --------    ----------    ----------------------------------------------
  */
-
+#endif /* MTK_LICENSE */
 VOID RTMPIdsPeriodicExec(
 	IN PVOID SystemSpecific1, 
 	IN PVOID FunctionContext, 
@@ -40,7 +41,12 @@ VOID RTMPConflictSsidDetection(
 	IN UCHAR			SsidLen,
 	IN CHAR				Rssi0,
 	IN CHAR				Rssi1,
-	IN CHAR				Rssi2);
+	IN CHAR				Rssi2
+#ifdef CUSTOMER_DCC_FEATURE
+	,
+	IN CHAR 			Rssi3
+#endif
+	);
 
 BOOLEAN RTMPReplayAttackDetection(
 	IN RTMP_ADAPTER *pAd,

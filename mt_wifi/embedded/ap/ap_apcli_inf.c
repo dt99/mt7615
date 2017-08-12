@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -43,6 +44,7 @@
     --------------  ----------      ----------------------------------------------
     Shiang, Fonchi  02-13-2007      created
 */
+#endif /* MTK_LICENSE */
 #define RTMP_MODULE_OS
 
 #ifdef APCLI_SUPPORT
@@ -108,10 +110,10 @@ INT ApCli_VirtualIF_Open(PNET_DEV dev_p)
 
 	pAd = RTMP_OS_NETDEV_GET_PRIV(dev_p);
 	ASSERT(pAd);
-
+	
 	MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("%s: ===> %s\n", __FUNCTION__, RTMP_OS_NETDEV_GET_DEVNAME(dev_p)));
 
-	if (VIRTUAL_IF_UP(pAd) != 0)
+	if (VIRTUAL_IF_UP(pAd, dev_p) != 0)
 		return -1;
 
 	/* increase MODULE use count */
@@ -150,7 +152,7 @@ INT ApCli_VirtualIF_Close(PNET_DEV dev_p)
 
 	RTMP_AP_IoctlHandle(pAd, NULL, CMD_RTPRIV_IOCTL_APC_CLOSE, 0, dev_p, 0);
 
-	VIRTUAL_IF_DOWN(pAd);
+	VIRTUAL_IF_DOWN(pAd, dev_p);
 
     RT_MOD_HNAT_DEREG(dev_p);
 	RT_MOD_DEC_USE_COUNT();

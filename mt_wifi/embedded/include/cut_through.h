@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -26,7 +27,7 @@
     --------    ----------    ----------------------------------------------
 
 */
-
+#endif /* MTK_LICENSE */
 #include "rtmp_type.h"
 #include "rtmp_os.h"
 #include "mac/mac_mt/dmac/mt_dmac.h"
@@ -40,8 +41,11 @@
 #define TIME_SLOT_NUMS 10
 #endif
 typedef enum _CT_MSDU_INFO_FLAG{
-	CT_INFO_APPLY_TXD = 0x1,
-	CT_INFO_MGN_FRAME = 0x4,
+	CT_INFO_APPLY_TXD = BIT(0),
+	HIF_PKT_FLAGS_COPY_HOST_TXD_ALL = BIT(1),
+	CT_INFO_MGN_FRAME = BIT(2),
+	CT_INFO_NONE_CIPHER_FRAME = BIT(3),
+	CT_INFO_HSR2_TX = BIT(4), 
 }CT_MSDU_INFO_FLAG;
 
 
@@ -62,7 +66,6 @@ typedef struct GNU_PACKED _CR4_TXP_MSDU_INFO {
 #define CUT_THROUGH_TYPE_RX 2
 #define CUT_THROUGH_TYPE_BOTH (CUT_THROUGH_TYPE_TX | CUT_THROUGH_TYPE_RX)
 
-#define CUT_THROUGH_HEAD_LEN 72
 #define PKT_TX_TOKEN_ID_MAX	4095 /* token ID in range of 0~4095 */
 #define PKT_TOKEN_ID_INVALID	PKT_TX_TOKEN_ID_MAX + 1
 #define PKT_TX_TOKEN_ID_CNT	PKT_TX_TOKEN_ID_MAX + 1 /* number of token IDs */
@@ -88,7 +91,10 @@ typedef struct _PKT_TOKEN_ENTRY{
 	LONG startTime;
 	LONG endTime;
 	NDIS_PHYSICAL_ADDRESS pkt_phy_addr;
-	size_t pkt_len;
+	size_t pkt_len;	
+#ifdef CONFIG_HOTSPOT_R2
+	BOOLEAN Reprocessed;
+#endif /* CONFIG_HOTSPOT_R2 */
 } PKT_TOKEN_ENTRY;
 
 /*
@@ -179,11 +185,9 @@ PNDIS_PACKET cut_through_rx_deq(PKT_TOKEN_CB *pktTokenCb, UINT16 token, UINT8 *T
 UINT16 cut_through_rx_enq(PKT_TOKEN_CB *pktTokenCb, PNDIS_PACKET pkt, UINT8 Type);
 VOID cut_through_rx_pkt_assign(PKT_TOKEN_CB *pktTokenCb, UINT16 token, PNDIS_PACKET pkt);
 PNDIS_PACKET cut_through_tx_deq(PKT_TOKEN_CB *pktTokenCb, UINT16 token, UINT8 *Type);
-UINT16 cut_through_tx_enq(PKT_TOKEN_CB *pktTokenCb, PNDIS_PACKET pkt, UINT8 Type);
+UINT16 cut_through_tx_enq(PKT_TOKEN_CB *pktTokenCb, PNDIS_PACKET pkt, UINT8 Type, NDIS_PHYSICAL_ADDRESS pkt_phy_addr, size_t pkt_len);
 BOOLEAN cut_through_tx_state(PKT_TOKEN_CB *pktTokenCb, UINT8 State, UINT8 RingIdx);
-INT cut_through_tx_unmap(PKT_TOKEN_CB *pktTokenCb, UINT16 token);
 INT32 cut_through_tx_flow_block(PKT_TOKEN_CB *pktTokenCb, PNET_DEV NetDev, UINT8 State, BOOLEAN Block, UINT8 RingIdx);
-INT cut_through_tx_mark_token_info(PKT_TOKEN_CB *pktTokenCb, UINT16 token, NDIS_PHYSICAL_ADDRESS pkt_phy_addr, size_t pkt_len);
 UINT cut_through_rx_in_order(PKT_TOKEN_CB *pktTokenCb, UINT16 token);
 UINT cut_through_rx_drop(PKT_TOKEN_CB *pktTokenCb, UINT16 token);
 UINT cut_through_rx_rxdone(PKT_TOKEN_CB *pktTokenCb, UINT16 token);

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -27,6 +28,7 @@
 	--------	----------		----------------------------------------------
 	Shiang      02/26/07      Init version
 */
+#endif /* MTK_LICENSE */
 #ifdef MAT_SUPPORT
 
 #include "rt_config.h"
@@ -548,6 +550,9 @@ static PUCHAR MATProto_IP_Rx(
 {
 #ifdef MAC_REPEATER_SUPPORT
 	PRTMP_ADAPTER pAd = (PRTMP_ADAPTER) pMatCfg->pPriv;
+	USHORT wcid = 0xFF;
+	PMAC_TABLE_ENTRY pEntry = NULL;
+	PREPEATER_CLIENT_ENTRY pReptEntry = NULL;
 #endif /* MAC_REPEATER_SUPPORT */
 	PUCHAR	 pMacAddr;
 	UINT   	dstIP=0;
@@ -563,55 +568,62 @@ static PUCHAR MATProto_IP_Rx(
 		return pMacAddr;
 	}
 
-	if ((pAd->ApCfg.bMACRepeaterEn) && (pAd->ApCfg.MACRepeaterOuiMode == VENDOR_DEFINED_MAC_ADDR_OUI))
+	wcid = RTMP_GET_PACKET_WCID(pSkb);
+	pEntry = &pAd->MacTab.Content[wcid];
+	pReptEntry = &pAd->ApCfg.pRepeaterCliPool[pEntry->MatchReptCliIdx];
+
+	if (pAd->ApCfg.bMACRepeaterEn)
 	{
-		USHORT wcid = 0xFF;
-		PRTMP_ADAPTER pAd = (PRTMP_ADAPTER) pMatCfg->pPriv;
-		PMAC_TABLE_ENTRY pEntry = NULL;
-		PREPEATER_CLIENT_ENTRY pReptEntry = NULL;
+		if (pEntry->bReptCli) 
+		{	
+			UINT  ip;
+			struct wifi_dev *wdev;
 
-		wcid = RTMP_GET_PACKET_WCID(pSkb);
+			ip = ntohl(dstIP);
+			wdev = pEntry->wdev;
 
-		pEntry = &pAd->MacTab.Content[wcid];
-		pReptEntry = &pAd->ApCfg.pRepeaterCliPool[pEntry->MatchReptCliIdx];
+			/* avoid duplicate packet in IGMP case */		
+			if (IS_MULTICAST_IP(ip))
+				return pReptEntry->OriginalAddress;
+		}
 
-		if (pEntry->bReptCli)
+		if ((pAd->ApCfg.MACRepeaterOuiMode != CASUALLY_DEFINE_MAC_ADDR))
 		{
-			PUCHAR pPktHdr, pLayerHdr;
-
-			pPktHdr = GET_OS_PKT_DATAPTR(pSkb);
-			pLayerHdr = (pPktHdr + MAT_ETHER_HDR_LEN);
-
-			/*For UDP packet, we need to check about the DHCP packet. */
-			if (*(pLayerHdr + 9) == 0x11)
+			if (pEntry->bReptCli)
 			{
-				PUCHAR pUdpHdr;
-				UINT16 srcPort, dstPort;
-				BOOLEAN bHdrChanged = FALSE;
-
-				pUdpHdr = pLayerHdr + 20;
-				srcPort = OS_NTOHS(get_unaligned((PUINT16)(pUdpHdr)));
-				dstPort = OS_NTOHS(get_unaligned((PUINT16)(pUdpHdr+2)));
-
-				if (srcPort==67 && dstPort==68) /*It's a DHCP packet */
+				/*For UDP packet, we need to check about the DHCP packet. */
+				if (*(pLayerHdr + 9) == 0x11)
 				{
-					PUCHAR bootpHdr, dhcpHdr, pCliHwAddr;
-					/*REPEATER_CLIENT_ENTRY *pReptEntry = NULL;*/
+					PUCHAR pUdpHdr;
+					UINT16 srcPort, dstPort;
+					BOOLEAN bHdrChanged = FALSE;
 
-					bootpHdr = pUdpHdr + 8;
-					dhcpHdr = bootpHdr + 236;
-					pCliHwAddr = (bootpHdr+28);
-					if (pReptEntry)
-						NdisMoveMemory(pCliHwAddr, pReptEntry->OriginalAddress, MAC_ADDR_LEN);
-					else
+					pUdpHdr = pLayerHdr + 20;
+					srcPort = OS_NTOHS(get_unaligned((PUINT16)(pUdpHdr)));
+					dstPort = OS_NTOHS(get_unaligned((PUINT16)(pUdpHdr+2)));
+
+					if (srcPort==67 && dstPort==68) /*It's a DHCP packet */
 					{
-						MTWF_LOG(DBG_CAT_PROTO, CATPROTO_MAT, DBG_LVL_OFF, ("%s() MatchAPCLITabIdx = %u\n", __FUNCTION__, pEntry->func_tb_idx));
+						PUCHAR bootpHdr, dhcpHdr, pCliHwAddr;
+						bootpHdr = pUdpHdr + 8;
+						dhcpHdr = bootpHdr + 236;
+						pCliHwAddr = (bootpHdr+28);
+						if (pReptEntry)
+							NdisMoveMemory(pCliHwAddr, pReptEntry->OriginalAddress, MAC_ADDR_LEN);
+						else
+						{
+							MTWF_LOG(DBG_CAT_PROTO, CATPROTO_MAT, DBG_LVL_OFF, ("%s() MatchAPCLITabIdx = %u\n", __FUNCTION__, pEntry->func_tb_idx));
+						}
+						bHdrChanged = TRUE;
 					}
-					bHdrChanged = TRUE;
-				}
 
-				if (bHdrChanged == TRUE)
-					NdisZeroMemory((pUdpHdr+6), 2); /*modify the UDP chksum as zero */
+					if (bHdrChanged == TRUE) {
+						NdisZeroMemory((pUdpHdr+6), 2); /*modify the UDP chksum as zero */
+#ifdef DHCP_UC_SUPPORT
+						*(UINT16*)(pUdpHdr+6) = RTMP_UDP_Checksum(pSkb);
+#endif /* DHCP_UC_SUPPORT */
+					}
+				}		
 			}
 		}
 	}
@@ -627,10 +639,15 @@ static PUCHAR MATProto_IP_Tx(
 	IN PUCHAR 			pLayerHdr,
 	IN PUCHAR 			pDevMacAdr)
 {
+#if defined(DHCP_UC_SUPPORT) && defined(MAC_REPEATER_SUPPORT)
+	PRTMP_ADAPTER pAd = (PRTMP_ADAPTER) pMatCfg->pPriv;
+	BOOLEAN use_dhcpbroadcast = TRUE;
+#endif /* DHCP_UC_SUPPORT && MAC_REPEATER_SUPPORT */
 	PUCHAR pSrcMac;
 	PUCHAR pSrcIP;
 	BOOLEAN needUpdate;
 	PUCHAR pPktHdr;
+	PNDIS_PACKET newSkb = NULL;
 
 	pPktHdr = GET_OS_PKT_DATAPTR(pSkb);
 
@@ -658,12 +675,44 @@ static PUCHAR MATProto_IP_Tx(
 			UINT16 bootpFlag;
 			PUCHAR dhcpHdr;
 
+			if (OS_PKT_CLONED(pSkb)){
+				OS_PKT_COPY(pSkb, newSkb);
+				if (newSkb) {
+					/* reassign packet header pointer for new skb*/
+					if (IS_VLAN_PACKET(GET_OS_PKT_DATAPTR(newSkb))) {
+						pPktHdr = GET_OS_PKT_DATAPTR(newSkb);
+						pLayerHdr = (pPktHdr + MAT_VLAN_ETH_HDR_LEN);
+						udpHdr = pLayerHdr + 20;
+					} else {
+						pPktHdr = GET_OS_PKT_DATAPTR(newSkb);
+						pLayerHdr = (pPktHdr + MAT_ETHER_HDR_LEN);
+						udpHdr = pLayerHdr + 20;
+					}
+				}
+			}
+
 			bootpHdr = udpHdr + 8;
 			bootpFlag = OS_NTOHS(get_unaligned((PUINT16)(bootpHdr+10)));
 			MTWF_LOG(DBG_CAT_PROTO, CATPROTO_MAT, DBG_LVL_TRACE, ("is bootp packet! bootpFlag=0x%x\n", bootpFlag));
-				dhcpHdr = bootpHdr + 236;
+			dhcpHdr = bootpHdr + 236;
 
+#if defined(DHCP_UC_SUPPORT) && defined(MAC_REPEATER_SUPPORT)
+			if (pAd->DhcpUcEnable == TRUE) {
+				if (pMatCfg->bMACRepeaterEn) { /* check repeater case*/
+					REPEATER_CLIENT_ENTRY *pReptEntry = NULL;
+					pReptEntry = RTMPLookupRepeaterCliEntry(pMatCfg->pPriv, FALSE, pDevMacAdr, TRUE);
+					if (pReptEntry != NULL) {
+						use_dhcpbroadcast = FALSE;
+					}
+				}
+			}
+#endif /* DHCP_UC_SUPPORT && MAC_REPEATER_SUPPORT */
+
+#if defined(DHCP_UC_SUPPORT) && defined(MAC_REPEATER_SUPPORT)
+			if ((bootpFlag != 0x8000) && (use_dhcpbroadcast == TRUE)) /*check if it's a broadcast request. */
+#else
 			if (bootpFlag != 0x8000) /*check if it's a broadcast request. */
+#endif
 			{
 				MTWF_LOG(DBG_CAT_PROTO, CATPROTO_MAT, DBG_LVL_TRACE, ("the DHCP flag is a unicast, dhcp_magic=%02x:%02x:%02x:%02x\n",
 										dhcpHdr[0], dhcpHdr[1], dhcpHdr[2], dhcpHdr[3]));
@@ -718,11 +767,15 @@ static PUCHAR MATProto_IP_Tx(
 #endif /* MAC_REPEATER_SUPPORT */
 		}
 
-		if (bHdrChanged == TRUE)
+		if (bHdrChanged == TRUE) {
 			NdisZeroMemory((udpHdr+6), 2); /* Modify the UDP chksum as zero */
+#ifdef DHCP_UC_SUPPORT
+			*(UINT16*)(udpHdr+6) = RTMP_UDP_Checksum((newSkb == NULL)?pSkb:newSkb);
+#endif /* DHCP_UC_SUPPORT */
+		}
 	}
 
-	return NULL;
+	return (PUCHAR)newSkb;
 }
 
 

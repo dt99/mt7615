@@ -34,6 +34,7 @@ obj_cmm := \
         $(RT28xx_EMBED_RPATH)/common/cmm_mumimo.o\
         $(RT28xx_EMBED_RPATH)/common/rtmp_timer.o\
         $(RT28xx_EMBED_RPATH)/common/rt_channel.o\
+	$(RT28xx_EMBED_RPATH)/common/op_class.o\
         $(RT28xx_EMBED_RPATH)/common/cmm_profile.o\
         $(RT28xx_EMBED_RPATH)/common/scan.o\
         $(RT28xx_EMBED_RPATH)/common/cmm_cmd.o\
@@ -49,6 +50,14 @@ obj_cmm := \
         $(RT28xx_EMBED_RPATH)/tx_rx/wdev_rx.o\
 	$(RT28xx_EMBED_RPATH)/common/bcn.o\
         $(RT28xx_EMBED_RPATH)/common/wifi_sys_info.o\
+	$(RT28xx_EMBED_RPATH)/wlan_config/config_basic.o\
+	$(RT28xx_EMBED_RPATH)/wlan_config/config_phy.o\
+	$(RT28xx_EMBED_RPATH)/wlan_config/config_ht.o\
+	$(RT28xx_EMBED_RPATH)/wlan_config/config_vht.o\
+	$(RT28xx_EMBED_RPATH)/mgmt/be_basic.o\
+	$(RT28xx_EMBED_RPATH)/mgmt/be_phy.o\
+	$(RT28xx_EMBED_RPATH)/mgmt/be_ht.o\
+	$(RT28xx_EMBED_RPATH)/mgmt/be_vht.o\
 	$(RT28xx_RPATH)/os/linux/rt_profile.o
 
 ifeq ($(HAS_CUT_THROUGH),y)
@@ -65,6 +74,10 @@ endif
 
 ifeq ($(HAS_FW_DUMP_SUPPORT),y)
 obj_cmm += $(RT28xx_RPATH)/os/linux/mt_fwdump.o
+endif
+
+ifeq ($(HAS_MULTI_PROFILE_SUPPORT),y)
+obj_cmm += $(RT28xx_EMBED_RPATH)/common/multi_profile.o
 endif
 
 obj_ra := \
@@ -88,7 +101,9 @@ obj_hw_ctrl := \
 	$(RT28xx_RPATH)/hw_ctrl/cmm_asic.o \
 	$(RT28xx_RPATH)/hw_ctrl/hw_init.o
 
-
+ifeq ($(HAS_GREENAP_SUPPORT),y)
+obj_hw_ctrl +=  $(RT28xx_RPATH)/hw_ctrl/greenap.o
+endif
 #########################################
 #   ASIC related source files
 #########################################
@@ -106,6 +121,10 @@ endif
 
 ifeq ($(HAS_MT_BBP),y)
 obj_phy += $(RT28xx_RPATH)/phy/mt_phy.o
+endif
+
+ifeq ($(HAS_RLM_CAL_CACHE),y)
+obj_phy += $(RT28xx_RPATH)/phy/rlm_cal_cache.o
 endif
 
 ifeq ($(HAS_MT_RF),y)
@@ -175,6 +194,7 @@ obj_mac += $(RT28xx_RPATH)/hw_ctrl/cmm_asic_mt_fw.o
 obj_mac += $(RT28xx_EMBED_RPATH)/common/mt_ps.o
 obj_mac += $(RT28xx_EMBED_RPATH)/common/mt_io.o
 obj_mac += $(RT28xx_RPATH)/protocol/tmr.o
+obj_mac += $(RT28xx_RPATH)/protocol/protection.o
 obj_mac += $(RT28xx_EMBED_RPATH)/tx_rx/txs.o
 endif
 
@@ -441,7 +461,8 @@ obj_ap += \
 	$(RT28xx_EMBED_RPATH)/ap/ap_autoChSel.o\
 	$(RT28xx_EMBED_RPATH)/ap/ap_qload.o\
 	$(RT28xx_EMBED_RPATH)/ap/ap_cfg.o\
-	$(RT28xx_EMBED_RPATH)/ap/ap_nps.o
+	$(RT28xx_EMBED_RPATH)/ap/ap_nps.o\
+    $(RT28xx_EMBED_RPATH)/ap/ap_vow.o
 
 ifeq ($(HAS_MU_MIMO_SUPPORT),y)
 obj_ap += $(RT28xx_EMBED_RPATH)/ap/ap_mumimo.o
@@ -508,10 +529,6 @@ endif
 
 ifeq ($(HAS_IGMP_SNOOP_SUPPORT),y)
 obj_ap += $(RT28xx_EMBED_RPATH)/common/igmp_snoop.o
-endif
-
-ifeq ($(HAS_VOW_SUPPORT),y)
-obj_ap += $(RT28xx_EMBED_RPATH)/ap/ap_vow.o
 endif
 
 MOD_NAME = $(MODULE)_ap
@@ -765,6 +782,37 @@ endif
 endif
 
 install:
+ifeq ($(PLATFORM),INTELP6)
+	rm -rf $(BUILD_DEST)/etc/Wireless/7615AP/
+	mkdir -p $(BUILD_DEST)/etc/
+	mkdir -p $(BUILD_DEST)/etc/Wireless/
+	mkdir -p $(BUILD_DEST)/etc/Wireless/7615AP/ 
+	cp $(RT28xx_EMBEDDED_DIR)/conf/mt76xx_5.dat $(BUILD_DEST)/etc/Wireless/7615AP/
+	cp $(RT28xx_EMBEDDED_DIR)/conf/mt76xx_24.dat $(BUILD_DEST)/etc/Wireless/7615AP/
+	cp $(RT28xx_EMBEDDED_DIR)/RT30xxEEPROM.bin $(BUILD_DEST)/etc/Wireless/7615AP/
+	#cp $(RT28xx_DIR)/arris_patch/new/SingleSKU.dat $(BUILD_DEST)/etc/Wireless/7615AP/ #ARRIS ADD
+	chmod 777 $(BUILD_DEST)/etc/Wireless/7615AP/ -Rf
+	
+	rm -rf $(FSROOT)/etc/Wireless/7615AP/
+	mkdir -p $(FSROOT)/etc/
+	mkdir -p $(FSROOT)/etc/Wireless/
+	mkdir -p $(FSROOT)/etc/Wireless/7615AP/ 
+	cp $(RT28xx_EMBEDDED_DIR)/conf/mt76xx_5.dat $(FSROOT)/etc/Wireless/7615AP/
+	cp $(RT28xx_EMBEDDED_DIR)/conf/mt76xx_24.dat $(FSROOT)/etc/Wireless/7615AP/
+	cp $(RT28xx_EMBEDDED_DIR)/RT30xxEEPROM.bin $(FSROOT)/etc/Wireless/7615AP/
+	#cp $(RT28xx_DIR)/arris_patch/new/SingleSKU.dat $(FSROOT)/etc/Wireless/7615AP/ #ARRIS ADD
+	chmod 777 $(BUILD_DEST)/etc/Wireless/7615AP -Rf
+	
+ifeq ($(RT28xx_MODE),AP)
+ifeq ($(PLATFORM),INTELP6)
+	install -d $(BUILD_DEST)/lib/modules/wifi/
+	install -m 644 -c $(addsuffix .ko,$(MOD_NAME)) $(BUILD_DEST)/lib/modules/wifi/
+	
+	install -d $(FSROOT)/lib/modules/wifi/
+	install -m 644 -c $(addsuffix .ko,$(MOD_NAME)) $(FSROOT)/lib/modules/wifi/
+endif
+endif
+else
 	rm -rf $(DAT_PATH)
 	$(shell [ ! -f /etc/Wireless ] && mkdir /etc/Wireless)
 	mkdir $(DAT_PATH)
@@ -773,6 +821,7 @@ install:
 	install -m 644 -c $(addsuffix .ko,$(MOD_NAME)) $(LINUX_SRC_MODULE)
 	/sbin/depmod -a ${shell uname -r}
 
+endif
 uninstall:
 #	rm -rf $(DAT_PATH)
 	rm -rf $(addprefix $(LINUX_SRC_MODULE),$(addsuffix .ko,$(MOD_NAME)))

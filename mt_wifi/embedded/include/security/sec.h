@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
 	--------	----------		----------------------------------------------
 	Name		Date			Modification logs
 */
+#endif /* MTK_LICENSE */
 
 #ifndef	__SEC_H__
 #define	__SEC_H__
@@ -162,8 +164,25 @@ VOID GroupRekeyExec (
     IN PVOID SystemSpecific2, 
     IN PVOID SystemSpecific3) ;
 
-VOID WPAGroupRekeyAction (
-    IN  PRTMP_ADAPTER pAd);
+VOID WPAGroupRekeyByWdev (
+    IN PRTMP_ADAPTER pAd,
+    IN struct wifi_dev *wdev);
+
+
+VOID APStartRekeyTimer(
+    IN PRTMP_ADAPTER pAd,
+    IN struct wifi_dev *wdev);
+
+
+VOID APStopRekeyTimer(
+    IN PRTMP_ADAPTER pAd,
+    IN struct wifi_dev *wdev);
+
+
+VOID APReleaseRekeyTimer(
+    IN PRTMP_ADAPTER pAd,
+    IN struct wifi_dev *wdev);
+
 
 INT Show_APSecurityInfo_Proc (
     IN RTMP_ADAPTER *pAd, 

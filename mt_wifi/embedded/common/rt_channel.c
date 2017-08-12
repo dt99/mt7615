@@ -26,13 +26,20 @@ CH_FREQ_MAP CH_HZ_ID_MAP[]=
 			{40, 5200},
 			{44, 5220},
 			{48, 5240},
+			{50, 5250},        
 			{52, 5260},
+			{54, 5270},         
 			{56, 5280},
+			{58, 5290},        
 			{60, 5300},
+			{62, 5310},			
 			{64, 5320},
 			{149, 5745},
+			{151, 5755},             
 			{153, 5765},
+			{155, 5775},			
 			{157, 5785},
+			{159, 5795},			
 			{161, 5805},
 			{165, 5825},
 			{167, 5835},
@@ -42,16 +49,27 @@ CH_FREQ_MAP CH_HZ_ID_MAP[]=
 						
 			/* HiperLAN2 */
 			{100, 5500},
+			{102, 5510},			
 			{104, 5520},
+			{106, 5530},			
 			{108, 5540},
+			{110, 5550},		
 			{112, 5560},
+			{114, 5570},
 			{116, 5580},
+			{118, 5590},			
 			{120, 5600},
+			{122, 5610},			
 			{124, 5620},
+			{126, 5630},			
 			{128, 5640},
 			{132, 5660},
+			{134, 5670},			
 			{136, 5680},
+			{138, 5690},			
 			{140, 5700},
+			{142, 5710},	
+			{144, 5720},            
 						
 			/* Japan MMAC */
 			{34, 5170},
@@ -550,6 +568,18 @@ CH_DESP Country_BA_ChDesp[] =
 	{ 100, 11, 27, BOTH, TRUE}, 	/*5490~5710MHz, Ch 100~140, Max BW: 40 */
 	{ 0},               	    	/* end*/
 };
+#ifdef VENDOR_FEATURE6_SUPPORT
+/*Brazil*/	
+CH_DESP Country_BR_ChDesp[] =
+{
+	{ 1,   13, 26, BOTH, FALSE},	/*2402~2482MHz, Ch 1~13,   Max BW: 40 */
+	{ 36,   4, 23, BOTH, FALSE},	/*5170~5250MHz, Ch 36~48, Max BW: 40 */
+	{ 52,   4, 23, BOTH, TRUE}, 	/*5250~5330MHz, Ch 52~64, Max BW: 40 */
+	{ 100, 11, 24, BOTH, TRUE}, 	/*5490~5710MHz, Ch 100~140, Max BW: 40 */
+	{ 149,  5, 30, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */
+	{ 0},               	    	/* end*/
+};
+#else
 /*Brazil*/	
 CH_DESP Country_BR_ChDesp[] =
 {
@@ -560,6 +590,7 @@ CH_DESP Country_BR_ChDesp[] =
 	{ 149,  5, 30, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */
 	{ 0},               	    	/* end*/
 };
+#endif
 /*Brunei Darussalam*/	
 CH_DESP Country_BN_ChDesp[] =
 {
@@ -587,6 +618,18 @@ CH_DESP Country_KH_ChDesp[] =
 	{ 100, 11, 27, BOTH, TRUE}, 	/*5490~5710MHz, Ch 100~140, Max BW: 40 */
 	{ 0},               	    	/* end*/
 };
+#ifdef VENDOR_FEATURE6_SUPPORT
+/*Canada*/	
+CH_DESP Country_CA_ChDesp[] =
+{
+	{ 1,   11, 30, BOTH, FALSE},	/*2402~2472MHz, Ch 1~11,   Max BW: 40 */
+	{ 36,   4, 23, IDOR, FALSE},	/*5170~5250MHz, Ch 36~48, Max BW: 40 */ 
+	{ 52,   4, 24, BOTH, TRUE}, 	/*5250~5330MHz, Ch 52~64, Max BW: 40 */
+	{ 100, 11, 24, BOTH, TRUE}, 	/*5490~5710MHz, Ch 100~140, Max BW: 40 */
+	{ 149,  5, 30, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */
+	{ 0},               	    	/* end*/
+};
+#else
 /*Canada*/	
 CH_DESP Country_CA_ChDesp[] =
 {
@@ -597,6 +640,18 @@ CH_DESP Country_CA_ChDesp[] =
 	{ 149,  5, 30, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */
 	{ 0},               	    	/* end*/
 };
+#endif
+#ifdef VENDOR_FEATURE6_SUPPORT
+/*Chile*/	
+CH_DESP Country_CL_ChDesp[] =
+{
+	{ 1,   13, 22, BOTH, FALSE},	/*2402~2482MHz, Ch 1~13,   Max BW: 40 */
+	{ 36,   4, 22, BOTH, FALSE},	/*5170~5250MHz, Ch 36~48, Max BW: 40 */
+	{ 52,   4, 22, BOTH, TRUE}, 	/*5250~5330MHz, Ch 52~64, Max BW: 40 */ 
+	{ 149,  5, 22, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */
+	{ 0},               	    	/* end*/
+};
+#else
 /*Chile*/	
 CH_DESP Country_CL_ChDesp[] =
 {
@@ -606,6 +661,7 @@ CH_DESP Country_CL_ChDesp[] =
 	{ 149,  5, 20, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */
 	{ 0},               	    	/* end*/
 };
+#endif
 /*China*/		
 CH_DESP Country_CN_ChDesp[] =
 {
@@ -1034,6 +1090,18 @@ CH_DESP Country_MT_ChDesp[] =
 	{ 100, 11, 27, BOTH, TRUE}, 	/*5490~5710MHz, Ch 100~140, Max BW: 40 */			
 	{ 0},               	    	/* end*/
 };
+#ifdef VENDOR_FEATURE6_SUPPORT
+/*Mexico*/		
+CH_DESP Country_MX_ChDesp[] =
+{
+	{ 1,   11, 30, BOTH, FALSE},	/*2402~2472MHz, Ch 1~11,   Max BW: 40 */
+	{ 36,   4, 17, BOTH, FALSE},	/*5170~5250MHz, Ch 36~48, Max BW: 40 */
+	{ 52,   4, 24, BOTH, TRUE}, 	/*5250~5330MHz, Ch 52~64, Max BW: 40 */
+    { 100, 11, 24, BOTH, TRUE},     /*5490~5710MHz, Ch 100~140, Max BW: 40 */
+	{ 149,  5, 30, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */		
+	{ 0},               	    	/* end*/
+};
+#else
 /*Mexico*/		
 CH_DESP Country_MX_ChDesp[] =
 {
@@ -1043,6 +1111,7 @@ CH_DESP Country_MX_ChDesp[] =
 	{ 149,  5, 30, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */		
 	{ 0},               	    	/* end*/
 };
+#endif
 /*Monaco*/		
 CH_DESP Country_MC_ChDesp[] =
 {
@@ -1135,6 +1204,18 @@ CH_DESP Country_PG_ChDesp[] =
 	{ 149,  5, 30, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */			
 	{ 0},               	    	/* end*/
 };
+#ifdef VENDOR_FEATURE6_SUPPORT
+/*Peru*/		
+CH_DESP Country_PE_ChDesp[] =
+{
+	{ 1,   13, 27, BOTH, FALSE},	/*2402~2482MHz, Ch 1~13,   Max BW: 40 */
+    { 36,   4, 23, BOTH, FALSE}, /*5170~5250MHz, Ch 36~48, Max BW: 40 */
+    { 52,   4, 24, BOTH, TRUE},  /*5250~5330MHz, Ch 52~64, Max BW: 40 */
+    { 100, 11, 21, BOTH, TRUE},  /*5490~5710MHz, Ch 100~140, Max BW: 40 */
+	{ 149,  5, 24, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */			
+	{ 0},               	    	/* end*/
+};
+#else
 /*Peru*/		
 CH_DESP Country_PE_ChDesp[] =
 {
@@ -1142,6 +1223,7 @@ CH_DESP Country_PE_ChDesp[] =
 	{ 149,  5, 30, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */			
 	{ 0},               	    	/* end*/
 };
+#endif
 /*Philippines*/		
 CH_DESP Country_PH_ChDesp[] =
 {
@@ -1364,17 +1446,31 @@ CH_DESP Country_GB_ChDesp[] =
 	{ 100, 11, 27, BOTH, TRUE}, 	/*5490~5710MHz, Ch 100~140, Max BW: 40 */			
 	{ 0},               	    	/* end*/
 };
+#ifdef VENDOR_FEATURE6_SUPPORT
+/*United States*/		
+CH_DESP Country_US_ChDesp[] =
+{
+	{ 1,   11, 30, BOTH, FALSE},	/*2402~2472MHz, Ch 1~11,   Max BW: 40 */
+	{ 36,   4, 30, IDOR, FALSE},	/*5170~5250MHz, Ch 36~48, Max BW: 40 */
+	{ 52,   4, 24, BOTH, TRUE}, 	/*5250~5330MHz, Ch 52~64, Max BW: 40 */
+	{ 100,  5, 24, BOTH, TRUE}, 	/*5490~5600MHz, Ch 100~116, Max BW: 40 */
+	{ 132,  4, 24, BOTH, TRUE}, 	/*5650~5710MHz, Ch 132~140, Max BW: 40 */
+	{ 149,  5, 30, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */
+	{ 0},               	    	/* end*/
+};
+#else
 /*United States*/		
 CH_DESP Country_US_ChDesp[] =
 {
 	{ 1,   11, 27, BOTH, FALSE},	/*2402~2472MHz, Ch 1~11,   Max BW: 40 */
-	{ 36,   4, 17, IDOR, FALSE},	/*5170~5250MHz, Ch 36~48, Max BW: 40 */
-	{ 52,   4, 20, BOTH, TRUE}, 	/*5250~5330MHz, Ch 52~64, Max BW: 40 */
-	{ 100,  5, 20, BOTH, TRUE}, 	/*5490~5600MHz, Ch 100~116, Max BW: 40 */
-	{ 132,  4, 20, BOTH, TRUE}, 	/*5650~5710MHz, Ch 132~144, Max BW: 40 */
+	{ 36,   4, 30, BOTH, FALSE},	/*5170~5250MHz, Ch 36~48, Max BW: 40 */
+	{ 52,   4, 24, BOTH, TRUE}, 	/*5250~5330MHz, Ch 52~64, Max BW: 40 */
+	{ 100,  5, 24, BOTH, TRUE}, 	/*5490~5600MHz, Ch 100~116, Max BW: 40 */
+	{ 132,  4, 24, BOTH, TRUE}, 	/*5650~5710MHz, Ch 132~144, Max BW: 40 */
 	{ 149,  5, 30, BOTH, FALSE},	/*5735~5835MHz, Ch 149~165, Max BW: 40 */
 	{ 0},               	    	/* end*/
 };		
+#endif
 /*Uruguay*/		
 CH_DESP Country_UY_ChDesp[] =
 {
@@ -1442,11 +1538,21 @@ CH_DESP Country_NA_ChDesp[] =
 /*World Wide*/		
 CH_DESP Country_WO_ChDesp[] =
 {
-	{ 1,   13, 20, BOTH, FALSE},	/* 2.4 G, ch 1~13*/
-	{ 36,   4, 17, BOTH, FALSE},	/* 5G band 1, ch 36~48*/
-	{ 149,	5, 22, BOTH, FALSE},	/* 5G band 4, ch 149~165*/
-	{ 0},               	    	/* end*/
+	{ 1,   13, 20, BOTH, FALSE},	/* 2.4 G, ch 1~13 */
+	{ 36,   4, 30, BOTH, FALSE},	/* 5G band 1, ch 36~48 */
+	{ 149,	5, 30, BOTH, FALSE},	/* 5G band 4, ch 149~165 */
+	{ 0},               	    	/* end */
 };
+#ifdef VENDOR_FEATURE6_SUPPORT
+/*Default*/
+CH_DESP Country_DF_ChDesp[] =
+{
+ { 1,   11, 20, BOTH, FALSE}, /*2402~2482MHz, Ch 1~13,   Max BW: 40 */
+ { 36,   4, 22, BOTH, FALSE}, /*5170~5250MHz, Ch 36~48, Max BW: 40 */
+ { 149,  5, 22, BOTH, FALSE}, /*5735~5835MHz, Ch 149~165, Max BW: 40 */
+ { 0},                     /* end*/
+};
+#endif
 
 CH_REGION ChRegion[] =
 {
@@ -1570,10 +1676,13 @@ CH_REGION ChRegion[] =
 	{"EU", CE, Country_EU_ChDesp}, /* Europe */
 	{"NA", FCC,Country_NA_ChDesp}, /* North America */
 	{"WO", CE, Country_WO_ChDesp}, /* World Wide */
+#ifdef VENDOR_FEATURE6_SUPPORT
+	{"DF", FCC,Country_DF_ChDesp}, /* Default */
+#endif
 	{""  , 0,  NULL}	     , /* End */	
 };
 
-static PCH_REGION GetChRegion(
+PCH_REGION GetChRegion(
 	IN PUCHAR CntryCode)
 {
 	INT loop = 0;
@@ -1591,8 +1700,11 @@ static PCH_REGION GetChRegion(
 
 	/* Default: use WO*/
 	if (pChRegion == NULL)
+#ifdef VENDOR_FEATURE6_SUPPORT
+		pChRegion = GetChRegion("DF");
+#else
 		pChRegion = GetChRegion("WO");
-
+#endif
 	return pChRegion;
 }
 
@@ -1618,8 +1730,12 @@ static UCHAR FillChList(
 	IN UCHAR regulatoryDomain,
 	IN UCHAR PhyMode)
 {
-	INT i, j, l;
+	INT i, j;//sachin - TODO, l;
 	UCHAR channel;
+#if defined(CONFIG_AP_SUPPORT) || defined(RT_CFG80211_SUPPORT)
+	UCHAR rfic = wmode_2_rfic(PhyMode);
+	UCHAR bw = HcGetBwByRf(pAd,rfic);
+#endif
 
 	j = Offset;
 	for (i = 0; i < pChDesp->NumOfCh; i++)
@@ -1641,7 +1757,7 @@ static UCHAR FillChList(
 			(pAd->CommonCfg.RDDurRegion == FCC) &&
 			(pAd->Dot11_H.bDFSIndoor == 1))
 		{
-			if (RESTRICTION_BAND_1(pAd,channel))
+			if (RESTRICTION_BAND_1(pAd,channel,bw))
 				continue;
 		}
 		else if ((pAd->CommonCfg.bIEEE80211H == 1) &&
@@ -1664,6 +1780,10 @@ static UCHAR FillChList(
 #ifdef DOT11_VHT_AC
 		if (vht80_channel_group(pAd, pAd->ChannelList[j].Channel))
 			pAd->ChannelList[j].Flags |= CHANNEL_80M_CAP;
+
+		if (vht160_channel_group(pAd, pAd->ChannelList[j].Channel))
+            pAd->ChannelList[j].Flags |= CHANNEL_160M_CAP;
+
 #endif /* DOT11_VHT_AC */	
 #endif /* DOT11_N_SUPPORT */
 
@@ -1674,7 +1794,7 @@ static UCHAR FillChList(
 					pAd->ChannelList[j].Channel,
 					pAd->ChannelList[j].MaxTxPwr,
 					WMODE_CAP_N(PhyMode),
-					(pAd->CommonCfg.RegTransmitSetting.field.BW == BW_20));
+					(bw == BW_20));
 #endif /* RT_CFG80211_SUPPORT */
 
 		j++;
@@ -1746,18 +1866,29 @@ static inline VOID CreateChList(
 	IN PCH_REGION pChRegion,
 	IN UCHAR Geography)
 {
-	INT i,PhyIdx;
 	UCHAR offset = 0;
-	PCH_DESP pChDesp;
-	UCHAR ChType;
-	UCHAR increment;
-	UCHAR regulatoryDomain;
+//	INT i,PhyIdx;	
+//	PCH_DESP pChDesp;
+//	UCHAR ChType;
+//	UCHAR increment;
+//	UCHAR regulatoryDomain;
+#ifdef CONFIG_AP_SUPPORT
+	BOOLEAN Is2GRun = HcIsRfRun(pAd,RFIC_24GHZ);
+	BOOLEAN Is5GRun = HcIsRfRun(pAd,RFIC_5GHZ); 
+#endif /* CONFIG_AP_SUPPORT */
 
 	if (pChRegion == NULL)
 		return;
+	
+#ifdef CONFIG_AP_SUPPORT
+	if(Is2GRun)
+		offset = CeateChListByRf(pAd,RFIC_24GHZ,pChRegion,Geography,offset);
+	if(Is5GRun)
+		offset = CeateChListByRf(pAd,RFIC_5GHZ,pChRegion,Geography,offset);
+#endif /* CONFIG_STA_SUPPORT */
+	
+	
 
-	offset = CeateChListByRf(pAd,RFIC_24GHZ,pChRegion,Geography,offset);
-	offset = CeateChListByRf(pAd,RFIC_5GHZ,pChRegion,Geography,offset);
 }
 
 
@@ -1810,9 +1941,10 @@ VOID BuildBeaconChList(
 			if (pChDesp[i].FirstChannel > 14)
 				continue;
 		}
-
+#ifndef VENDOR_FEATURE6_SUPPORT						// Display regardless of "geography"
 		if ((pChDesp[i].Geography == BOTH) ||
 			(pChDesp[i].Geography == pAd->CommonCfg.Geography))
+#endif
 		{
 			MakeOutgoingFrame(pBuf + *pBufLen,		&TmpLen,
 								1,					&pChDesp[i].FirstChannel,
@@ -1882,7 +2014,7 @@ COUNTRY_PROP CountryProp[]=
 	{"IL", CE, FALSE }, /* Israel */
 	{"IT", CE, TRUE }, /* Italy */
 	{"JM", CE, TRUE }, /* Jamaica */
-	{"JP", JAP, FALSE}, /* Japan */		
+	{"JP", JAP, TRUE}, /* Japan */		
 	{"JO", CE, TRUE }, /* Jordan */	
 	{"KZ", CE, TRUE }, /* Kazakhstan */			
 	{"KE", CE, TRUE }, /* Kenya */	
@@ -1950,6 +2082,7 @@ COUNTRY_PROP CountryProp[]=
 	{""  , 0, FALSE}	     , /* End */	
 };
 
+#ifndef EXT_BUILD_CHANNEL_LIST
 static PCOUNTRY_PROP GetCountryProp(
 	IN PUCHAR CntryCode)
 {
@@ -1971,6 +2104,38 @@ static PCOUNTRY_PROP GetCountryProp(
 		pCountryProp = GetCountryProp("WO");
 
 	return pCountryProp;
+}
+#endif /* ifndef EXT_BUILD_CHANNEL_LIST */
+
+BOOLEAN GetEDCCASupport(
+    IN PRTMP_ADAPTER pAd)
+{
+    BOOLEAN ret = FALSE;
+
+#ifdef EXT_BUILD_CHANNEL_LIST 
+    PCH_REGION pChReg;
+
+    pChReg = GetChRegion(pAd->CommonCfg.CountryCode);
+
+    if ((pChReg->DfsType != FCC) && (pChReg->edcca_on == TRUE) )
+    {
+        // actually need to check PM's table in CE country
+        ret = TRUE;
+    }
+#else
+    PCOUNTRY_PROP pCountryProp;
+
+    pCountryProp = GetCountryProp(pAd->CommonCfg.CountryCode);
+
+    if ((pCountryProp->DfsType != FCC) && (pCountryProp->edcca_on == TRUE))
+    {
+        // actually need to check PM's table in CE country
+        ret = TRUE;
+    }
+#endif
+
+    return ret;
+
 }
 
 UCHAR GetCountryRegionFromCountryCode(
@@ -2028,6 +2193,23 @@ static UCHAR GetExtCh(
 	return ExtCh;
 }
 
+BOOLEAN ExtChCheck(
+    IN PRTMP_ADAPTER pAd, 
+    IN UCHAR Channel,
+    IN UCHAR Direction)
+{
+    UCHAR ExtCh;
+        
+    /* Get extension channel by current direction */         
+    ExtCh = GetExtCh(Channel, Direction);
+
+    /* Check whether current extension channel is in channel list or not */
+    if (IsValidChannel(pAd, ExtCh))
+        return TRUE;
+    else
+        return FALSE;
+}
+
 BOOLEAN N_ChannelGroupCheck(
 	IN PRTMP_ADAPTER pAd,
 	IN UCHAR Channel)
@@ -2078,6 +2260,10 @@ BOOLEAN N_ChannelGroupCheck(
 VOID N_ChannelCheck(RTMP_ADAPTER *pAd, UCHAR PhyMode, UCHAR Channel)
 {
 	INT idx;
+	unsigned char i;
+	struct wifi_dev *wdev;
+	UCHAR op_ht_bw;
+	UCHAR ext_cha;
 	static const UCHAR wfa_ht_ch_ext[] = {
 			36, EXTCHA_ABOVE, 40, EXTCHA_BELOW,
 			44, EXTCHA_ABOVE, 48, EXTCHA_BELOW,
@@ -2093,69 +2279,90 @@ VOID N_ChannelCheck(RTMP_ADAPTER *pAd, UCHAR PhyMode, UCHAR Channel)
 			157, EXTCHA_ABOVE, 161, EXTCHA_BELOW,
 			0, 0};
 
-	if (WMODE_CAP_N(PhyMode) &&
-		(pAd->CommonCfg.RegTransmitSetting.field.BW  == BW_40))
-	{
-		if (Channel > 14)
-		{
-			idx = 0;
-			while(wfa_ht_ch_ext[idx] != 0) {
-				if (wfa_ht_ch_ext[idx] == Channel && IsValidChannel(pAd, GetExtCh(Channel, wfa_ht_ch_ext[idx + 1]))) {
-					 HcUpdateExtCha(pAd,Channel,wfa_ht_ch_ext[idx + 1]);
-					break;
-				}
-				idx += 2;
-			};
-			if (wfa_ht_ch_ext[idx] == 0)
-			{
-				pAd->CommonCfg.RegTransmitSetting.field.BW  = BW_20;
-				HcUpdateExtCha(pAd,Channel,EXTCHA_NONE);
-			}
-		}
-		else
-		{
-			do
-			{
-				UCHAR ExtCh;
-				UCHAR Dir = HcGetExtCha(pAd,Channel);
-				if(Dir == EXTCHA_NONE){
-					Dir = EXTCHA_ABOVE;
-				}
-				ExtCh = GetExtCh(Channel, Dir);
-				if (IsValidChannel(pAd, ExtCh)){
-					HcUpdateExtCha(pAd,Channel,Dir);
-					break;
-				}
-				Dir = (Dir == EXTCHA_ABOVE) ? EXTCHA_BELOW : EXTCHA_ABOVE;
-				ExtCh = GetExtCh(Channel, Dir);
-				if (IsValidChannel(pAd, ExtCh))
-				{
-					HcUpdateExtCha(pAd,Channel,Dir);
-					break;
-				}
-				pAd->CommonCfg.RegTransmitSetting.field.BW  = BW_20;
-			} while(FALSE);
+	if (!WMODE_CAP_N(PhyMode))
+		return;
 
-			if (Channel == 14)
+	for(i=0;i<WDEV_NUM_MAX;i++){
+		wdev = pAd->wdev_list[i];
+		if(!wdev || (wdev->PhyMode!=PhyMode) || (wdev->channel != Channel))
+			continue;
+
+		op_ht_bw = wlan_operate_get_ht_bw(wdev);
+		ext_cha = wlan_operate_get_ext_cha(wdev);
+
+		if(op_ht_bw == BW_40)
+		{
+			if (Channel > 14)
 			{
-				pAd->CommonCfg.RegTransmitSetting.field.BW  = BW_20;
-				/*pAd->CommonCfg.RegTransmitSetting.field.EXTCHA = EXTCHA_NONE; We didn't set the ExtCh as NONE due to it'll set in RTMPSetHT()*/
+				idx = 0;
+				while(wfa_ht_ch_ext[idx] != 0) {
+					if (wfa_ht_ch_ext[idx] == Channel && IsValidChannel(pAd, GetExtCh(Channel, wfa_ht_ch_ext[idx + 1]))) {
+						ext_cha = wfa_ht_ch_ext[idx + 1];
+						break;
+					}
+					idx += 2;
+				};
+				if (wfa_ht_ch_ext[idx] == 0)
+				{
+					op_ht_bw = HT_BW_20;
+					ext_cha = EXTCHA_NONE;
+#ifdef CUSTOMER_DCC_FEATURE				
+#ifdef DOT11_VHT_AC
+			if (WMODE_CAP_AC(pAd->CommonCfg.PhyMode) && (pAd->CommonCfg.vht_bw > VHT_BW_2040))
+					pAd->CommonCfg.vht_bw = VHT_BW_2040;
+#endif /* DOT11_VHT_AC */
+#endif
+				}
 			}
+			else
+			{
+				do
+				{
+					UCHAR ExtCh;
+					UCHAR Dir = ext_cha;
+					if(Dir == EXTCHA_NONE){
+						Dir = EXTCHA_ABOVE;
+					}
+					ExtCh = GetExtCh(Channel, Dir);
+					if (IsValidChannel(pAd, ExtCh)){
+						ext_cha = Dir;
+						break;
+					}
+					Dir = (Dir == EXTCHA_ABOVE) ? EXTCHA_BELOW : EXTCHA_ABOVE;
+					ExtCh = GetExtCh(Channel, Dir);
+					if (IsValidChannel(pAd, ExtCh))
+					{
+						ext_cha = Dir;
+						break;
+					}
+					op_ht_bw = HT_BW_20;
+				} while(FALSE);
+
+				if (Channel == 14)
+				{
+					op_ht_bw = HT_BW_20;
+				}
+			}
+		}else
+		if (op_ht_bw == BW_20)
+		{
+			ext_cha = EXTCHA_NONE;
 		}
-	}else
-	if (WMODE_CAP_N(PhyMode) &&
-		(pAd->CommonCfg.RegTransmitSetting.field.BW  == BW_20))
-	{
-		HcUpdateExtCha(pAd,Channel,EXTCHA_NONE);
+		wlan_operate_set_ht_bw(wdev,op_ht_bw);
+		wlan_operate_set_ext_cha(wdev,ext_cha);
 	}
 }
 
 
-UCHAR N_SetCenCh(RTMP_ADAPTER *pAd, UCHAR prim_ch)
+UCHAR N_SetCenCh(RTMP_ADAPTER *pAd, UCHAR prim_ch, UCHAR ht_bw)
 {
-	if (pAd->CommonCfg.RegTransmitSetting.field.BW == BW_40)
+	UCHAR op_ext_cha = EXTCHA_NONE;
+	
+	op_ext_cha = HcGetExtCha(pAd, prim_ch);
+	
+	if (ht_bw== BW_40)
 	{
-		if (HcGetExtCha(pAd,prim_ch) == EXTCHA_ABOVE)
+		if (op_ext_cha == EXTCHA_ABOVE)
 			pAd->CommonCfg.CentralChannel = prim_ch + 2;
 		else
 		{
@@ -2167,7 +2374,7 @@ UCHAR N_SetCenCh(RTMP_ADAPTER *pAd, UCHAR prim_ch)
 	}
 	else
 		pAd->CommonCfg.CentralChannel = prim_ch;
-
+	
 	return pAd->CommonCfg.CentralChannel;
 }
 #endif /* DOT11_N_SUPPORT */
@@ -2175,8 +2382,10 @@ UCHAR N_SetCenCh(RTMP_ADAPTER *pAd, UCHAR prim_ch)
 
 UINT8 GetCuntryMaxTxPwr(
 	IN PRTMP_ADAPTER pAd,
+	struct wifi_dev *wdev,
 	IN UCHAR PhyMode,
-	IN UINT8 channel)
+	IN UINT8 channel,
+	IN UCHAR ht_bw)
 {
 	int i;
 	for (i = 0; i < pAd->ChannelListNum; i++)
@@ -2191,9 +2400,22 @@ UINT8 GetCuntryMaxTxPwr(
 	if (pAd->CommonCfg.bSKUMode == TRUE)
 	{
 		UINT deltaTxStreamPwr = 0;
+		UCHAR TxStream;
+
+		if (pAd->CommonCfg.dbdc_mode)
+		{
+			UCHAR band_idx = HcGetBandByWdev(wdev);
+
+			if (band_idx == DBDC_BAND0)
+				TxStream = pAd->dbdc_2G_Tx_stream;
+			else
+				TxStream = pAd->dbdc_5G_Tx_stream;
+		} else {
+			TxStream = pAd->Antenna.field.TxPath;
+		}
 
 #ifdef DOT11_N_SUPPORT
-		if (WMODE_CAP_N(PhyMode) && (pAd->CommonCfg.TxStream == 2))
+		if (WMODE_CAP_N(PhyMode) && (TxStream == 2))
 			deltaTxStreamPwr = 3; /* If 2Tx case, antenna gain will increase 3dBm*/
 #endif /* DOT11_N_SUPPORT */
 
@@ -2202,7 +2424,7 @@ UINT8 GetCuntryMaxTxPwr(
 			/* FCC should maintain 20/40 Bandwidth, and without antenna gain */
 #ifdef DOT11_N_SUPPORT
 			if (WMODE_CAP_N(PhyMode) &&
-				(pAd->CommonCfg.RegTransmitSetting.field.BW == BW_40) &&
+				(ht_bw == BW_40) &&
 				(channel == 1 || channel == 11))
 				return (pAd->ChannelList[i].MaxTxPwr - pAd->CommonCfg.BandedgeDelta - deltaTxStreamPwr);
 			else

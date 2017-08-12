@@ -12,6 +12,7 @@ struct _RTMP_ADAPTER;
 #define MEDIATEK_256QAM_CAP (1 << 3)
 
 #define BROADCOM_256QAM_CAP (1 << 0)
+#define BROADCOM_2G_4SS_CAP (1 << 4)
 
 
 typedef struct GNU_PACKED _ie_hdr {

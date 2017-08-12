@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,7 +14,7 @@
 	Module Name:
 	band_steering.h
 */
-
+#endif /* MTK_LICENSE */
 #ifndef _BAND_STEERING_H_
 #define __BAND_STEERING_H__
 
@@ -28,6 +29,7 @@ INT Set_BndStrg_RssiLow(PRTMP_ADAPTER pAd, RTMP_STRING *arg);
 INT Set_BndStrg_Age(PRTMP_ADAPTER pAd, RTMP_STRING *arg);
 INT Set_BndStrg_HoldTime(PRTMP_ADAPTER pAd, RTMP_STRING *arg);
 INT Set_BndStrg_CheckTime5G(PRTMP_ADAPTER pAd, RTMP_STRING *arg);
+INT Set_BndStrg_CheckTime2G(PRTMP_ADAPTER pAd, RTMP_STRING *arg);
 INT Set_BndStrg_FrmChkFlag(PRTMP_ADAPTER pAd, RTMP_STRING *arg);
 INT Set_BndStrg_CndChkFlag(PRTMP_ADAPTER pAd, RTMP_STRING *arg);
 #ifdef BND_STRG_DBG
@@ -41,15 +43,25 @@ INT BndStrg_TableRelease(PBND_STRG_CLI_TABLE table);
 
 BOOLEAN BndStrg_CheckConnectionReq(
 		PRTMP_ADAPTER	pAd,
+		struct wifi_dev *wdev,
 		PUCHAR pSrcAddr,
 		UINT8 FrameType,
 		PCHAR Rssi,
-		BOOLEAN bAllowStaConnectInHt);
+		BOOLEAN bAllowStaConnectInHt,
+		BOOLEAN bVHTCap,
+		UINT8 nss);
 
 INT BndStrg_Enable(PBND_STRG_CLI_TABLE table, BOOLEAN enable);
 INT BndStrg_SetInfFlags(PRTMP_ADAPTER pAd, PBND_STRG_CLI_TABLE table, BOOLEAN bInfReady);
 BOOLEAN BndStrg_IsClientStay(PRTMP_ADAPTER pAd, PMAC_TABLE_ENTRY pEntry);
 INT BndStrg_MsgHandle(PRTMP_ADAPTER pAd, RTMP_IOCTL_INPUT_STRUCT *wrq);
+INT Set_BndStrg_CndPriority(PRTMP_ADAPTER pAd, RTMP_STRING *arg); 
+INT Set_BndStrg_BssIdx(PRTMP_ADAPTER pAd, RTMP_STRING *arg);
+void BndStrg_UpdateEntry(PRTMP_ADAPTER pAd,MAC_TABLE_ENTRY *pEntry, BOOLEAN bHTCap,  BOOLEAN bVHTCap, UINT8 nss, BOOLEAN bConnStatus);
+UINT8 GetNssFromHTCapRxMCSBitmask(UINT32 RxMCSBitmask);
+
+#define IS_VALID_MAC(addr) \
+	(addr[0])|(addr[1])|(addr[2])|(addr[3])|(addr[4])|(addr[5])
 
 
 
@@ -58,19 +70,23 @@ INT BndStrg_MsgHandle(PRTMP_ADAPTER pAd, RTMP_IOCTL_INPUT_STRUCT *wrq);
 #define IS_BND_STRG_DUAL_BAND_CLIENT(_Control_Flags) \
 	((_Control_Flags & fBND_STRG_CLIENT_SUPPORT_2G) && (_Control_Flags & fBND_STRG_CLIENT_SUPPORT_5G))
 
-#define BND_STRG_CHECK_CONNECTION_REQ(_pAd, _wdev, _SrcAddr, _FrameType, _RssiInfo, _bAllowStaConnectInHt, _pRet) \
-{	\
-	CHAR Rssi[3] = {0};	\
-	Rssi[0] = _RssiInfo.raw_rssi[0] ? ConvertToRssi(_pAd, &_RssiInfo, RSSI_IDX_0) : 0;	\
-	Rssi[1] = _RssiInfo.raw_rssi[1] ? ConvertToRssi(_pAd, &_RssiInfo, RSSI_IDX_1) : 0;	\
-	Rssi[2] = _RssiInfo.raw_rssi[2] ? ConvertToRssi(_pAd, &_RssiInfo, RSSI_IDX_2) : 0;	\
-\
-	*_pRet = BndStrg_CheckConnectionReq( _pAd, 	\
-								_SrcAddr,		\
-								_FrameType,		\
-								Rssi,			\
-								_bAllowStaConnectInHt);	\
-}
+#define BND_STRG_CHECK_CONNECTION_REQ(_pAd, _wdev, _SrcAddr, _FrameType, _RssiInfo, _bAllowStaConnectInHt, _bVHTCap, _nss, _pRet) \
+   {	\
+	   CHAR Rssi[4] = {0};	\
+	   Rssi[0] = _RssiInfo.raw_rssi[0] ? ConvertToRssi(_pAd, &_RssiInfo, RSSI_IDX_0) : 0;	\
+	   Rssi[1] = _RssiInfo.raw_rssi[1] ? ConvertToRssi(_pAd, &_RssiInfo, RSSI_IDX_1) : 0;	\
+	   Rssi[2] = _RssiInfo.raw_rssi[2] ? ConvertToRssi(_pAd, &_RssiInfo, RSSI_IDX_2) : 0;	\
+   	   Rssi[3] = _RssiInfo.raw_rssi[3] ? ConvertToRssi(_pAd, &_RssiInfo, RSSI_IDX_3) : 0;	\
+	   \
+	   *_pRet = BndStrg_CheckConnectionReq( _pAd, 	\
+											_wdev,	\
+											_SrcAddr,		\
+											_FrameType,		\
+											Rssi,			\
+											_bAllowStaConnectInHt, \
+											_bVHTCap,	\
+											_nss);	\
+   }
 
 #ifdef BND_STRG_DBG
 #define RED(_text)  "\033[1;31m"_text"\033[0m"

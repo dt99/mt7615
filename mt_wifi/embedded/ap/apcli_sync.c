@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	--------	----------		----------------------------------------------
 	Fonchi		2006-06-23      modified for rt61-APClinent
 */
-
+#endif /* MTK_LICENSE */
 #ifdef APCLI_SUPPORT
 
 #include "rt_config.h"
@@ -225,6 +226,19 @@ static VOID ApCliPeerProbeRspAtJoinAction(
 	ULONG *pCurrState;
 	BCN_IE_LIST *ie_list = NULL;
 
+#ifdef CUSTOMER_DCC_FEATURE
+	UCHAR Snr[4] = {0};
+    CHAR  rssi[4] = {0};
+    Snr[0] = ConvertToSnr(pAd, Elem->rssi_info.raw_Snr[0]);
+    Snr[1] = ConvertToSnr(pAd, Elem->rssi_info.raw_Snr[1]);
+    Snr[2] = ConvertToSnr(pAd, Elem->rssi_info.raw_Snr[2]);
+    Snr[3] = ConvertToSnr(pAd, Elem->rssi_info.raw_Snr[3]);
+
+    rssi[0] = ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_0);
+    rssi[1] = ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_1);
+    rssi[2] = ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_2);
+    rssi[3] = ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_3);
+#endif
 	if (ifIndex >= MAX_APCLI_NUM)
 		return;
 
@@ -254,7 +268,8 @@ static VOID ApCliPeerProbeRspAtJoinAction(
 								ie_list,
 								&LenVIE,
 								pVIE,
-								TRUE))
+								TRUE,
+								FALSE))
 	{
 		/*
 			BEACON from desired BSS/IBSS found. We should be able to decide most
@@ -283,7 +298,11 @@ static VOID ApCliPeerProbeRspAtJoinAction(
 		if (Bssidx == BSS_NOT_FOUND)
 		{
 			/* discover new AP of this network, create BSS entry */
-			Bssidx = BssTableSetEntry(pAd, &pAd->ScanTab, ie_list, -127, LenVIE, pVIE);
+			Bssidx = BssTableSetEntry(pAd, &pAd->ScanTab, ie_list, -127, LenVIE, pVIE
+#ifdef CUSTOMER_DCC_FEATURE
+                    ,Snr, rssi
+#endif        
+                    );
 
 			if (Bssidx == BSS_NOT_FOUND) /* return if BSS table full */
 			{
@@ -447,8 +466,15 @@ static VOID ApCliPeerProbeRspAtJoinAction(
 						}
 						else if (IS_SECURITY(pSecConfig) && (Privacy == 1))
 						{       /* WEP mode */
-							SET_AKM_OPEN(pApCliEntry->MlmeAux.AKMMap);
-							SET_AKM_SHARED(pApCliEntry->MlmeAux.AKMMap);
+							if (IS_AKM_AUTOSWITCH(pApCliEntry->wdev.SecConfig.AKMMap)) {
+                                SET_AKM_AUTOSWITCH(pApCliEntry->MlmeAux.AKMMap);
+							} else if (IS_AKM_OPEN(pApCliEntry->wdev.SecConfig.AKMMap)) {
+								SET_AKM_OPEN(pApCliEntry->MlmeAux.AKMMap);
+							} else if (IS_AKM_SHARED(pApCliEntry->wdev.SecConfig.AKMMap)) {
+								SET_AKM_SHARED(pApCliEntry->MlmeAux.AKMMap);
+							} else {
+								SET_AKM_OPEN(pApCliEntry->MlmeAux.AKMMap);
+							}
 							SET_CIPHER_WEP(pApCliEntry->MlmeAux.PairwiseCipher);
 							SET_CIPHER_WEP(pApCliEntry->MlmeAux.GroupCipher);
 						}
@@ -474,13 +500,24 @@ static VOID ApCliPeerProbeRspAtJoinAction(
 				CHAR Rssi0 = ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_0);
 				CHAR Rssi1 = ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_1);
 				CHAR Rssi2 = ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_2);
+#ifdef CUSTOMER_DCC_FEATURE                
+				CHAR Rssi3 = ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_3);
+				LONG RealRssi = (LONG)(RTMPMaxRssi(pAd, Rssi0, Rssi1, Rssi2, Rssi3));
+#else
 				LONG RealRssi = (LONG)(RTMPMaxRssi(pAd, Rssi0, Rssi1, Rssi2));
 
+#endif
 				MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("SYNC - previous Rssi = %ld current Rssi=%ld\n", pApCliEntry->MlmeAux.Rssi, (LONG)RealRssi));
 				if (pApCliEntry->MlmeAux.Rssi > (LONG)RealRssi)
 					goto LabelErr;
 				else
 					pApCliEntry->MlmeAux.Rssi = RealRssi;
+				
+				if (ie_list->Channel != pApCliEntry->MlmeAux.Channel)
+				{
+					MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("SYNC - current ie channel=%d, apcli channel=%d!\n", ie_list->Channel, pApCliEntry->MlmeAux.Channel));
+					goto LabelErr;
+				}
 			}
 			else
 			{
@@ -581,24 +618,31 @@ static VOID ApCliPeerProbeRspAtJoinAction(
 				ChangeToCellPowerLimit(pAd, ie_list->AironetCellPowerLimit);
 			}
 			else  /* Used the default TX Power Percentage. */
-				pAd->CommonCfg.TxPowerPercentage = pAd->CommonCfg.TxPowerDefault;
+		    {         
+				pAd->CommonCfg.TxPowerPercentage[BAND0] = pAd->CommonCfg.TxPowerDefault[BAND0];
+#ifdef DBDC_MODE
+                pAd->CommonCfg.TxPowerPercentage[BAND1] = pAd->CommonCfg.TxPowerDefault[BAND1];
+#endif /* DBDC_MODE */
+            }
 
 #ifdef WSC_AP_SUPPORT
 #ifdef DOT11_N_SUPPORT
 			if ((pApCliEntry->WscControl.WscConfMode != WSC_DISABLE) &&
 		        (pApCliEntry->WscControl.bWscTrigger == TRUE))
 			{
-				ADD_HTINFO RootApHtInfo, ApHtInfo;
-				ApHtInfo = pAd->CommonCfg.AddHTInfo.AddHtInfo;
+				ADD_HTINFO RootApHtInfo;
+				struct wifi_dev *wdev = &pApCliEntry->wdev;
+				UCHAR ext_cha = wlan_config_get_ext_cha(wdev);
+				UCHAR cfg_ht_bw = wlan_config_get_ht_bw(wdev);
 				RootApHtInfo = ie_list->AddHtInfo.AddHtInfo;
-				if ((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40) &&
+				if ((cfg_ht_bw == HT_BW_40) &&
 					(RootApHtInfo.RecomWidth) &&
-					(RootApHtInfo.ExtChanOffset != ApHtInfo.ExtChanOffset))
+					(RootApHtInfo.ExtChanOffset != ext_cha))
 				{
 					if (RootApHtInfo.ExtChanOffset == EXTCHA_ABOVE)
-						Set_HtExtcha_Proc(pAd, "1");
+						set_extcha_for_wdev(pAd,wdev,1);
 					else
-						Set_HtExtcha_Proc(pAd, "0");
+						set_extcha_for_wdev(pAd,wdev,0);
 
 					goto LabelErr;
 				}
@@ -620,6 +664,33 @@ static VOID ApCliPeerProbeRspAtJoinAction(
 				ApCliCtrlMsg.BssIdx = ifIndex;
 				ApCliCtrlMsg.CliIdx = 0xFF;
 #endif /* MAC_REPEATER_SUPPORT */
+
+#ifdef APCLI_AUTO_CONNECT_SUPPORT
+				/* follow root ap setting while ApCliAutoConnectRunning is active */
+				if ((pAd->ApCfg.ApCliAutoConnectRunning[ifIndex] == TRUE) &&
+					(pAd->ApCfg.ApCliAutoBWAdjustCnt[ifIndex] < 3 )) {
+					ULONG Bssidx = 0;
+					Bssidx = BssTableSearch(&pAd->ScanTab, pApCliEntry->MlmeAux.Bssid, pApCliEntry->wdev.channel);
+					if (Bssidx != BSS_NOT_FOUND) {
+#ifdef APCLI_AUTO_BW_TMP /* should be removed after apcli auto-bw is applied */
+						MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("%s[%d]Bssidx:%lu\n", __func__,__LINE__,Bssidx));
+						if (pAd->ScanTab.BssEntry[Bssidx].SsidLen) {
+							MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("Root AP SSID: %s\n", pAd->ScanTab.BssEntry[Bssidx].Ssid));
+						}
+						if (ApCliAutoConnectBWAdjust(pAd, &pApCliEntry->wdev, &pAd->ScanTab.BssEntry[Bssidx]))
+						{
+							pAd->ApCfg.ApCliAutoBWAdjustCnt[ifIndex]++;
+							MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("Switch to channel :%d\n", pAd->ScanTab.BssEntry[Bssidx].Channel));
+							rtmp_set_channel(pAd, &pApCliEntry->wdev, pAd->ScanTab.BssEntry[Bssidx].Channel);
+							goto LabelErr;
+						}
+#endif /* APCLI_AUTO_BW_TMP */
+					} else {
+						MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_ERROR, ("%s[%d]Can not find BssEntry\n", __func__,__LINE__));
+						goto LabelErr;
+					}
+				}
+#endif
 
 				MlmeEnqueue(pAd, APCLI_CTRL_STATE_MACHINE, APCLI_CTRL_PROBE_RSP,
 					sizeof(APCLI_CTRL_MSG_STRUCT), &ApCliCtrlMsg, ifIndex);
@@ -674,6 +745,35 @@ static VOID ApCliProbeTimeoutAtJoinAction(
 		ApCliCtrlMsg.BssIdx = ifIndex;
 		ApCliCtrlMsg.CliIdx = 0xFF;
 #endif /* MAC_REPEATER_SUPPORT */
+
+#ifdef APCLI_AUTO_CONNECT_SUPPORT
+		/* follow root ap setting while ApCliAutoConnectRunning is active */
+		if ((pAd->ApCfg.ApCliAutoConnectRunning[ifIndex] == TRUE) &&
+				(pAd->ApCfg.ApCliAutoBWAdjustCnt[ifIndex] < 3 )) {
+			ULONG Bssidx = 0;
+			Bssidx = BssTableSearch(&pAd->ScanTab, pApCliEntry->MlmeAux.Bssid, pApCliEntry->wdev.channel);
+			if (Bssidx != BSS_NOT_FOUND) {
+#ifdef APCLI_AUTO_BW_TMP /* should be removed after apcli auto-bw is applied */
+				MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("%s[%d]Bssidx:%lu\n", __func__,__LINE__,Bssidx));
+				if (pAd->ScanTab.BssEntry[Bssidx].SsidLen) {
+					MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("Root AP SSID: %s\n", pAd->ScanTab.BssEntry[Bssidx].Ssid));
+				}
+				if (ApCliAutoConnectBWAdjust(pAd, &pApCliEntry->wdev, &pAd->ScanTab.BssEntry[Bssidx]))
+				{
+					pAd->ApCfg.ApCliAutoBWAdjustCnt[ifIndex]++;
+					MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("Switch to channel :%d\n", pAd->ScanTab.BssEntry[Bssidx].Channel));
+					rtmp_set_channel(pAd, &pApCliEntry->wdev, pAd->ScanTab.BssEntry[Bssidx].Channel);
+					MlmeEnqueue(pAd, APCLI_CTRL_STATE_MACHINE, APCLI_CTRL_JOIN_REQ_TIMEOUT, 0, NULL, ifIndex);//if bw adjust,timeout this time
+					return;
+				}
+#endif /* APCLI_AUTO_BW_TMP */
+			} else {
+				MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_ERROR, ("%s[%d]Can not find BssEntry\n", __func__,__LINE__));
+				MlmeEnqueue(pAd, APCLI_CTRL_STATE_MACHINE, APCLI_CTRL_JOIN_REQ_TIMEOUT, 0, NULL, ifIndex);
+				return;
+			}
+		}
+#endif
 
 		MlmeEnqueue(pAd, APCLI_CTRL_STATE_MACHINE, APCLI_CTRL_PROBE_RSP,
 			sizeof(APCLI_CTRL_MSG_STRUCT), &ApCliCtrlMsg, ifIndex);
@@ -799,17 +899,39 @@ static VOID ApCliEnqueueProbeRequest(
         vht_ie_info.frame_subtype = SUBTYPE_PROBE_REQ;
         vht_ie_info.channel = pApCliEntry->wdev.channel;
         vht_ie_info.phy_mode = pApCliEntry->wdev.PhyMode;
+	vht_ie_info.wdev = &pApCliEntry->wdev;
 
 #if defined(TXBF_SUPPORT) && defined(VHT_TXBF_SUPPORT)
         ucETxBfCap = pAd->CommonCfg.ETxBfEnCond;
         if (HcIsBfCapSupport(&pApCliEntry->wdev) == FALSE)
         {
-            pAd->CommonCfg.ETxBfEnCond = 0;
+            pAd->CommonCfg.ETxBfEnCond = SUBF_OFF;
         }
+#ifdef MAC_REPEATER_SUPPORT        
+        else if (pAd->ApCfg.bMACRepeaterEn)
+        {
+	        if (ifIndex >= REPT_MLME_START_IDX)
+	        {
+	            REPEATER_CLIENT_ENTRY *pReptEntry = NULL;
+	            UCHAR CliIdx;
+		        CliIdx = ifIndex - REPT_MLME_START_IDX;
+		        pReptEntry = &pAd->ApCfg.pRepeaterCliPool[CliIdx];
+
+		        if (pReptEntry)
+		        {
+		            pAd->CommonCfg.ETxBfEnCond = SUBF_BFER;
+                    //MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s : SUBF_BFER =============== \n", __FUNCTION__));
+		        }
+	        }       
+        }
+#endif /* MAC_REPEATER_SUPPORT */         
 #endif /* TXBF_SUPPORT && VHT_TXBF_SUPPORT */ 
 
         FrameLen += build_vht_ies(pAd, &vht_ie_info);
 
+#if defined(TXBF_SUPPORT) && defined(VHT_TXBF_SUPPORT)
+		pAd->CommonCfg.ETxBfEnCond = ucETxBfCap;
+#endif /* TXBF_SUPPORT && VHT_TXBF_SUPPORT */ 
 #endif /* DOT11_VHT_AC */
 
 #ifdef WSC_AP_SUPPORT
@@ -835,7 +957,7 @@ static VOID ApCliEnqueueProbeRequest(
 			if (WscBuf != NULL)
 			{
 				NdisZeroMemory(WscBuf, 512);
-				WscBuildProbeReqIE(pAd, STA_MODE, WscBuf, &WscIeLen);
+				WscBuildProbeReqIE(pAd, STA_MODE, ifIndex, WscBuf, &WscIeLen);
 				MakeOutgoingFrame(pOutBuffer + FrameLen,              &WscTmpLen,
 								WscIeLen,                             WscBuf,
 								END_OF_ARGS);

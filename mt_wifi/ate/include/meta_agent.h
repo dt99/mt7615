@@ -1,4 +1,4 @@
-
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -14,7 +14,7 @@
 	Module Name:
 	qa_agent.h
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __META_AGENT_H__
 #define __META_AGENT_H__
 

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -27,10 +28,14 @@
     Paul Lin    08-01-2002    created
     John Chang  08-05-2003    add definition for 11g & other drafts
 */
+#endif /* MTK_LICENSE */
 #ifndef __RTMP_DEF_H__
 #define __RTMP_DEF_H__
 
 #include "oid.h"
+#ifndef MTK_LICENSE
+#define MTK_LICENSE
+#endif /* MTK_LICENSE */
 
 #undef AP_WSC_INCLUDED
 #undef STA_WSC_INCLUDED
@@ -168,6 +173,7 @@
 #define MAX_PACKETS_IN_MCAST_PS_QUEUE		32
 #define MAX_PACKETS_IN_PS_QUEUE				128	/*32 */
 #define WMM_NUM_OF_AC                       4	/* AC0, AC1, AC2, and AC3 */
+#define WMM_NUM								4
 
 #ifdef CONFIG_AP_SUPPORT
 #ifdef IGMP_SNOOP_SUPPORT
@@ -636,7 +642,7 @@ enum {
 
 // We have retired BSSID_WCID. If you need this constant, please contact Patrick.
 //#define BSSID_WCID		1	/* in infra mode, always put bssid with this WCID */
-
+#define MCAST_WCID	0x0
 //#define APCLI_MCAST_WCID    (MAX_LEN_OF_MAC_TABLE + HW_BEACON_MAX_NUM + MAX_APCLI_NUM)
 #define BSS0Mcast_WCID	0x0
 #define BSS1Mcast_WCID	0xf8
@@ -1312,19 +1318,57 @@ enum {
 #define APMT2_PEER_PROBE_REQ		0
 #define APMT2_PEER_BEACON			1
 #define APMT2_PEER_PROBE_RSP		2
+
+#ifdef WDS_SUPPORT
+#define APMT2_WDS_RECV_UC_DATA		3
+#ifdef AP_SCAN_SUPPORT
+#define APMT2_MLME_SCAN_REQ		4
+#define APMT2_SCAN_TIMEOUT		5
+#define APMT2_MLME_SCAN_CNCL		6
+#ifdef CON_WPS
+#define APMT2_MLME_SCAN_COMPLETE        7
+#ifdef CUSTOMER_DCC_FEATURE
+#define APMT2_CHANNEL_SWITCH 8
+#define AP_MAX_SYNC_MSG		 9
+#else
+#define AP_MAX_SYNC_MSG                 8
+#endif
+#else
+#ifdef CUSTOMER_DCC_FEATURE
+#define APMT2_CHANNEL_SWITCH 7
+#define AP_MAX_SYNC_MSG		 8
+#else
+#define AP_MAX_SYNC_MSG                 7
+#endif
+#endif /* CON_WPS */
+#else
+#define AP_MAX_SYNC_MSG			4
+#endif
+#else /* WDS_SUPPORT */
 #ifdef AP_SCAN_SUPPORT
 #define APMT2_MLME_SCAN_REQ		3
 #define APMT2_SCAN_TIMEOUT		4
 #define APMT2_MLME_SCAN_CNCL		5
 #ifdef CON_WPS
 #define APMT2_MLME_SCAN_COMPLETE        6
+#ifdef CUSTOMER_DCC_FEATURE
+#define APMT2_CHANNEL_SWITCH 7
+#define AP_MAX_SYNC_MSG		 8
+#else
 #define AP_MAX_SYNC_MSG                 7
+#endif
+#else
+#ifdef CUSTOMER_DCC_FEATURE
+#define APMT2_CHANNEL_SWITCH 6
+#define AP_MAX_SYNC_MSG		 7
 #else
 #define AP_MAX_SYNC_MSG                 6
+#endif
 #endif /* CON_WPS */
 #else
 #define AP_MAX_SYNC_MSG			3
 #endif
+#endif	/* WDS_SUPPORT */
 
 #define AP_SYNC_FUNC_SIZE               (AP_MAX_SYNC_STATE * AP_MAX_SYNC_MSG)
 
@@ -1434,6 +1478,8 @@ enum {
 #define APCLI_DISCONNECT_SUB_REASON_AP_PEER_DISASSOC_REQ    6
 #define APCLI_DISCONNECT_SUB_REASON_AP_PEER_DEAUTH_REQ      7
 #define APCLI_DISCONNECT_SUB_REASON_APCFG_DEL_MAC_ENTRY     8
+#define APCLI_DISCONNECT_SUB_REASON_CHANGE_APCLI_IF      	9
+#define APCLI_DISCONNECT_SUB_REASON_APCLI_TRIGGER_TOO_LONG	10
 
 
 #endif /* APCLI_SUPPORT */
@@ -1582,7 +1628,7 @@ enum {
 #define BW_10		BAND_WIDTH_10	/* 802.11j has 10MHz. This definition is for internal usage. doesn't fill in the IE or other field. */
 #define BW_5			BAND_WIDTH_5
 #define BW_8080		BAND_WIDTH_8080
-
+#define BW_25		BAND_WIDTH_25
 
 #define RF_BW_20	0x01
 #define RF_BW_40	0x02
@@ -1767,7 +1813,7 @@ enum {
 #define DEFAULT_RF_TX_POWER         5
 #define DEFAULT_BBP_TX_FINE_POWER_CTRL 0
 
-#define MAX_INI_BUFFER_SIZE		 8192
+#define MAX_INI_BUFFER_SIZE		 16384
 #define MAX_PARAM_BUFFER_SIZE		(2048)	/* enough for ACL (18*64) */
 											/*18 : the length of Mac address acceptable format "01:02:03:04:05:06;") */
 											/*64 : MAX_NUM_OF_ACL_LIST */
@@ -1800,19 +1846,13 @@ enum {
 #define RSSI_IDX_0					0
 #define RSSI_IDX_1					1
 #define RSSI_IDX_2					2
+#define RSSI_IDX_3					3
 
 /* definition of radar detection */
 #define RD_NORMAL_MODE				0	/* Not found radar signal */
 #define RD_SWITCHING_MODE			1	/* Found radar signal, and doing channel switch */
 #define RD_SILENCE_MODE				2	/* After channel switch, need to be silence a while to ensure radar not found */
 #define RD_MAX_STATE  RD_SILENCE_MODE
-
-/*Msg*/
-#define RD_MACHINE_MSG_BASE			0
-#define RD_CSA_CNT_DOWN_TIMEOUT_MSG 0
-#define RD_MAX_MSG					1
-
-#define RD_FUNC_SIZE				RD_MAX_MSG*RD_MAX_STATE
 
 
 /*Driver defined cid for mapping status and command. */
@@ -2122,6 +2162,7 @@ enum _ENTRY_STATE
 #define MCAST_CCK		1
 #define MCAST_OFDM		2
 #define MCAST_HTMIX		3
+#define MCAST_VHT		4
 #endif /* MCAST_RATE_SPECIFIC */
 
 /* For AsicRadioOff/AsicRadioOn function */

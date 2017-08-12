@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,12 +26,16 @@
 	Who         When          What
 	--------    ----------    ----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #include	"rt_config.h"
 #ifdef DOT11R_FT_SUPPORT
 #include	"ft.h"
 #endif /* DOT11R_FT_SUPPORT */
 
 
+#ifdef MULTI_PROFILE
+VOID multi_profile_exit(struct _RTMP_ADAPTER *ad);
+#endif /*MULTI_PROFILE*/
 
 #ifdef LINUX
 #ifdef OS_ABL_FUNC_SUPPORT
@@ -100,6 +105,7 @@ INT rtmp_cfg_init(RTMP_ADAPTER *pAd, RTMP_STRING *pHostName)
 #endif
 
 	UserCfgInit(pAd);
+
 
 
 	CfgInitHook(pAd);
@@ -181,6 +187,9 @@ static INT rtmp_sys_init(RTMP_ADAPTER *pAd,RTMP_STRING *pHostName)
 {
 	NDIS_STATUS status;
 
+	WifiSysInfoReset(&pAd->WifiSysInfo);
+	WifiSysInfoDump(pAd);
+
 	status = RtmpMgmtTaskInit(pAd);
 	if (status != NDIS_STATUS_SUCCESS)
 		goto err0;
@@ -226,6 +235,17 @@ static INT rtmp_sys_init(RTMP_ADAPTER *pAd,RTMP_STRING *pHostName)
 		InitTxSCommonCallBack(pAd);
 	}
 #endif
+
+	/* hwnat optimize */
+#if (!defined(CONFIG_RA_NAT_NONE)) || ( defined(BB_SOC) && defined(BB_RA_HWNAT_WIFI) )
+			pAd->LanNatSpeedUpEn = 1;
+#else
+			pAd->LanNatSpeedUpEn = 0;
+#endif
+	pAd->CurWdevIdx = 0;
+	pAd->isInitBrLan = 0;
+	pAd->BrLanIpAddr = 0xffffffff;
+	pAd->BrLanMask = 0xffffffff;
 	return TRUE;
 
 
@@ -245,9 +265,10 @@ int mt_wifi_init(VOID *pAdSrc, RTMP_STRING *pDefaultMac, RTMP_STRING *pHostName)
 #ifdef SMART_CARRIER_SENSE_SUPPORT
         UINT32  CrValue;
 #endif /* SMART_CARRIER_SENSE_SUPPORT */
-	UCHAR	i=0;
 	RTMP_ADAPTER *pAd = (RTMP_ADAPTER *)pAdSrc;
 	NDIS_STATUS Status;
+//    UCHAR EDCCACtrl;
+    UCHAR BandIdx = 0;
 
 	if (!pAd)
 		return FALSE;
@@ -334,11 +355,21 @@ int mt_wifi_init(VOID *pAdSrc, RTMP_STRING *pDefaultMac, RTMP_STRING *pHostName)
 	rtmp_hif_data_init(pAd);
 
 #ifdef SMART_CARRIER_SENSE_SUPPORT
-	/* Enable PD_BLOCKING */
+	/* Enable Band0 PD_BLOCKING */
 	HW_IO_READ32(pAd, PHY_MIN_PRI_PWR, &CrValue);
 	CrValue |= (0x1 << PdBlkEnabeOffset); /* Bit[19] */
 	HW_IO_WRITE32(pAd, PHY_MIN_PRI_PWR, CrValue);
+	/* Enable Band1 PD_BLOCKING & initail PD_BLOCKING_TH */
+	HW_IO_READ32(pAd, BAND1_PHY_MIN_PRI_PWR, &CrValue);
+	CrValue |= (0x1 << PdBlkEnabeOffsetB1); /* Bit[25] */
+	CrValue &= ~(PdBlkOfmdThMask << PdBlkOfmdThOffsetB1);  /* OFDM PD BLOCKING TH */
+	CrValue |= (PdBlkOfmdThDefault <<PdBlkOfmdThOffsetB1);
+	HW_IO_WRITE32(pAd, BAND1_PHY_MIN_PRI_PWR, CrValue);
 #endif /* SMART_CARRIER_SENSE_SUPPORT */
+
+#ifdef MAC_INIT_OFFLOAD
+	AsicSetMacTxRx(pAd,ASIC_MAC_TXRX,TRUE);
+#endif /*MAC_INIT_OFFLOAD*/
 
 #ifdef CONFIG_AP_SUPPORT
 	RT_CONFIG_IF_OPMODE_ON_AP(pAd->OpMode)
@@ -371,14 +402,6 @@ int mt_wifi_init(VOID *pAdSrc, RTMP_STRING *pDefaultMac, RTMP_STRING *pHostName)
 				pAd->CommonCfg.HtCapability.MCSSet[4]));
 #endif /* DOT11_N_SUPPORT */
 
-
-// TODO: Star
-/*temportal modify for first day link, need to modify*/
-#ifdef MAC_INIT_OFFLOAD
-	AsicSetMacTxRx(pAd,ASIC_MAC_TXRX,TRUE);
-#endif /*MAC_INIT_OFFLOAD*/
-
-
 #ifdef UAPSD_SUPPORT
         UAPSD_Init(pAd);
 #endif /* UAPSD_SUPPORT */
@@ -401,17 +424,18 @@ int mt_wifi_init(VOID *pAdSrc, RTMP_STRING *pDefaultMac, RTMP_STRING *pHostName)
 	pAd->bUSBIOTReady = TRUE;
 #endif
 
-#ifdef BACKGROUND_SCAN_SUPPORT
-	BackgroundScanInit(pAd);
-#endif /* BACKGROUND_SCAN_SUPPORT */
-
 #ifdef CONFIG_AP_SUPPORT
     AutoChSelInit(pAd);
 #endif /* CONFIG_AP_SUPPORT */
     
+#ifdef REDUCE_TCP_ACK_SUPPORT
+    ReduceAckInit(pAd);
+#endif
 	/* Trigger MIB counter update */
-	for (i=0; i<DBDC_BAND_NUM; i++)
-		pAd->OneSecMibBucket.Enabled[i] = TRUE;
+	for (BandIdx = 0; BandIdx < DBDC_BAND_NUM; BandIdx++)
+		pAd->OneSecMibBucket.Enabled[BandIdx] = TRUE;
+
+	pAd->MsMibBucket.Enabled = TRUE;
 
 	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("<==== mt_wifi_init, Status=%x\n", Status));
 
@@ -427,6 +451,40 @@ int mt_wifi_init(VOID *pAdSrc, RTMP_STRING *pDefaultMac, RTMP_STRING *pHostName)
                              pAd->CommonCfg.ETxBfEnCond,
                              pAd->CommonCfg.RegTransmitSetting.field.ITxBfEn);
 #endif /* TXBF_SUPPORT */
+
+    /* EDCCA support */
+    //EDCCACtrl = GetEDCCASupport(pAd);
+
+    for (BandIdx = 0; BandIdx < DBDC_BAND_NUM; BandIdx++)
+    {
+        //pAd->CommonCfg.ucEDCCACtrl[BandIdx] = EDCCACtrl;    
+        EDCCACtrlCmd(pAd, BandIdx, pAd->CommonCfg.ucEDCCACtrl[BandIdx]);
+    }
+
+
+
+#ifdef BACKGROUND_SCAN_SUPPORT
+	BackgroundScanInit(pAd);
+
+	/* Enable band0 IPI SW control */
+        HW_IO_READ32(pAd, PHY_RXTD_12, &CrValue);
+        CrValue |= (1 << B0IrpiSwCtrlResetOffset);
+        CrValue |= (1 << B0IrpiSwCtrlOnlyOffset);
+        HW_IO_WRITE32(pAd, PHY_RXTD_12, CrValue);
+        HW_IO_WRITE32(pAd, PHY_RXTD_12, CrValue);
+        /* Enable badn0 IPI control */
+        HW_IO_READ32(pAd, PHY_BAND0_PHYMUX_5, &CrValue);
+        CrValue |= (B0IpiEnableCtrlValue << B0IpiEnableCtrlOffset);
+        HW_IO_WRITE32(pAd, PHY_BAND0_PHYMUX_5, CrValue);
+#endif /* BACKGROUND_SCAN_SUPPORT */
+
+#ifdef NR_PD_DETECTION
+    if (pAd->CommonCfg.LinkTestSupport)
+    {
+        /* Enable 4T ACK Mechanism */
+        pAd->fgWifiInitDone = TRUE;
+    }
+#endif /* NR_PD_DETECTION */
 
 	return TRUE;
 err3:
@@ -493,20 +551,29 @@ VOID RTMPDrvOpen(VOID *pAdSrc)
 	pAd->WOW_Cfg.bWoWRunning = FALSE;
 #endif
 
-#ifdef VOW_SUPPORT
 #ifdef CONFIG_AP_SUPPORT
+#ifdef VOW_SUPPORT
     if (IS_MT7615(pAd) || IS_MT7622(pAd))
         vow_init(pAd);
-#endif /* CONFIG_AP_SUPPORT */
+#else
+    vow_atf_off_init(pAd);
 #endif /* VOW_SUPPORT */
+#endif /* CONFIG_AP_SUPPORT */
 
-#ifdef BACKGROUND_SCAN_SUPPORT
+#ifdef RED_SUPPORT
+	if(pAd->OpMode == OPMODE_AP)
+		red_is_enabled(pAd);
+#endif /* RED_SUPPORT */
+
+	cp_support_is_enabled(pAd);
+
+#if defined(MT_DFS_SUPPORT) && defined(BACKGROUND_SCAN_SUPPORT)
 	if (IS_MT7615(pAd)) {
 		MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("Trigger DFS Zero wait procedure Support=%d, DfsZeroWaitChannel=%d", pAd->BgndScanCtrl.DfsZeroWaitSupport, pAd->BgndScanCtrl.DfsZeroWaitChannel));
 		if (pAd->BgndScanCtrl.DfsZeroWaitSupport == 1 && pAd->BgndScanCtrl.DfsZeroWaitChannel !=0)
 			DfsZeroWaitStart(pAd, TRUE);
 	}
-#endif /* BACKGROUND_SCAN_SUPPORT */
+#endif /* defined(MT_DFS_SUPPORT) && defined(BACKGROUND_SCAN_SUPPORT) */
 
 }
 
@@ -544,10 +611,6 @@ VOID RTMPDrvClose(VOID *pAdSrc, VOID *net_dev)
 	pAd->CommonCfg.bCountryFlag = FALSE;
 
 
-
-#ifdef WDS_SUPPORT
-	WdsDown(pAd);
-#endif /* WDS_SUPPORT */
 
 	for (i = 0 ; i < NUM_OF_TX_RING; i++)
 	{
@@ -620,7 +683,9 @@ VOID RTMPDrvClose(VOID *pAdSrc, VOID *net_dev)
 		/*  Polling TX/RX path until packets empty */
 		MTPciPollTxRxEmpty(pAd);
 #endif
-		RTMP_SET_FLAG(pAd, fRTMP_ADAPTER_RADIO_OFF);
+		
+		HcSetAllSupportedBandsRadioOff(pAd);
+
 		if (RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_INTERRUPT_ACTIVE))
 		{
 			RTMP_ASIC_INTERRUPT_DISABLE(pAd);
@@ -752,20 +817,37 @@ VOID RTMPDrvClose(VOID *pAdSrc, VOID *net_dev)
 	/* Close Hw ctrl*/
 	HwCtrlExit(pAd);
 
+#ifdef REDUCE_TCP_ACK_SUPPORT
+	ReduceAckExit(pAd);
+#endif
 
-#ifdef CAL_TO_FLASH_SUPPORT		
-	if(pAd->E2pAccessMode == E2P_FLASH_MODE)
+#ifdef PRE_CAL_TRX_SET1_SUPPORT
+	if(pAd->E2pAccessMode == E2P_FLASH_MODE || pAd->E2pAccessMode == E2P_BIN_MODE)
 	{		
-		if(pAd->CalDCOCToFlashImage != NULL)
-			os_free_mem(pAd->CalDCOCToFlashImage);
-		if(pAd->CalDPDAPart1ToFlashImage != NULL)
-			os_free_mem(pAd->CalDPDAPart1ToFlashImage);
-		if(pAd->CalDPDAPart2GToFlashImage != NULL)
-			os_free_mem(pAd->CalDPDAPart2GToFlashImage);		
-	}	
-#endif /* CAL_TO_FLASH_SUPPORT */
-
-
+		if(pAd->CalDCOCImage != NULL)
+			os_free_mem(pAd->CalDCOCImage);
+		if(pAd->CalDPDAPart1Image != NULL)
+			os_free_mem(pAd->CalDPDAPart1Image);
+		if(pAd->CalDPDAPart2GImage != NULL)
+			os_free_mem(pAd->CalDPDAPart2GImage);
+	}
+#endif /* PRE_CAL_TRX_SET1_SUPPORT */
+#ifdef PRE_CAL_TRX_SET2_SUPPORT
+	if(pAd->PreCalStoreBuffer != NULL)
+	{
+		os_free_mem(pAd->PreCalStoreBuffer);
+		pAd->PreCalStoreBuffer = NULL;
+	}
+	if(pAd->PreCalReStoreBuffer != NULL)
+	{
+		os_free_mem(pAd->PreCalReStoreBuffer);    
+		pAd->PreCalReStoreBuffer = NULL;
+	}
+#endif/* PRE_CAL_TRX_SET2_SUPPORT */    
+/*multi profile release*/
+#ifdef MULTI_PROFILE
+	multi_profile_exit(pAd);
+#endif /*MULTI_PROFILE*/
 }
 
 
@@ -778,10 +860,16 @@ VOID RTMPInfClose(VOID *pAdSrc)
 	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
 	{
 		wdev = &pAd->ApCfg.MBSSID[MAIN_MBSSID].wdev;
+		wdev->bAllowBeaconing = FALSE;
 		WifiSysApLinkDown(pAd,wdev);
 		WifiSysClose(pAd,wdev);
 	}
 #endif /*CONFIG_AP_SUPPROT*/
+
+
+#ifdef RT_CFG80211_SUPPORT			
+	pAd->cfg80211_ctrl.beaconIsSetFromHostapd = FALSE;
+#endif
 
 }
 
@@ -801,6 +889,14 @@ PNET_DEV RtmpPhyNetDevMainCreate(VOID *pAdSrc)
 #endif /* HOSTAPD_SUPPORT */
 
 	dev_name = get_dev_name_prefix(pAd, INT_MAIN);
+#ifdef INTELP6_SUPPORT
+#ifdef MT_SECOND_CARD
+	if (pAd->dev_idx == 1)
+		pDevNew = RtmpOSNetDevCreate((INT32)MC_RowID, (UINT32 *)&IoctlIF,
+					INT_MAIN, MAX_MBSS_NUM, sizeof(struct mt_dev_priv), dev_name);
+	else
+#endif
+#endif
 	pDevNew = RtmpOSNetDevCreate((INT32)MC_RowID, (UINT32 *)&IoctlIF,
 					INT_MAIN, 0, sizeof(struct mt_dev_priv), dev_name);
 

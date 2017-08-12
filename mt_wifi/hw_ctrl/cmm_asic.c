@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When			What
 	--------	----------		----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #ifdef COMPOS_WIN
 #include "MtConfig.h"
@@ -53,7 +54,7 @@ VOID AsicNotSupportFunc(RTMP_ADAPTER *pAd, const RTMP_STRING *caller)
 	else
 		str = hif_2_str[HIF_MAX];
 
-	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s(): NotSupportedFunc for this arch(%s)!\n",
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s(): NotSupportedFunc for this arch(%s)!\n",
 				caller, str));
 }
 
@@ -151,9 +152,10 @@ INT AsicAutoFallbackInit(RTMP_ADAPTER *pAd)
 
 
 VOID AsicUpdateRtsThld(
-        RTMP_ADAPTER *pAd,
-        UINT32 PktNumThrd,
-        UINT32 PpduLengthThrd)
+        struct _RTMP_ADAPTER *pAd,
+	struct wifi_dev *wdev,
+        UCHAR pkt_num,
+        UINT32 length)
 {
 	if (pAd->chipCap.hif_type == HIF_MT)
 	{
@@ -163,10 +165,8 @@ VOID AsicUpdateRtsThld(
 			return;
 		}
 #endif /* CONFIG_ATE */
-
-        HwCtrlSetFlag(pAd, HWFLAG_ID_UPDATE_RTS_THLD);
-
-		return ;
+		if (pAd->archOps.archUpdateRtsThld)
+			return pAd->archOps.archUpdateRtsThld(pAd, wdev, pkt_num, length);
 	}
 
 	AsicNotSupportFunc(pAd, __FUNCTION__);
@@ -215,7 +215,6 @@ VOID AsicUpdateProtect(
 			return;
 		}
 #endif /* CONFIG_ATE */
-		HwCtrlSetFlag(pAd, HWFLAG_ID_UPDATE_RTS_THLD);
         HwCtrlSetFlag(pAd, HWFLAG_ID_UPDATE_PROTECT);
 
         return ;
@@ -243,19 +242,15 @@ VOID AsicSwitchChannel(RTMP_ADAPTER *pAd, UCHAR Channel, BOOLEAN bScan)
 	if(Channel >14)
 	{
 		PrimChannel = HcGetChannelByRf(pAd,RFIC_5GHZ);
-		bw = pAd->CommonCfg.BBPCurrentBW;
 	}
 	else
 	{
 		PrimChannel = HcGetChannelByRf(pAd,RFIC_24GHZ);
-		/*HT support max bw is 40*/
-		bw = (pAd->CommonCfg.BBPCurrentBW > BW_40)? BW_40: pAd->CommonCfg.BBPCurrentBW;
-		pAd->CommonCfg.BBPCurrentBW = bw;
 	}
 
+	if (IsHcRadioCurStatOffByChannel(pAd, Channel))
+	    return;
 
-	if (RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_RADIO_OFF) )
-		return;
 #ifdef MT_WOW_SUPPORT
 	if (pAd->WOW_Cfg.bWoWRunning){
 		MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s] WoW is running, skip!\n", __func__));
@@ -280,11 +275,20 @@ VOID AsicSwitchChannel(RTMP_ADAPTER *pAd, UCHAR Channel, BOOLEAN bScan)
 		}
 	}
 
+	if(bScan)
+		bw = BW_20;
+	else
+		bw = decide_phy_bw_by_channel(pAd,Channel);
 
 #ifdef CONFIG_AP_SUPPORT
+#ifdef CUSTOMER_DCC_FEATURE
+
+	if(!(ApScanRunning(pAd)) && pAd->ApEnableBeaconTable)
+		BssTableInit(&pAd->AvailableBSS);
+#endif
 #ifdef AP_QLOAD_SUPPORT
 	/* clear all statistics count for QBSS Load */
-	QBSS_LoadStatusClear(pAd);
+	QBSS_LoadStatusClear(pAd,Channel);
 #endif /* AP_QLOAD_SUPPORT */
 #endif /* CONFIG_AP_SUPPORT */
 
@@ -300,23 +304,49 @@ VOID AsicSwitchChannel(RTMP_ADAPTER *pAd, UCHAR Channel, BOOLEAN bScan)
 		os_zero_mem(&SwChCfg,sizeof(MT_SWITCH_CHANNEL_CFG));
 		SwChCfg.bScan = bScan;
 		SwChCfg.CentralChannel= Channel;
-		SwChCfg.BandIdx = HcGetBandByChannel(pAd,Channel);
-		SwChCfg.RxStream = pAd->CommonCfg.RxStream;
-		SwChCfg.TxStream = pAd->CommonCfg.TxStream;
+		SwChCfg.BandIdx = HcGetBandByChannel(pAd, Channel);
+
+		if (pAd->CommonCfg.dbdc_mode)
+		{
+			if (SwChCfg.BandIdx == DBDC_BAND0) {
+				SwChCfg.RxStream = pAd->dbdc_2G_rx_stream;
+				SwChCfg.TxStream = pAd->dbdc_2G_tx_stream;
+			} else {
+				SwChCfg.RxStream = pAd->dbdc_5G_rx_stream;
+				SwChCfg.TxStream = pAd->dbdc_5G_tx_stream;
+			}
+		} else {
+			SwChCfg.RxStream = pAd->Antenna.field.RxPath;
+			SwChCfg.TxStream = pAd->Antenna.field.TxPath;
+		}
+
 		SwChCfg.Bw = bw;
 		SwChCfg.ControlChannel = (SwChCfg.Bw == BW_20) ? Channel : PrimChannel;
 #ifdef DOT11_VHT_AC
 		SwChCfg.ControlChannel2 = (SwChCfg.Bw == BW_8080)?pAd->CommonCfg.vht_cent_ch2 : 0;
 #endif /* DOT11_VHT_AC */
 #ifdef MT_DFS_SUPPORT
-		SwChCfg.DfsParam.bDfsCheck = DfsSwitchCheck(pAd);
+		SwChCfg.DfsParam.bDfsCheck = DfsSwitchCheck(pAd, SwChCfg.ControlChannel);
 #endif
+		HcSuspendMSDUTxByChannel(pAd, SwChCfg.ControlChannel);
 
-        /*update radio info to band*/
-        if(!bScan)
+		/*update radio info to band*/
+        if(!bScan){
+			UCHAR ext_cha;
+			if(SwChCfg.ControlChannel == Channel)
+				ext_cha = EXTCHA_NONE;
+			else if(SwChCfg.ControlChannel > Channel)
+				ext_cha = EXTCHA_BELOW;
+			else
+				ext_cha = EXTCHA_ABOVE;
             HcUpdateRadio(pAd,SwChCfg.Bw,SwChCfg.CentralChannel,SwChCfg.ControlChannel2);
+			HcUpdateExtCha(pAd,Channel,ext_cha);
+			pAd->CommonCfg.BBPCurrentBW = bw;
+        }
 
 		MtAsicSwitchChannel(pAd,SwChCfg);
+
+		HcUpdateMSDUTxAllowByChannel(pAd, SwChCfg.ControlChannel);
 	}
 #endif
 
@@ -792,20 +822,20 @@ VOID AsicSetSyncModeAndEnable(
     return;
 }
 
-VOID AsicDisableBcnSntReq(struct _RTMP_ADAPTER *pAd)
+VOID AsicDisableBcnSntReq(struct _RTMP_ADAPTER *pAd, struct wifi_dev *wifiDev)
 {
 	if (pAd->archOps.archDisableBcnSntReq)
-		pAd->archOps.archDisableBcnSntReq(pAd);
+		pAd->archOps.archDisableBcnSntReq(pAd, wifiDev);
 	else {
 		AsicNotSupportFunc(pAd, __FUNCTION__);
 	}
 	return;
 }
 
-VOID AsicEnableBcnSntReq(struct _RTMP_ADAPTER *pAd)
+VOID AsicEnableBcnSntReq(struct _RTMP_ADAPTER *pAd, struct wifi_dev *wifiDev)
 {
 	if (pAd->archOps.archEnableBcnSntReq)
-		pAd->archOps.archEnableBcnSntReq(pAd);
+		pAd->archOps.archEnableBcnSntReq(pAd, wifiDev);
 	else {
 		AsicNotSupportFunc(pAd, __FUNCTION__);
 	}
@@ -865,7 +895,6 @@ VOID AsicSetEdcaParm(RTMP_ADAPTER *pAd, PEDCA_PARM pEdcaParm, struct wifi_dev *w
 	{
 		OPSTATUS_SET_FLAG(pAd, fOP_STATUS_WMM_INUSED);
 
-
 		if (!ADHOC_ON(pAd))
 		{
 			MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_TRACE,("EDCA [#%d]: AIFSN CWmin CWmax  TXOP(us)  ACM, WMM Set: %d, BandIdx: %d\n",
@@ -897,9 +926,15 @@ VOID AsicSetEdcaParm(RTMP_ADAPTER *pAd, PEDCA_PARM pEdcaParm, struct wifi_dev *w
 									 pEdcaParm->Txop[3]<<5,
 									 pEdcaParm->bACM[3]));
 		}
-
+#ifdef APCLI_CERT_SUPPORT
+		ApCliCertEDCAAdjust(pAd,wdev,pEdcaParm);
+#endif
 
 	}
+
+#ifdef VOW_SUPPORT
+    vow_update_om_wmm(pAd, wdev, pEdcaParm);
+#endif /* VOW_SUPPORT */
 
 #if defined(RTMP_MAC) || defined(RLT_MAC)
 	if (pAd->chipCap.hif_type == HIF_RTMP ||pAd->chipCap.hif_type == HIF_RLT)
@@ -1439,7 +1474,7 @@ VOID AsicUpdateBASession(RTMP_ADAPTER *pAd, UCHAR wcid, UCHAR tid, UINT16 sn, UC
 	AsicNotSupportFunc(pAd, __FUNCTION__);
 }
 
-VOID AsicUpdateRxWCIDTable(RTMP_ADAPTER *pAd, USHORT WCID, UCHAR *pAddr, BOOLEAN IsBCMCWCID)
+VOID AsicUpdateRxWCIDTable(RTMP_ADAPTER *pAd, USHORT WCID, UCHAR *pAddr, BOOLEAN IsBCMCWCID, BOOLEAN IsReset)
 {
 #if defined(RTMP_MAC) || defined(RLT_MAC)
 	if (pAd->chipCap.hif_type == HIF_RTMP ||pAd->chipCap.hif_type == HIF_RLT)
@@ -1459,6 +1494,7 @@ VOID AsicUpdateRxWCIDTable(RTMP_ADAPTER *pAd, USHORT WCID, UCHAR *pAddr, BOOLEAN
 
 		os_zero_mem(&WtblInfo,sizeof(MT_WCID_TABLE_INFO_T));
 		WtblInfo.Wcid = WCID;
+		WtblInfo.IsReset = IsReset;
 		os_move_mem(&WtblInfo.Addr[0],&pAddr[0],6);
 
         if (VALID_UCAST_ENTRY_WCID(pAd, WCID))
@@ -1516,13 +1552,17 @@ VOID AsicUpdateRxWCIDTable(RTMP_ADAPTER *pAd, USHORT WCID, UCHAR *pAddr, BOOLEAN
             if(IS_HT_STA(mac_entry))
             {
 			    WtblInfo.fgTiBf    = (mac_entry->rStaRecBf.fgETxBfCap > 0) ? FALSE : TRUE;
+			    WtblInfo.fgTiBf    = (pAd->CommonCfg.RegTransmitSetting.field.ITxBfEn == TRUE) ? WtblInfo.fgTiBf : FALSE;
 			    WtblInfo.fgTeBf    = mac_entry->rStaRecBf.fgETxBfCap;
+			    WtblInfo.fgTeBf    = (pAd->CommonCfg.ETxBfEnCond == TRUE) ? WtblInfo.fgTeBf : FALSE;
             }
 
             if(IS_VHT_STA(mac_entry))
             {
 			    WtblInfo.fgTibfVht = (mac_entry->rStaRecBf.fgETxBfCap > 0) ? FALSE : TRUE;
+			    WtblInfo.fgTibfVht = (pAd->CommonCfg.RegTransmitSetting.field.ITxBfEn == TRUE) ? WtblInfo.fgTibfVht : FALSE;
 			    WtblInfo.fgTebfVht = mac_entry->rStaRecBf.fgETxBfCap;
+			    WtblInfo.fgTebfVht = (pAd->CommonCfg.ETxBfEnCond == TRUE) ? WtblInfo.fgTebfVht : FALSE;
             }
 #endif
             if (CLIENT_STATUS_TEST_FLAG(mac_entry, fCLIENT_STATUS_RDG_CAPABLE)
@@ -1547,6 +1587,9 @@ VOID AsicUpdateRxWCIDTable(RTMP_ADAPTER *pAd, USHORT WCID, UCHAR *pAddr, BOOLEAN
                     if (IS_VHT_STA(mac_entry))
                     {
                         WtblInfo.SupportVHT = TRUE;
+#ifdef TXBF_SUPPORT
+                        WtblInfo.gid = 63;
+#endif
                     }
 				}
 
@@ -1579,7 +1622,7 @@ VOID AsicUpdateRxWCIDTable(RTMP_ADAPTER *pAd, USHORT WCID, UCHAR *pAddr, BOOLEAN
 VOID AsicUpdateClientBfCap(RTMP_ADAPTER *pAd, PMAC_TABLE_ENTRY pMacEntry)
 {
 #ifdef MT_MAC
-	if (pAd->archOps.archUpdateRxWCIDTable)
+	if (pAd->archOps.archUpdateClientBfCap)
 	{
 		return pAd->archOps.archUpdateClientBfCap(pAd, pMacEntry);
 	}
@@ -1588,8 +1631,9 @@ VOID AsicUpdateClientBfCap(RTMP_ADAPTER *pAd, PMAC_TABLE_ENTRY pMacEntry)
 		AsicNotSupportFunc(pAd, __FUNCTION__);
 		return;
 	}
-#endif
+#else
 	AsicNotSupportFunc(pAd, __FUNCTION__);
+#endif
 }
 #endif /* TXBF_SUPPORT */
 
@@ -1675,6 +1719,33 @@ VOID AsicDelWcidTab(RTMP_ADAPTER *pAd, UCHAR wcid_idx)
 	AsicNotSupportFunc(pAd, __FUNCTION__);
 	return;
 }
+
+
+#ifdef  HTC_DECRYPT_IOT
+VOID AsicSetWcidAAD_OM(RTMP_ADAPTER *pAd, UCHAR wcid_idx , CHAR value)
+{
+
+#ifdef MT_MAC
+	if (pAd->chipCap.hif_type == HIF_MT)
+	{
+		if (pAd->archOps.archSetWcidAAD_OM)
+		{
+			return pAd->archOps.archSetWcidAAD_OM(pAd, wcid_idx, value);
+		}
+		else
+		{
+			AsicNotSupportFunc(pAd, __FUNCTION__);
+			return;
+		}
+	}
+#endif
+
+	AsicNotSupportFunc(pAd, __FUNCTION__);
+	return;
+}
+#endif /* HTC_DECRYPT_IOT */
+
+
 
 VOID AsicAddRemoveKeyTab (
     IN PRTMP_ADAPTER pAd,
@@ -2569,6 +2640,7 @@ INT32 AsicExtPwrMgtBitWifi(RTMP_ADAPTER *pAd, UINT8 ucWlanIdx, UINT8 ucPwrMgtBit
 
 INT32 AsicStaRecUpdate(
 	RTMP_ADAPTER *pAd,
+	struct wifi_dev *wdev,
 	UINT8 BssIndex,
 	UINT8 WlanIdx,
 	UINT32 ConnectionType,
@@ -2614,11 +2686,27 @@ INT32 AsicStaRecUpdate(
 		{
 			StaCfg.MuarIdx = 0xe;//TODO: Carter, check this on TX_HDR_TRANS
 		}
+
+#ifdef TXBF_SUPPORT
+        if (pEntry && !IS_ENTRY_NONE(pEntry) && 
+            (IS_ENTRY_CLIENT(pEntry) || IS_ENTRY_APCLI(pEntry) || IS_ENTRY_REPEATER(pEntry) || IS_ENTRY_AP(pEntry)))
+		{
+		    if (HcIsBfCapSupport(pEntry->wdev) == TRUE)
+		    {
+		        if (EnableFeature & STA_REC_BF_FEATURE)
+		        {
+                    AsicBfStaRecUpdate(pAd, pEntry->wdev->PhyMode, BssIndex, WlanIdx);
+		        }
+		    }
+        }
+#endif /* TXBF_SUPPORT */
+
 		StaCfg.ConnectionState = ConnectionState;
 		StaCfg.ConnectionType = ConnectionType;
 		StaCfg.u4EnableFeature = EnableFeature;
 		StaCfg.ucBssIndex = BssIndex;
 		StaCfg.ucWlanIdx = WlanIdx;
+		StaCfg.wdev = wdev;
 		StaCfg.pEntry = pEntry;
 		StaCfg.IsNewSTARec = IsNewSTARec;
 
@@ -2691,15 +2779,22 @@ INT32 AsicRaParamStaRecUpdate(
 				return -1;
 			}
 
-            if (IS_ENTRY_REPEATER(pEntry))
-                StaCfg.MuarIdx = pAd->MacTab.tr_entry[pEntry->wcid].OmacIdx;
-            else
-                StaCfg.MuarIdx = pEntry->wdev->OmacIdx;
+			if (IS_ENTRY_REPEATER(pEntry))
+			{
+				StaCfg.MuarIdx = pAd->MacTab.tr_entry[pEntry->wcid].OmacIdx;
+			}
+			else
+			{
+				StaCfg.MuarIdx = pEntry->wdev->OmacIdx;
+			}
+
+			StaCfg.ucBssIndex = pEntry->wdev->bss_info_argument.ucBssIndex;
 		}
 		else
 		{
 			StaCfg.MuarIdx = 0xe;//TODO: Carter, check this on TX_HDR_TRANS
 		}
+		StaCfg.ConnectionState = STATE_CONNECTED;
 		StaCfg.u4EnableFeature = EnableFeature;
 		StaCfg.ucWlanIdx = WlanIdx;
 		StaCfg.pEntry = pEntry;
@@ -2735,7 +2830,7 @@ INT32 AsicBfStaRecUpdate(
     UCHAR        ucBssIdx,
 	UCHAR        ucWlanIdx)
 {
-    if (pAd->archOps.archSetStaRec)
+    if (pAd->chipOps.BfStaRecUpdate)
 	{
 	    return pAd->chipOps.BfStaRecUpdate(
 	                                   pAd,
@@ -2843,14 +2938,35 @@ INT32 AsicTxBfTxApplyCtrl(
 INT32 AsicTxBfApClientCluster(
 	RTMP_ADAPTER *pAd,
     UCHAR   ucWlanId,
-    UCHAR   ucPfmuId)
+    UCHAR   ucCmmWlanId)
 {
     if (pAd->chipOps.BfApClientCluster)
 	{
 	    return pAd->chipOps.BfApClientCluster(
 	                                   pAd,
 	                                   ucWlanId,
-	                                   ucPfmuId);
+	                                   ucCmmWlanId);
+    }
+    else
+    {
+        AsicNotSupportFunc(pAd, __FUNCTION__);
+		return FALSE;
+
+    }
+}
+
+
+INT32 AsicTxBfReptClonedStaToNormalSta(
+	RTMP_ADAPTER *pAd,
+    UCHAR   ucWlanId,
+    UCHAR   ucCliIdx)
+{
+    if (pAd->chipOps.BfReptClonedStaToNormalSta)
+	{
+	    return pAd->chipOps.BfReptClonedStaToNormalSta(
+	                                   pAd,
+	                                   ucWlanId,
+	                                   ucCliIdx);
     }
     else
     {
@@ -2912,6 +3028,26 @@ INT32 AsicRadioOnOffCtrl(RTMP_ADAPTER *pAd, UINT8 ucDbdcIdx, UINT8 ucRadio)
 	return 0;
 }
 
+#ifdef GREENAP_SUPPORT
+INT32 AsicGreenAPOnOffCtrl(RTMP_ADAPTER *pAd, UINT8 ucDbdcIdx, BOOLEAN ucGreenAPOn)
+{
+#ifdef MT_MAC
+    if (pAd->chipCap.hif_type == HIF_MT)
+    {
+        MT_GREENAP_CTRL_T GreenAPCtrl = {0};
+
+        GreenAPCtrl.ucDbdcIdx = ucDbdcIdx;
+        GreenAPCtrl.ucGreenAPOn = ucGreenAPOn;
+
+        return  MtCmdExtGreenAPOnOffCtrl(pAd, GreenAPCtrl);
+    }
+#endif
+
+	AsicNotSupportFunc(pAd, __FUNCTION__);
+	return 0;
+}
+#endif /* GREENAP_SUPPORT */
+
 INT32 AsicExtPmStateCtrl(
 	RTMP_ADAPTER *pAd,
 	PSTA_ADMIN_CONFIG pStaCfg,
@@ -2948,12 +3084,12 @@ INT32 AsicExtPmStateCtrl(
 	return 0;
 }
 
-INT32 AsicExtWifiHifCtrl(RTMP_ADAPTER *pAd, UINT8 PmStatCtrl, VOID *pReslt)
+INT32 AsicExtWifiHifCtrl(RTMP_ADAPTER *pAd, UINT8 ucDbdcIdx, UINT8 PmStatCtrl, VOID *pReslt)
 {
 #ifdef MT_MAC
 	if (pAd->chipCap.hif_type == HIF_MT)
 	{
-		return  MtCmdWifiHifCtrl(pAd, PmStatCtrl, pReslt);
+		return  MtCmdWifiHifCtrl(pAd, ucDbdcIdx, PmStatCtrl, pReslt);
 	}
 #endif
 
@@ -3321,4 +3457,1044 @@ VOID RssiUpdate(RTMP_ADAPTER *pAd)
 
 	
 
+}
+
+#ifdef NR_PD_DETECTION
+VOID CMWRcpiSet(RTMP_ADAPTER *pAd, UCHAR Wcid, UINT8 AntIdx, INT8 cRCPI)
+{
+	struct wtbl_entry tb_entry;
+	union WTBL_DW28 wtbl_wd28;
+
+	NdisZeroMemory(&tb_entry, sizeof(tb_entry));
+	if (mt_wtbl_get_entry234(pAd, Wcid, &tb_entry) == FALSE)
+	{
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s(): Cannot found WTBL2/3/4 for WCID(%d)\n",
+					__FUNCTION__, Wcid));
+		return;
+	}
+
+    /* Read RCPI from WTBL DW28 */
+	HW_IO_READ32(pAd, tb_entry.wtbl_addr + 112, &wtbl_wd28.word);
+
+    switch (AntIdx)
+    {
+        case BITMAP_WF0:
+            wtbl_wd28.field.resp_rcpi_0 = cRCPI;
+            break;
+        case BITMAP_WF1:
+            wtbl_wd28.field.resp_rcpi_1 = cRCPI;
+            break;
+        case BITMAP_WF2:
+            wtbl_wd28.field.resp_rcpi_2 = cRCPI;
+            break;
+        case BITMAP_WF3:
+            wtbl_wd28.field.resp_rcpi_3 = cRCPI;
+            break;
+    }
+
+    /* Write Back RCPI from WTBL DW28 */
+	HW_IO_WRITE32(pAd, tb_entry.wtbl_addr + 112, wtbl_wd28.word);
+
+    return;
+}
+
+VOID NRTxDetecCtrl(RTMP_ADAPTER *pAd)
+{
+    if (pAd->fgLinkBw20State)
+    {
+        BOOLEAN  fgDepartStatus = FALSE;       
+        PMAC_TABLE_ENTRY  pEntry = &pAd->MacTab.Content[0];
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check Condition:  One STA Connect */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        if ((pAd->MacTab.Size != 1))
+        {
+            fgDepartStatus = TRUE;
+        }
+        
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check Condition:  Support VHT mode Support */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        if ((pEntry->SupportRateMode & SUPPORT_VHT_MODE))
+        {
+            fgDepartStatus = TRUE;
+        }
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* State Transition: CBW Recovery  Configuration */
+        /*-------------------------------------------------------------------------------------------------------------------------*/     
+
+        if (fgDepartStatus)
+        {           
+            if (pAd->CommonCfg.dbdc_mode)
+            {
+                UINT8  ucDbdcBandIdx;
+
+                /* Channel switch for change to Original CBW */
+                for (ucDbdcBandIdx = BAND0; ucDbdcBandIdx < BAND_NUM; ucDbdcBandIdx++)
+                {
+                    if (pAd->ucOriCBW[ucDbdcBandIdx] != BW_20)
+                    {
+                        if (pAd->ucOriCenterChannel[ucDbdcBandIdx] > pAd->ucOriChannel[ucDbdcBandIdx])
+                            AsicSetChannel(pAd, pAd->ucOriCenterChannel[ucDbdcBandIdx], pAd->ucOriCBW[ucDbdcBandIdx],  EXTCHA_ABOVE, FALSE);
+                        else
+                            AsicSetChannel(pAd, pAd->ucOriCenterChannel[ucDbdcBandIdx], pAd->ucOriCBW[ucDbdcBandIdx],  EXTCHA_BELOW, FALSE);
+                    }
+                    else
+                    {
+                        AsicSetChannel(pAd, pAd->ucOriChannel[ucDbdcBandIdx], pAd->ucOriCBW[ucDbdcBandIdx],  EXTCHA_NONE, TRUE);
+                    }
+                }
+            }
+            else
+            {
+                /* Channel switch for change to Original CBW */
+                if (pAd->ucOriCBW[BAND0] != BW_20)
+                {
+                    if (pAd->ucOriCenterChannel[BAND0] > pAd->ucOriChannel[BAND0])
+                        AsicSetChannel(pAd, pAd->ucOriCenterChannel[BAND0], pAd->ucOriCBW[BAND0],  EXTCHA_ABOVE, FALSE);
+                    else
+                        AsicSetChannel(pAd, pAd->ucOriCenterChannel[BAND0], pAd->ucOriCBW[BAND0],  EXTCHA_BELOW, FALSE);
+                }
+                else
+                    AsicSetChannel(pAd, pAd->ucOriChannel[BAND0], pAd->ucOriCBW[BAND0],  EXTCHA_NONE, TRUE);      
+            }
+
+            MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) Back to Original BW!!! \n"));            
+
+            /* Disable BW20 flag */
+            pAd->fgLinkBw20State = FALSE;
+        }
+    }
+}
+
+VOID NRPDDetectCtrl(RTMP_ADAPTER *pAd)
+{
+    /* Round Count Increment */
+    pAd->u4RoundCount++;
+
+    /* Config RSSI Moving Average Ratio 1/2 */
+    MtCmdLinkTestRcpiMACtrl(pAd, CMW_RCPI_MA_1_2);
+
+    if (!pAd->fgLinkSingleRxState)
+    {
+        BOOLEAN fgEntryStatus = TRUE;
+        BOOLEAN fgRSSIEntryStatus = TRUE;
+        BOOLEAN fgSensitivityTestEn = FALSE;
+        INT8    cRSSI[4] = {MINIMUM_POWER_VALUE, MINIMUM_POWER_VALUE, MINIMUM_POWER_VALUE, MINIMUM_POWER_VALUE};
+        INT8    cMaxRssi = MINIMUM_POWER_VALUE;
+        UINT8   ucWCID;
+        UINT8   ucAntIdx;
+        UINT8   ucMode = CMW_MODE_DONT_CARE;
+        UINT8   ucMaxRssiIdx;
+        PMAC_TABLE_ENTRY pEntry = &pAd->MacTab.Content[0];
+
+        MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("(Link Test) Round: %d, status: %dR, RxSuccess: %ld, Rx With CRC: %ld \n",
+                pAd->u4RoundCount,
+                pAd->CommonCfg.dbdc_mode? 2 : 4,
+                (ULONG)pAd->WlanCounters[0].ReceivedFragmentCount.QuadPart,
+                (ULONG)pAd->WlanCounters[0].FCSErrorCount.u.LowPart
+                ));
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check Condition:  Timeout Departure Mechanism */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        pAd->ucTestTimeoutCount = 0;
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check Condition:  One STA Connect */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        if (1 != pAd->MacTab.Size)
+        {
+            fgEntryStatus = FALSE;
+        }
+        
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Search pEntry Address */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        for (ucWCID = 1; VALID_UCAST_ENTRY_WCID(pAd, ucWCID); ucWCID++)
+        {
+            pEntry = &pAd->MacTab.Content[ucWCID];
+        
+            /* APclient and Repeater not apply CMW270 patch */
+            if ((IS_ENTRY_REPEATER(pEntry)) || (IS_ENTRY_AP(pEntry)) || (IS_ENTRY_APCLI(pEntry)))
+            {
+                fgEntryStatus = FALSE;
+                break;
+            }
+            
+            if (IS_ENTRY_CLIENT(pEntry))
+            {
+                UINT8 ucTxStream;
+
+                /* Update Rssi value */
+                MtRssiGet(pAd, ucWCID, &cRSSI[0]);
+                
+                for(ucTxStream = 0; ucTxStream < TX_STREAM_PATH; ucTxStream++)
+                {
+                    if (cRSSI[ucTxStream] >= 0)
+                    {
+                        cRSSI[ucTxStream] = MINIMUM_POWER_VALUE;
+                    }
+        
+                    if (cRSSI[ucTxStream] > cMaxRssi)
+                    {            
+                        cMaxRssi = cRSSI[ucTxStream];
+                    }
+                }
+
+                if (pAd->CommonCfg.dbdc_mode)
+                {
+                    if (WMODE_CAP_5G(pEntry->wdev->PhyMode))
+                    {
+                        ucMode = DBDC_BAND1;
+                    }
+                    else
+                    {
+                        ucMode = DBDC_BAND0;
+                    }
+                }
+                else
+                {
+                    ucMode = DBDC_BAND0;
+                }
+                
+                break;
+            }
+        }
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check Condition:  Support VHT mode Support */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        if (pEntry->SupportRateMode & SUPPORT_VHT_MODE)
+        {
+            fgEntryStatus = FALSE;
+        }
+        
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check condition:  1 Tx Spatial Stream */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        if (pEntry->SupportHTMCS > 0xFF)
+        {
+            fgEntryStatus = FALSE;
+        }
+        
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check condition:  only support BW20 */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        if (pEntry->MaxHTPhyMode.field.BW != BW_20)
+        {
+            fgEntryStatus = FALSE;
+        }
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check Condition:  Max RSSI != -127 */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        
+        if (cMaxRssi == MINIMUM_POWER_VALUE)
+            return;
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check condition:  RSSI Significance */
+        /*-------------------------------------------------------------------------------------------------------------------------*/         
+        
+        MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) RSSI: (%d : %d : %d : %d) \n",
+                                                                cRSSI[0], cRSSI[1], cRSSI[2], cRSSI[3]));
+
+        /* RSSI Significance Check */
+        ucMaxRssiIdx = CMWRSSICheck(pAd, cRSSI, 0xFF, CMW_RSSI_SOURCE_WTBL, ucMode);
+
+        /* Check Significant RSSI value Antenna Index */
+        if (0x0 == ucMaxRssiIdx)
+        {
+            fgRSSIEntryStatus = FALSE;
+        }
+
+        MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) RSSI_Entry_Status: %d, Max_RSSI_index: %d \n",
+                                                                fgRSSIEntryStatus, ucMaxRssiIdx));
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* State Transition:  4T -> 1T  Configuration */
+        /*-------------------------------------------------------------------------------------------------------------------------*/
+        
+        if ((fgEntryStatus) && (!fgRSSIEntryStatus) && (pAd->fgWifiInitDone) && (pAd->fgChannelSwitchDone) && (pAd->fgPhyInitDone))
+        {
+            if (pAd->CommonCfg.dbdc_mode)
+            {
+                /* 1T mode */
+                MtCmdLinkTestTxCtrl(pAd, TRUE, CHANNEL_BAND_2G);
+                MtCmdLinkTestTxCtrl(pAd, TRUE, CHANNEL_BAND_5G);
+            
+                /* Boost Tx Power for 1T mode */
+                MtCmdLinkTestTxPwrCtrl(pAd, TRUE, BAND0, CHANNEL_BAND_2G);
+                MtCmdLinkTestTxPwrCtrl(pAd, TRUE, BAND1, CHANNEL_BAND_5G);
+            }
+            else
+            {
+                /* 1T mode */
+                MtCmdLinkTestTxCtrl(pAd, TRUE, pAd->ucCmwChannelBand);
+            
+                /* Boost Tx Power for 1T mode */
+                MtCmdLinkTestTxPwrCtrl(pAd, TRUE, BAND0, pAd->ucCmwChannelBand);
+            }
+            
+            MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) 1T mode after link up!!! \n"));
+        }
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* State Transition:  1T -> 4T  Configuration */
+        /*-------------------------------------------------------------------------------------------------------------------------*/
+        
+        /* Validate CMW Instrument */
+        if (!fgEntryStatus)
+        {
+            if (pAd->ucCmwCheckCount < pAd->ucCmwCheckCountTh)
+            {
+                /* Increment CMW Instrument Count */
+                pAd->ucCmwCheckCount++;
+            }
+            else
+            {
+                /* Enable CMW Istrument back 4T mode Flag */
+                pAd->fgCmwInstrumBack4T = TRUE;
+        
+                /* Reset CMW Instrument Count */
+                pAd->ucCmwCheckCount = 0;
+            }
+        }
+        else
+        {
+            /* Reset CMW Instrument Count */
+            pAd->ucCmwCheckCount = 0;
+        }           
+        
+        /* Check RSSI Balance status */
+        if (fgRSSIEntryStatus)
+        {
+            if (pAd->ucRssiBalanceCount < pAd->ucRssiIBalanceCountTh)
+            {
+                /* Increment RSSI Balance Count */
+                pAd->ucRssiBalanceCount++;
+            }
+            else
+            {
+                /* Enable RSSI back 4T mode Flag */
+                pAd->fgRssiBack4T = TRUE; 
+        
+                /* Reset RSSI Balance Count */
+                pAd->ucRssiBalanceCount = 0;
+            }
+        }
+        else
+        {
+            /* Reset RSSI Balance Count */
+            pAd->ucRssiBalanceCount = 0;
+        }
+        
+        /* Check RSSI Difference between Highest RSSI and Second RSSI */
+        if (0x0 != CMWRSSICheck(pAd, cRSSI, pAd->ucCableRssiTh, CMW_RSSI_SOURCE_WTBL, ucMode))
+        {
+            /* Enable RSSI back 4T mode Flag */
+            pAd->fgRssiBack4T = TRUE;
+            
+            /* Reset RSSI Balance Count */
+            pAd->ucRssiBalanceCount = 0;
+        }
+        
+        /* Back up RF CR configuration */
+        if (pAd->fgCmwInstrumBack4T)
+        {
+            if (pAd->CommonCfg.dbdc_mode)
+            {
+                /* Back to 4T mode */
+                MtCmdLinkTestTxCtrl(pAd, FALSE, CHANNEL_BAND_2G);
+                MtCmdLinkTestTxCtrl(pAd, FALSE, CHANNEL_BAND_5G);
+            
+                /* Restore Tx Power */
+                MtCmdLinkTestTxPwrCtrl(pAd, FALSE, BAND0, CHANNEL_BAND_2G);
+                MtCmdLinkTestTxPwrCtrl(pAd, FALSE, BAND0, CHANNEL_BAND_5G);
+            }
+            else
+            {
+                /* Back to 4T mode */
+                MtCmdLinkTestTxCtrl(pAd, FALSE, pAd->ucCmwChannelBand);
+            
+                /* Restore Tx Power */
+                MtCmdLinkTestTxPwrCtrl(pAd, FALSE, BAND0, pAd->ucCmwChannelBand);
+            }
+        
+            /* Disable CMW Istrument back 4T mode Flag */
+            pAd->fgCmwInstrumBack4T = FALSE;
+        
+            MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) 4T mode after link up (not CMW instrument)!!! \n"));
+        }
+        
+        if (pAd->fgRssiBack4T)
+        {
+            if (pAd->CommonCfg.dbdc_mode)
+            {
+                /* Back to 4T mode */
+                MtCmdLinkTestTxCtrl(pAd, FALSE, CHANNEL_BAND_2G);
+                MtCmdLinkTestTxCtrl(pAd, FALSE, CHANNEL_BAND_5G);
+            
+                /* Restore Tx Power */
+                MtCmdLinkTestTxPwrCtrl(pAd, FALSE, BAND0, CHANNEL_BAND_2G);
+                MtCmdLinkTestTxPwrCtrl(pAd, FALSE, BAND0, CHANNEL_BAND_5G);
+            }
+            else
+            {
+                /* Back to 4T mode */
+                MtCmdLinkTestTxCtrl(pAd, FALSE, pAd->ucCmwChannelBand);
+            
+                /* Restore Tx Power */
+                MtCmdLinkTestTxPwrCtrl(pAd, FALSE, BAND0, pAd->ucCmwChannelBand);
+            }
+        
+            /* Disable RSSI back 4T mode Flag */
+            pAd->fgRssiBack4T = FALSE;
+        
+            MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) 4T mode after link up (RSSI imbalance for long time)!!! \n"));
+        }
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check condition: Max RSSI < -40 for Change Channel test */
+        /*-------------------------------------------------------------------------------------------------------------------------*/     
+
+        /* Find Largest RSSI Port of all 4 ports */
+        for(ucAntIdx = WF0; ucAntIdx < WF_NUM; ucAntIdx++)
+        {
+            if (cRSSI[ucAntIdx] > cMaxRssi)
+            {            
+                cMaxRssi = cRSSI[ucAntIdx];
+            }
+        }
+
+        if (cMaxRssi < pAd->cNrRssiTh)
+            fgSensitivityTestEn = TRUE;
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* State Transition:  4R -> 1R  Configuration */
+        /*-------------------------------------------------------------------------------------------------------------------------*/     
+
+        if (pAd->fgNrFloating)
+        {
+            if ((fgEntryStatus) && (fgRSSIEntryStatus) && (fgSensitivityTestEn))
+            {
+                MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("(Link Test) 1R mode after link up!!! RX index: %d \n", ucMaxRssiIdx));
+
+                /* Clear RSSI Value in WTBL */
+                MtAsicRcpiReset(pAd, pEntry->wcid);
+
+                /* Enter 1R mode */
+                MtCmdLinkTestRxCtrl(pAd, ucMaxRssiIdx);
+                
+                /* Update 1R PD Detection Status */
+                pAd->fgLinkSingleRxState = TRUE;
+            }
+        }
+    }
+    else
+    {
+        BOOLEAN fgDepartureStatus = TRUE;
+        INT8    cRSSI[4] = {MINIMUM_POWER_VALUE, MINIMUM_POWER_VALUE, MINIMUM_POWER_VALUE, MINIMUM_POWER_VALUE};
+        INT8    cMaxRssi = MINIMUM_POWER_VALUE;
+        UINT8   ucWCID;
+        UINT8   ucTxPER;
+        INT64   c8RxCount;
+        EXT_EVENT_TX_STATISTIC_RESULT_T rTxStatResult;
+        PMAC_TABLE_ENTRY pEntry = &pAd->MacTab.Content[0];
+
+        MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("(Link Test) Round: %d, status: 1R, RxSuccess: %ld, Rx With CRC: %ld \n",
+                pAd->u4RoundCount,
+                (ULONG)pAd->WlanCounters[0].ReceivedFragmentCount.QuadPart,
+                (ULONG)pAd->WlanCounters[0].FCSErrorCount.u.LowPart
+                ));
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check Condition:  One STA Connect */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        if (1 == pAd->MacTab.Size)
+        {
+            fgDepartureStatus = FALSE;
+        }
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Search pEntry Address */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        for (ucWCID = 1; VALID_UCAST_ENTRY_WCID(pAd, ucWCID); ucWCID++)
+        {
+            pEntry = &pAd->MacTab.Content[ucWCID];
+
+            if (IS_ENTRY_CLIENT(pEntry))
+            {
+                UINT8 ucTxStream;
+
+                /* Update Rssi value */
+                MtRssiGet(pAd, ucWCID, &cRSSI[0]);
+                
+                for(ucTxStream = 0; ucTxStream < TX_STREAM_PATH; ucTxStream++)
+                {
+                    if (cRSSI[ucTxStream] >= 0)
+                    {
+                        cRSSI[ucTxStream] = MINIMUM_POWER_VALUE;
+                    }
+
+                    if (cRSSI[ucTxStream] > cMaxRssi)
+                    {            
+                        cMaxRssi = cRSSI[ucTxStream];
+                    }
+                }
+
+                break;
+            }
+        }
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check Condition:  Max RSSI != -127 */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+
+        if (MINIMUM_POWER_VALUE == cMaxRssi)
+            return;
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check Condition:  PER > PER_Threshold */
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        MtCmdGetTxStatistic(pAd, GET_TX_STAT_TOTAL_TX_CNT , 0, &rTxStatResult);
+
+        if (rTxStatResult.u4TotalTxCount != 0)
+            ucTxPER = (rTxStatResult.u4TotalTxFailCount * 100)/ rTxStatResult.u4TotalTxCount;
+        else
+            ucTxPER = 0;
+
+        if (ucTxPER < pAd->ucPerTh)
+        {
+            fgDepartureStatus = FALSE;
+        }
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check Condition:  Change test path */
+        /*-------------------------------------------------------------------------------------------------------------------------*/
+
+        if (cMaxRssi > pAd->cChgTestPathTh)
+            fgDepartureStatus = TRUE;
+        
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* Check Condition:  Timeout Mechanism */
+        /*-------------------------------------------------------------------------------------------------------------------------*/
+
+        /* Read Rx Count Info */
+        c8RxCount = pAd->WlanCounters[0].ReceivedFragmentCount.QuadPart;
+
+        if (c8RxCount - pAd->u4TempRxCount <= pAd->ucRxCountTh)
+        {
+            pAd->ucTestTimeoutCount++;
+        }
+        else
+        {
+            pAd->ucTestTimeoutCount = 0;
+        }
+
+        if (pAd->ucTestTimeoutCount > pAd->ucTimeOutTh)
+        {
+            fgDepartureStatus = TRUE;
+        }
+
+        /* Update Rx Count to temp buffer */
+        pAd->u4TempRxCount = pAd->WlanCounters[0].ReceivedFragmentCount.QuadPart;
+
+        /*-------------------------------------------------------------------------------------------------------------------------*/ 
+        /* State Transition:  1R -> 4R  Configuration */
+        /*-------------------------------------------------------------------------------------------------------------------------*/     
+
+        if (fgDepartureStatus)
+        {
+            /* Clear Timeout Count */
+            pAd->ucTestTimeoutCount = 0;
+
+            /* Clear RSSI Value in WTBL */
+            MtAsicRcpiReset(pAd, pEntry->wcid);
+            
+            /* Restore to 4R Config */
+            MtCmdLinkTestRxCtrl(pAd, BITMAP_WF_ALL);
+
+            /* Update 1R PD Detection Status */
+            pAd->fgLinkSingleRxState = FALSE;
+        }
+    }
+}
+
+VOID NRPDACRCtrl(RTMP_ADAPTER *pAd)
+{
+    BOOLEAN fgEntryStatus = TRUE;
+    INT8    cMaxRssi = MINIMUM_POWER_VALUE;
+    INT8    cRSSI[4] = {MINIMUM_POWER_VALUE, MINIMUM_POWER_VALUE, MINIMUM_POWER_VALUE, MINIMUM_POWER_VALUE};
+    UINT8   ucWCID;
+    UINT8   ucAntIdx;
+    PMAC_TABLE_ENTRY pEntry = &pAd->MacTab.Content[0];
+
+    /*-------------------------------------------------------------------------------------------------------------------------*/ 
+    /* Check Condition:  One STA Connect */
+    /*-------------------------------------------------------------------------------------------------------------------------*/ 
+
+    if (pAd->MacTab.Size != 1)
+    {
+        fgEntryStatus = FALSE;
+    }
+
+     /*-------------------------------------------------------------------------------------------------------------------------*/ 
+    /* Search pEntry Address */
+    /*-------------------------------------------------------------------------------------------------------------------------*/ 
+
+    for (ucWCID = 1; VALID_UCAST_ENTRY_WCID(pAd, ucWCID); ucWCID++)
+    {
+        pEntry = &pAd->MacTab.Content[ucWCID];
+
+        /* APclient and Repeater not apply CMW270 patch */
+        if ((IS_ENTRY_REPEATER(pEntry)) || (IS_ENTRY_AP(pEntry)) || (IS_ENTRY_APCLI(pEntry)))
+        {
+            fgEntryStatus = FALSE;
+            break;
+        }
+        
+        if (IS_ENTRY_CLIENT(pEntry))
+        {
+            UINT8 ucTxStream;
+            
+            /* Update Rssi value */
+            MtRssiGet(pAd, ucWCID, &cRSSI[0]);
+
+            for(ucTxStream = 0; ucTxStream < TX_STREAM_PATH; ucTxStream++)
+            {
+                if (cRSSI[ucTxStream] >= 0)
+                {
+                    cRSSI[ucTxStream] = MINIMUM_POWER_VALUE;
+                }
+            }
+            break;
+        }
+    }
+
+    /*-------------------------------------------------------------------------------------------------------------------------*/ 
+    /* Check Condition:  Support VHT mode Support */
+    /*-------------------------------------------------------------------------------------------------------------------------*/ 
+
+    if (pEntry->SupportRateMode & SUPPORT_VHT_MODE)
+    {
+        fgEntryStatus = FALSE;
+    }
+
+    /*-------------------------------------------------------------------------------------------------------------------------*/ 
+    /* Check condition:  1 Tx Spatial Stream */
+    /*-------------------------------------------------------------------------------------------------------------------------*/ 
+
+    if (pEntry->SupportHTMCS > 0xFF)
+    {
+        fgEntryStatus = FALSE;
+    }
+
+    /*-------------------------------------------------------------------------------------------------------------------------*/ 
+    /* Check condition:  only support BW20 */
+    /*-------------------------------------------------------------------------------------------------------------------------*/ 
+
+    if (pEntry->MaxHTPhyMode.field.BW != BW_20)
+    {
+        fgEntryStatus = FALSE;
+    }
+
+    /* Validate CMW Instrument */
+    if (!fgEntryStatus)
+        return;
+
+    /*-------------------------------------------------------------------------------------------------------------------------*/ 
+    /* Check condition:  RSSI Significance */
+    /*-------------------------------------------------------------------------------------------------------------------------*/           
+
+    /* Find Largest RSSI Port of all 4 ports */
+    for(ucAntIdx = WF0; ucAntIdx < WF_NUM; ucAntIdx++)
+    {
+        if (cRSSI[ucAntIdx] > cMaxRssi)
+        {            
+            cMaxRssi = cRSSI[ucAntIdx];
+        }
+    }
+
+    /*-------------------------------------------------------------------------------------------------------------------------*/ 
+    /* State Transition:  Max Input <---> Adjacent Channel Rejection   Configuration */
+    /*-------------------------------------------------------------------------------------------------------------------------*/   
+
+    if (!pAd->fgACRstate)
+    {
+        /* Check ACI patch enable/disable status */
+        if (pAd->fgACREn)
+        {
+            if (cMaxRssi <= pAd->cMaxInRssiTh)
+            {
+                if (pAd->ucACRConfidenceCnt > pAd->ucACRConfidenceCntTh)
+                {
+                    /* Clear ACI confidence count */
+                    pAd->ucACRConfidenceCnt = 0;
+
+                    /* Flag for ACI State*/
+                    pAd->fgACRstate = TRUE;
+                    
+                    MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) ACR patch!!! \n"));
+
+                    /* Fw command to apply ACI patch */
+                    MtCmdLinkTestACRCtrl(pAd, TRUE, BAND0);   // ACR patch
+                }
+                else
+                {
+                    /* ACI confidence count increment */
+                    pAd->ucACRConfidenceCnt++;
+                }
+            }
+            else
+            {
+                /* Clear ACI confidence count */
+                pAd->ucACRConfidenceCnt = 0;
+
+                /* Flag for MaxIn State*/
+                pAd->fgACRstate = FALSE;
+                
+                MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) MaxIn patch !!! \n"));
+
+                /* Fw command to apply MaxIn patch */
+                MtCmdLinkTestACRCtrl(pAd, FALSE, BAND0);  // Max Input patch
+            }
+        }
+    }
+    else
+    {
+        /* Check ACI patch enable/disable status */
+        if (pAd->fgACREn)
+        {
+            if (cMaxRssi <= pAd->cMaxInRssiTh)
+            {
+                /* Clear ACI confidence count */
+                pAd->ucMaxInConfidenceCnt = 0;
+
+                /* Flag for ACI State*/
+                pAd->fgACRstate = TRUE;
+                
+                MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) ACR patch!!! \n"));
+
+                /* Fw command to apply ACI patch */
+                MtCmdLinkTestACRCtrl(pAd, TRUE, BAND0);   // ACR patch
+            }
+            else
+            {
+                if (pAd->ucMaxInConfidenceCnt > pAd->ucMaxInConfidenceCntTh)
+                {
+                    /* Clear ACI confidence count */
+                    pAd->ucMaxInConfidenceCnt = 0;
+
+                    /* Flag for MaxIn State*/
+                    pAd->fgACRstate = FALSE;
+                    
+                    MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) MaxIn patch \n"));
+
+                    /* Fw command to apply MaxIn patch */
+                    MtCmdLinkTestACRCtrl(pAd, FALSE, BAND0);  // Max Input patch
+                }
+                else
+                {
+                    /* MaxIn confidence count increment */
+                    pAd->ucMaxInConfidenceCnt++;
+                }
+            }
+        }
+    }
+}
+
+VOID CMWLinkCtrl(RTMP_ADAPTER *pAd)
+{
+    UINT32   u4value;
+    UINT8    ucAntIdx;
+    UINT8    ucTempValue;
+    UINT8    ucRxBitmap;
+    INT8     cRSSI[4];
+
+    /* RCPI value read */
+    PHY_IO_READ32(pAd, 0x10654, &u4value);
+
+    /* RCPI value Transform */
+    for (ucAntIdx = WF0; ucAntIdx < WF_NUM; ucAntIdx++)
+    {
+        ucTempValue = (u4value & BITS(0 + (ucAntIdx << 3), 7 + (ucAntIdx << 3))) >> (ucAntIdx << 3);
+        cRSSI[ucAntIdx] = (ucTempValue - 220) / 2;
+
+        /* RSSI validation check */
+        if (cRSSI[ucAntIdx] > 0)
+        {
+            cRSSI[ucAntIdx] = MINIMUM_POWER_VALUE;
+        }
+    }
+
+    MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) LinkCtrl--> RSSI: (%d:%d:%d:%d) \n", cRSSI[0], cRSSI[1], cRSSI[2], cRSSI[3]));
+
+    /* RSSI Significance Check */
+    ucRxBitmap = CMWRSSICheck(pAd, cRSSI, pAd->ucLinkRssiTh, CMW_RSSI_SOURCE_BBP, CMW_MODE_DONT_CARE);
+
+    MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) LinkCtrl--> ucRxBitmap: 0x%x \n", ucRxBitmap));
+
+    if (0 != ucRxBitmap)
+    {
+        pAd->fgLinkRSSICheck = TRUE;
+
+        /* Restore to 4T mode */
+        if(pAd->CommonCfg.dbdc_mode)
+        {
+            MtCmdLinkTestTxCtrl(pAd, FALSE, CHANNEL_BAND_2G);
+            MtCmdLinkTestTxCtrl(pAd, FALSE, CHANNEL_BAND_5G);
+        }
+        else
+        {
+            MtCmdLinkTestTxCtrl(pAd, FALSE, pAd->ucCmwChannelBand);
+        }
+        
+        /* Reset Link Count */
+        pAd->ucLinkCount = 0;
+        
+        MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) LinkCtrl--> Enter 4T mode !!! \n"));
+    }
+    else
+    {
+        pAd->fgLinkRSSICheck = FALSE;
+
+        /* Increment Link Count */
+        pAd->ucLinkCount++;
+    }
+
+    /* Pereodic Enter 1T mode each 3 second */
+    if ((pAd->ucLinkCount >= pAd->ucLinkCountTh) && (!pAd->fgLinkRSSICheck) && (pAd->fgWifiInitDone) && (pAd->fgChannelSwitchDone) && (pAd->fgPhyInitDone))
+    {
+        /* Enter 1T mode */
+        if(pAd->CommonCfg.dbdc_mode)
+        {
+            MtCmdLinkTestTxCtrl(pAd, TRUE, CHANNEL_BAND_2G);
+            MtCmdLinkTestTxCtrl(pAd, TRUE, CHANNEL_BAND_5G);
+        }
+        else
+        {
+            MtCmdLinkTestTxCtrl(pAd, TRUE, pAd->ucCmwChannelBand);
+        }
+
+        /* Reset Link Count */
+        pAd->ucLinkCount = 0;
+
+        MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_INFO, ("(Link Test) LinkCtrl --> Enter 1T mode !!! \n"));
+    }
+}
+
+/*
+ *  Function: check RSSI Significance path
+ *
+ *  Parameter:
+ *
+ *      @ pAd
+ *
+ *      @ pcRSSI: pointer of array of RSSI values
+ *
+ *      @ ucRSSIThManual: RSSI Significance Threshold. If this value is 0xFF, program will use dynamic threshold.
+ *
+ *
+ *  Return: 
+ *
+ *      @ ucResult: RSSI Significant path index bitmap. 0x5 means WF0 and WF2. 0x0 mean no RSSI significant path.
+ */
+
+UINT8 CMWRSSICheck(RTMP_ADAPTER *pAd, INT8  *cRSSI, UCHAR ucRSSIThManual, UINT8 ucRSSISource, UINT8 ucMode)
+{
+    UINT8   ucRxIdx1 = 0, ucRxIdx2 = 0;
+    UINT8   ucRxBitmap;
+    
+    if(pAd->CommonCfg.dbdc_mode)
+    {
+        if (ucRSSISource == CMW_RSSI_SOURCE_BBP)
+        {
+            /* DBDC Band0 RSSI Check */
+            ucRxIdx1 = CMWRSSIComp(pAd, cRSSI, ucRSSIThManual, WF0, WF1);
+
+            if (0xFF != ucRxIdx1)
+                ucRxIdx1 = 1 << (ucRxIdx1);
+            else
+                ucRxIdx1 = 0;
+
+            /* DBDC Band1 RSSI Check */
+            ucRxIdx2 = CMWRSSIComp(pAd, cRSSI, ucRSSIThManual, WF2, WF3);
+
+            if (0xFF != ucRxIdx2)
+                ucRxIdx2 = 1 << (ucRxIdx2);
+            else
+                ucRxIdx2 = 0;
+
+            /* update Rx Bitmap */
+            ucRxBitmap = ucRxIdx1 + ucRxIdx2;
+        }
+        else
+        {
+            if (DBDC_BAND0 == ucMode)
+            {
+                ucRxIdx1 = CMWRSSIComp(pAd, cRSSI, ucRSSIThManual, WF0, WF1);
+
+                if (0xFF != ucRxIdx1)
+                    ucRxIdx1 = 1 << (ucRxIdx1);
+                else
+                    ucRxIdx1 = 0;
+            }
+            else if (DBDC_BAND1 == ucMode)
+            {
+                ucRxIdx1 = CMWRSSIComp(pAd, cRSSI, ucRSSIThManual, WF0, WF1);
+
+                if (0xFF != ucRxIdx1)
+                    ucRxIdx1 = 1 << (ucRxIdx1 + 2);
+                else
+                    ucRxIdx1 = 0;
+            }
+
+            /* update Rx Bitmap */
+            ucRxBitmap = ucRxIdx1;
+        }
+    }
+    else
+    {
+        /* Single Band RSSI Check */
+        ucRxIdx1 = CMWRSSIComp(pAd, cRSSI, ucRSSIThManual, WF0, WF3);
+
+        if (0xFF != ucRxIdx1)
+            ucRxIdx1 = 1 << (ucRxIdx1);
+        else
+            ucRxIdx1 = 0;
+
+        /* update Rx Bitmap */
+        ucRxBitmap = ucRxIdx1;
+    }
+
+    return ucRxBitmap;
+}
+
+UINT8 CMWRSSIComp(RTMP_ADAPTER *pAd, INT8 *cRSSI, UCHAR ucRSSIThManual, UINT8 ucStart, UINT8 ucEnd)
+{
+    INT8    cMaxRssi = MINIMUM_POWER_VALUE;
+    INT8    cSecRssi = MINIMUM_POWER_VALUE;
+    UINT8   ucMaxRssiIdx = 0;
+    UINT8   ucSecRssiIdx = 0;
+    UINT8   ucTxStreamMap[4] = {0,0,0,0};
+    UINT8   ucTxStream;
+    UINT8   ucRssiTh;
+    UINT8   ucRxIdx;
+
+    /* Find Largest RSSI Port */
+    for(ucTxStream = ucStart; ucTxStream <= ucEnd; ucTxStream++)
+    {
+        if (cRSSI[ucTxStream] > cMaxRssi)
+        {            
+            cMaxRssi = cRSSI[ucTxStream];
+            ucMaxRssiIdx = ucTxStream;
+        }
+    }
+
+    /* Find Second RSSI Port */
+    for(ucTxStream = ucStart; ucTxStream <= ucEnd; ucTxStream++)
+    {
+        if (ucTxStream != ucMaxRssiIdx)
+        {
+            if (cRSSI[ucTxStream] > cSecRssi)
+            {            
+                cSecRssi = cRSSI[ucTxStream];
+                ucSecRssiIdx = ucTxStream;
+            }
+        }
+    }
+
+    /* Update RSSI Threshold for check */
+    if (0xFF == ucRSSIThManual)
+    {
+        if (cSecRssi > pAd->cLargePowerTh)
+        {
+            ucRssiTh = pAd->ucHighPowerRssiTh;
+        }
+        else
+        {
+            ucRssiTh = pAd->ucLowPowerRssiTh;
+        }
+    }
+    else
+    {
+        ucRssiTh = ucRSSIThManual;
+    }
+    
+    /* Map notation for Max RSSI Antenna Index */
+    ucTxStreamMap[ucMaxRssiIdx] = 1;              
+
+    /* Assign Max RSSI Antenna Index */
+    ucRxIdx = ucMaxRssiIdx;
+
+    /* Check RSSI Threshold */
+    for(ucTxStream = ucStart; ucTxStream <= ucEnd; ucTxStream++)
+    {
+        if (0 == ucTxStreamMap[ucTxStream])
+        {            
+            if (cMaxRssi - cRSSI[ucTxStream] < ucRssiTh)
+            {
+                ucRxIdx = 0xFF;
+            }
+        }
+    }
+
+    return ucRxIdx;
+}
+
+#endif /* NR_PD_DETECTION */
+
+INT AsicRtsOnOff(struct wifi_dev *wdev, BOOLEAN rts_en)
+{
+	struct _RTMP_ADAPTER *ad;
+	UCHAR band_idx;
+	UINT32 rts_num;
+	UINT32 rts_len;
+
+	if(!wdev)
+		return 0;
+
+	ad = wdev->sys_handle;
+	band_idx = HcGetBandByWdev(wdev);
+
+#ifdef MT_MAC
+	if (ad->archOps.asic_rts_on_off){
+		if (rts_en) {
+			rts_num = wlan_operate_get_rts_pkt_thld(wdev);
+			rts_len = wlan_operate_get_rts_len_thld(wdev);
+			return ad->archOps.asic_rts_on_off(ad,band_idx, rts_num, rts_len, rts_en);
+		} else {
+			rts_num = 0xff;
+			rts_len = 0xffffff;
+			return ad->archOps.asic_rts_on_off(ad,band_idx, rts_num, rts_len, rts_en);
+		}
+	}
+#endif
+
+	AsicNotSupportFunc(ad, __func__);
+	return 0;
+}
+
+INT AsicAmpduEfficiencyAdjust(struct wifi_dev *wdev, UCHAR	aifs_adjust)
+{
+	struct _RTMP_ADAPTER *ad;
+	UINT32	wmm_idx;
+	if(!wdev)
+		return 0;
+
+	ad = wdev->sys_handle;
+	wmm_idx = HcGetWmmIdx(ad, wdev);
+
+#ifdef MT_MAC
+	if (ad->archOps.asic_ampdu_efficiency_on_off){
+		return ad->archOps.asic_ampdu_efficiency_on_off(ad, wmm_idx, aifs_adjust);
+	}
+#endif
+
+	AsicNotSupportFunc(ad, __func__);
+	return 0;
 }

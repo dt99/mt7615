@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -23,7 +24,7 @@
 	Who 		When			What
 	--------	----------		----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 
@@ -783,7 +784,7 @@ VOID AsicExtraPowerOverMAC(RTMP_ADAPTER *pAd)
 	txpwr9 |= (txpwr & 0x0000FF00) >> 8; /* Get Tx power for STBC MCS 7 */
 	RTMP_IO_WRITE32(pAd, TX_PWR_CFG_9, txpwr9);
 
-	if (pAd->CommonCfg.TxStream == 2)
+	if (pAd->Antenna.field.TxPath == 2)
 	{
 		/* For HT_MCS_15, extra fill the corresponding register value into MAC 0x13DC */
 		RTMP_IO_READ32(pAd, TX_PWR_CFG_3, &txpwr);
@@ -993,6 +994,8 @@ VOID GetSingleSkuDeltaPower(
 	CONFIGURATION_OF_TX_POWER_CONTROL_OVER_MAC CfgOfTxPwrCtrlOverMAC = {0};
 	UCHAR Channel = HcGetRadioChannel(pAd);
 	UCHAR PhyMode = HcGetRadioPhyMode(pAd);
+	struct wifi_dev *wdev = get_default_wdev(pAd);
+	UCHAR op_ht_bw = wlan_operate_get_ht_bw(wdev);
 	
 	/* Get TX rate offset table which from EEPROM 0xDEh ~ 0xEFh */
 	RTMP_CHIP_ASIC_TX_POWER_OFFSET_GET(pAd, (PULONG)&CfgOfTxPwrCtrlOverMAC);
@@ -1007,7 +1010,7 @@ VOID GetSingleSkuDeltaPower(
 		TxPwrInEEPROM = (pAd->CommonCfg.DefineMaxTxPwr & 0x00FF); /* 2.4G band */
 	}
 
-	CountryTxPwr = GetCuntryMaxTxPwr(pAd, PhyMode,Channel); 
+	CountryTxPwr = GetCuntryMaxTxPwr(pAd, wdev, PhyMode,Channel,op_ht_bw); 
 
 	/* Use OFDM 6M as the criterion */
 	criterion = (UCHAR)((CfgOfTxPwrCtrlOverMAC.TxPwrCtrlOverMAC[0].RegisterValue & 0x000F0000) >> 16);
@@ -1257,24 +1260,24 @@ VOID AsicPercentageDeltaPower(
 		We lower TX power here according to the percentage specified from UI.
 	*/
 	
-	if (pAd->CommonCfg.TxPowerPercentage >= 100) /* AUTO TX POWER control */
+	if (pAd->CommonCfg.TxPowerPercentage[BAND0] >= 100) /* AUTO TX POWER control */
 	{
 	}
-	else if (pAd->CommonCfg.TxPowerPercentage > 90) /* 91 ~ 100% & AUTO, treat as 100% in terms of mW */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 90) /* 91 ~ 100% & AUTO, treat as 100% in terms of mW */
 		;
-	else if (pAd->CommonCfg.TxPowerPercentage > 60) /* 61 ~ 90%, treat as 75% in terms of mW		 DeltaPwr -= 1; */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 60) /* 61 ~ 90%, treat as 75% in terms of mW		 DeltaPwr -= 1; */
 	{
 		*pDeltaPwr -= 1;
 	}
-	else if (pAd->CommonCfg.TxPowerPercentage > 30) /* 31 ~ 60%, treat as 50% in terms of mW		 DeltaPwr -= 3; */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 30) /* 31 ~ 60%, treat as 50% in terms of mW		 DeltaPwr -= 3; */
 	{
 		*pDeltaPwr -= 3;
 	}
-	else if (pAd->CommonCfg.TxPowerPercentage > 15) /* 16 ~ 30%, treat as 25% in terms of mW		 DeltaPwr -= 6; */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 15) /* 16 ~ 30%, treat as 25% in terms of mW		 DeltaPwr -= 6; */
 	{
 		*pDeltaPowerByBbpR1 -= 6; /* -6 dBm */
 	}
-	else if (pAd->CommonCfg.TxPowerPercentage > 9) /* 10 ~ 15%, treat as 12.5% in terms of mW		 DeltaPwr -= 9; */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 9) /* 10 ~ 15%, treat as 12.5% in terms of mW		 DeltaPwr -= 9; */
 	{
 		*pDeltaPowerByBbpR1 -= 6; /* -6 dBm */
 		*pDeltaPwr -= 3;

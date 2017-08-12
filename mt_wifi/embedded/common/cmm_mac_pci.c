@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * Taiwan, R.O.C.
@@ -11,7 +12,7 @@
  * way altering the source code is stricitly prohibited, unless the prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 
 
 #ifdef RTMP_MAC_PCI
@@ -269,7 +270,18 @@ VOID RTMPResetTxRxRingMemory(RTMP_ADAPTER *pAd)
 			if ((dma_cb->DmaBuf.AllocVa) && (dma_cb->pNdisPacket))
 			{
 				PCI_UNMAP_SINGLE(pAd, dma_cb->DmaBuf.AllocPa, dma_cb->DmaBuf.AllocSize, RTMP_PCI_DMA_FROMDEVICE);
-				RELEASE_NDIS_PACKET(pAd, dma_cb->pNdisPacket, NDIS_STATUS_SUCCESS);
+#ifdef  CONFIG_WIFI_BUILD_SKB
+				if (index == 0) {
+					DEV_FREE_FRAG_BUF(dma_cb->pNdisPacket);
+				}
+				else {
+#endif /* CONFIG_WIFI_BUILD_SKB */
+					RELEASE_NDIS_PACKET(
+						pAd, dma_cb->pNdisPacket, 
+						NDIS_STATUS_SUCCESS);
+#ifdef  CONFIG_WIFI_BUILD_SKB
+				}
+#endif /* CONFIG_WIFI_BUILD_SKB */
 			}
 		}
 		NdisZeroMemory(pAd->PciHif.RxRing[index].Cell, RxRingSize * sizeof(RTMP_DMACB));
@@ -735,14 +747,28 @@ NDIS_STATUS RTMPInitTxRxRingMemory(RTMP_ADAPTER *pAd)
 			else
 #endif /* CUT_THROUGH */
 			pDmaBuf->AllocSize = RxBufferSize;
-			pPacket = RTMP_AllocateRxPacketBuffer(
-				pAd,
-				((POS_COOKIE)(pAd->OS_Cookie))->pci_dev,
-				pDmaBuf->AllocSize,
-				FALSE,
-				&pDmaBuf->AllocVa,
-				&pDmaBuf->AllocPa);
-
+#ifdef  CONFIG_WIFI_BUILD_SKB
+			if (num == 0) {
+				pPacket = RTMP_AllocateRxPacketBufferOnly(
+					pAd,
+					((POS_COOKIE)(pAd->OS_Cookie))->pci_dev,
+					pDmaBuf->AllocSize,
+					FALSE,
+					&pDmaBuf->AllocVa,
+					&pDmaBuf->AllocPa);
+			}
+			else {
+#endif /* CONFIG_WIFI_BUILD_SKB */
+				pPacket = RTMP_AllocateRxPacketBuffer(
+					pAd,
+					((POS_COOKIE)(pAd->OS_Cookie))->pci_dev,
+					pDmaBuf->AllocSize,
+					FALSE,
+					&pDmaBuf->AllocVa,
+					&pDmaBuf->AllocPa);
+#ifdef  CONFIG_WIFI_BUILD_SKB
+			}
+#endif /* CONFIG_WIFI_BUILD_SKB*/
 			/* keep allocated rx packet */
 			dma_cb->pNdisPacket = pPacket;
 
@@ -1575,13 +1601,29 @@ NDIS_STATUS	RTMPAllocTxRxRingMemory(RTMP_ADAPTER *pAd)
                 else
 #endif /* CUT_THROUGH */
 				pDmaBuf->AllocSize = RxBufferSize;
-				pPacket = RTMP_AllocateRxPacketBuffer(
+#ifdef  CONFIG_WIFI_BUILD_SKB
+				if (num == 0) {
+					pPacket =
+						RTMP_AllocateRxPacketBufferOnly(
+						pAd,
+					((POS_COOKIE)(pAd->OS_Cookie))->pci_dev,
+						pDmaBuf->AllocSize,
+						FALSE,
+						&pDmaBuf->AllocVa,
+						&pDmaBuf->AllocPa);
+				}
+				else {
+#endif /* CONFIG_WIFI_BUILD_SKB */
+					pPacket = RTMP_AllocateRxPacketBuffer(
 					pAd,
 					((POS_COOKIE)(pAd->OS_Cookie))->pci_dev,
 					pDmaBuf->AllocSize,
 					FALSE,
 					&pDmaBuf->AllocVa,
 					&pDmaBuf->AllocPa);
+#ifdef  CONFIG_WIFI_BUILD_SKB
+				}
+#endif /* CONFIG_WIFI_BUILD_SKB*/
 
 				/* keep allocated rx packet */
 				dma_cb->pNdisPacket = pPacket;
@@ -2010,7 +2052,18 @@ VOID RTMPFreeTxRxRingMemory(RTMP_ADAPTER *pAd)
 				PCI_UNMAP_SINGLE(pAd, dma_cb->DmaBuf.AllocPa,
 									dma_cb->DmaBuf.AllocSize,
 									RTMP_PCI_DMA_FROMDEVICE);
-				RELEASE_NDIS_PACKET(pAd, dma_cb->pNdisPacket, NDIS_STATUS_SUCCESS);
+#ifdef  CONFIG_WIFI_BUILD_SKB
+				if (j == 0) {
+					DEV_FREE_FRAG_BUF(dma_cb->pNdisPacket);
+				}
+				else {
+#endif /* CONFIG_WIFI_BUILD_SKB */
+					RELEASE_NDIS_PACKET(pAd,
+						dma_cb->pNdisPacket,
+						NDIS_STATUS_SUCCESS);
+#ifdef  CONFIG_WIFI_BUILD_SKB
+				}
+#endif /* CONFIG_WIFI_BUILD_SKB */
 			}
 		}
 
@@ -2918,7 +2971,7 @@ BOOLEAN RT28xxPciAsicRadioOff(
 	if (pAd->chipCap.hif_type == HIF_MT) {
 		MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_OFF, ("%s(): Not support for HIF_MT yet!\n",
 					__FUNCTION__));
-		return FALSE;
+		return TRUE;
 	}
 
 #if defined(RTMP_MAC) || defined(RLT_MAC)
@@ -3327,11 +3380,69 @@ VOID FwOwn(RTMP_ADAPTER *pAd)
 	return;
 #endif /* MT7622 */
 }
-
-VOID DriverOwn(RTMP_ADAPTER *pAd)
+#ifdef MT7615
+static VOID n9_wdt_reset(RTMP_ADAPTER *pAd)
 {
+#define WDT_SWRST_CR_PA 0x81080044
+#define MCU_POWER_ON 0x01
+#define HOST_TRIGGER_WDT_SWRST 0x1209
+
+    UINT32 top_clock_gen0_value = 0;
+    UINT32 top_clock_gen1_value = 0;
+    UINT32 top_misc_value = 0;
+    UINT32 origonal_remap_cr_value = 0;
+    UINT32 remap_cr_record_base_address = 0;
+    UINT32 offset_between_target_and_remap_cr_base = 0;
+
+    /* switch hclk to XTAL source, 0x80021100[1:0] = 2'b00 */
+    HW_IO_READ32(pAd, TOP_CKGEN0, &top_clock_gen0_value);
+    top_clock_gen0_value &= ~(BIT0 | BIT1);
+    HW_IO_WRITE32(pAd, TOP_CKGEN0, top_clock_gen0_value);
+
+    /* Set HCLK divider to 1:1, 0x80021104[1:0] = 2'b00 */
+    HW_IO_READ32(pAd, TOP_CKGEN1, &top_clock_gen1_value);
+    top_clock_gen1_value &= ~(BIT0 | BIT1);
+    HW_IO_WRITE32(pAd, TOP_CKGEN1, top_clock_gen1_value);
+
+    /* disable HIF can be reset by WDT 0x80021130[30]=1'b0 */
+    HW_IO_READ32(pAd, TOP_MISC, &top_misc_value);
+    top_misc_value &= ~(BIT30);
+    HW_IO_WRITE32(pAd, TOP_MISC, top_misc_value);
+
+    /* enable WDT reset mode and trigger WDT reset 0x81080044 = 0x1209 */
+    /* keep the origonal remap cr1 value for restore */
+    HW_IO_READ32(pAd, MCU_PCIE_REMAP_1, &origonal_remap_cr_value);
+    /* do PCI-E remap for CR4 PDMA physical base address to 0x40000 */
+    HW_IO_WRITE32(pAd, MCU_PCIE_REMAP_1, WDT_SWRST_CR_PA);
+
+    HW_IO_READ32(pAd, MCU_PCIE_REMAP_1, &remap_cr_record_base_address);
+
+    if ((WDT_SWRST_CR_PA  - remap_cr_record_base_address) > REMAP_1_OFFSET_MASK)
+    {
+        /* restore the origonal remap cr1 value */
+        HW_IO_WRITE32(pAd, MCU_PCIE_REMAP_1, origonal_remap_cr_value);
+        
+    }
+    offset_between_target_and_remap_cr_base =
+        ((WDT_SWRST_CR_PA  - remap_cr_record_base_address) & REMAP_1_OFFSET_MASK);
+
+    RTMP_IO_WRITE32(pAd, MT_PCI_REMAP_ADDR_1 + offset_between_target_and_remap_cr_base,
+                                                        HOST_TRIGGER_WDT_SWRST);
+    /* restore the origonal remap cr1 value */
+    HW_IO_WRITE32(pAd, MCU_PCIE_REMAP_1, origonal_remap_cr_value);
+    MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s()::N9 WDT reset down\n", __FUNCTION__));
+}
+#endif
+
+INT32 DriverOwn(RTMP_ADAPTER *pAd)
+{
+	INT32 Ret = NDIS_STATUS_SUCCESS;
 #if defined(MT7615) || defined(MT7637)
 #ifdef MT7615
+#define MAX_RETRY_CNT 4
+
+	UINT32 retrycnt = 0;
+
 	if(MTK_REV_GTE(pAd, MT7615, MT7615E1) && MTK_REV_LT(pAd, MT7615, MT7615E3))
 	{
 		UINT32		Counter = 0;
@@ -3356,6 +3467,7 @@ VOID DriverOwn(RTMP_ADAPTER *pAd)
 		else
 		{
 			MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s(): Fail to clear FW own (%d)\n", __FUNCTION__, Counter));
+			Ret = NDIS_STATUS_FAILURE;
 		}		
 	}
 	else
@@ -3366,42 +3478,49 @@ VOID DriverOwn(RTMP_ADAPTER *pAd)
 
 
 #ifdef MT7615
-		if (pAd->bDrvOwn == TRUE)
-		{
-			MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s()::Return since already in Driver Own...\n",__FUNCTION__));
-			return;
-		}
-		
-		MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s()::Try to Clear FW Own...\n",__FUNCTION__));
-		/* Write CR to get driver own */
-		HIF_IO_WRITE32(pAd, MT_CFG_LPCR_HOST, MT_HOST_CLR_OWN);
-
-		/* Poll driver own status */
-		counter = 0;
-		while (counter < FW_OWN_POLLING_COUNTER)	
-		{
-			RtmpusecDelay(1000);
+		do {
+			retrycnt++;
 			if (pAd->bDrvOwn == TRUE)
-				break;						
-			counter++;		
-		};
+			{
+				MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s()::Return since already in Driver Own...\n",__FUNCTION__));
+				return Ret;
+			}
+			
+			MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s()::Try to Clear FW Own...\n",__FUNCTION__));
+			/* Write CR to get driver own */
+			HIF_IO_WRITE32(pAd, MT_CFG_LPCR_HOST, MT_HOST_CLR_OWN);
 
-		if (counter == FW_OWN_POLLING_COUNTER)
-		{
-			HIF_IO_READ32(pAd, MT_CFG_LPCR_HOST, &Value);
+			/* Poll driver own status */
+			counter = 0;
+			while (counter < FW_OWN_POLLING_COUNTER)	
+			{
+				RtmpusecDelay(1000);
+				if (pAd->bDrvOwn == TRUE)
+					break;						
+				counter++;		
+			};
 
-			if (!(Value & MT_HOST_SET_OWN))
-				pAd->bDrvOwn = TRUE;
-		}
+			if (counter == FW_OWN_POLLING_COUNTER)
+			{
+				HIF_IO_READ32(pAd, MT_CFG_LPCR_HOST, &Value);
 
-		if (pAd->bDrvOwn)
-		{
-			MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s()::Success to clear FW Own\n", __FUNCTION__));			
-		}
-		else
-		{
-			MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s()::Fail to clear FW Own (%d)\n", __FUNCTION__, counter));
-		}
+				if (!(Value & MT_HOST_SET_OWN))
+					pAd->bDrvOwn = TRUE;
+			}
+
+			if (pAd->bDrvOwn)
+			{
+				MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s()::Success to clear FW Own\n", __FUNCTION__));			
+			}
+			else
+			{
+				MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s()::Fail to clear FW Own (%d)\n", __FUNCTION__, counter));
+				if (retrycnt >= MAX_RETRY_CNT)
+					Ret = NDIS_STATUS_FAILURE;
+				else
+					n9_wdt_reset(pAd);
+			}
+		} while (pAd->bDrvOwn == FALSE && retrycnt < MAX_RETRY_CNT);
 #endif /* MT7615 */
 	}
 #endif /* MT7615 || MT7637 */	
@@ -3429,8 +3548,11 @@ VOID DriverOwn(RTMP_ADAPTER *pAd)
 	else
 	{
 		MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s(): Fail to clear FW own (%d)\n", __FUNCTION__, Counter));
+		Ret = NDIS_STATUS_FAILURE;
 	}
 #endif /* defined(MT7615) || defined(MT7622) */
+
+	return Ret;
 }
 
 #if defined(MT7615) || defined(MT7622)

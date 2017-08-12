@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
     Who       When            What
     --------  ----------      ----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 /*----- 802.11H -----*/
@@ -104,6 +106,7 @@ BOOLEAN RadarChannelCheck(
 {
 	INT 	i;
 	BOOLEAN result = FALSE;
+	UCHAR phy_bw = decide_phy_bw_by_channel(pAd,Ch);//HcGetBwByRf(pAd,RFIC_5GHZ);
 
 	for (i=0; i<pAd->ChannelListNum; i++)
 	{
@@ -115,7 +118,7 @@ BOOLEAN RadarChannelCheck(
 	}
 
 #ifdef DOT11_VHT_AC
-		if((pAd->CommonCfg.vht_bw == VHT_BW_160) && (Ch >= 36 && Ch <= 48))
+		if((phy_bw == BW_160) && (Ch >= 36 && Ch <= 48))
 			return TRUE;		
 #endif
 
@@ -137,29 +140,42 @@ BOOLEAN RadarChannelCheck(
 	========================================================================
 */
 VOID RadarStateCheck(
-	IN PRTMP_ADAPTER	pAd)
+	IN PRTMP_ADAPTER	pAd,
+	struct wifi_dev *wdev)
 {
 	BOOLEAN IsSupport5G = HcIsRfSupport(pAd,RFIC_5GHZ);
 #ifndef MT_DFS_SUPPORT
 	UCHAR Channel = HcGetChannelByRf(pAd,RFIC_5GHZ);
 #endif	
 	pAd->Dot11_H.CalBufTime = 0;
-
+    if(wdev->csa_count != 0)
+        return;
 	if ( IsSupport5G &&
 		(pAd->CommonCfg.bIEEE80211H == 1) &&
 #ifdef MT_DFS_SUPPORT
         DfsRadarChannelCheck(pAd)
+#ifdef BACKGROUND_SCAN_SUPPORT         
+        &&((IS_SUPPORT_MT_ZEROWAIT_DFS(pAd) == FALSE) ||(CHK_MT_ZEROWAIT_DFS_STATE(pAd, DFS_OFF_CHNL_CAC_TIMEOUT)))    
+#endif /* BACKGROUND_SCAN_SUPPORT */        
 #else		
 		RadarChannelCheck(pAd, Channel)
-#endif	
+#endif /* MT_DFS_SUPPORT */	
        )
 	{
+        MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s]Set into RD_SILENCE_MODE! \n",
+                                                             __FUNCTION__));
+        
 		pAd->Dot11_H.RDMode = RD_SILENCE_MODE;
 		pAd->Dot11_H.RDCount = 0;
 		pAd->Dot11_H.InServiceMonitorCount = 0;
 	}
 	else
-		pAd->Dot11_H.RDMode = RD_NORMAL_MODE;
+    {
+        MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s]Set into RD_NORMAL_MODE\n",__FUNCTION__));
+
+        /* DFS Zero wait case, OP CH always is normal mode */
+	    pAd->Dot11_H.RDMode = RD_NORMAL_MODE;
+    }
 
 #ifdef CARRIER_DETECTION_SUPPORT
 	if ((pAd->CommonCfg.RDDurRegion == JAP)
@@ -168,7 +184,7 @@ VOID RadarStateCheck(
 	{
 
 		if (IsSupport5G  ||
-			(pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40))
+			(wlan_operate_get_ht_bw(wdev)== HT_BW_40))
 		{
 			pAd->CommonCfg.CarrierDetect.Enable = TRUE;
 		}
@@ -196,6 +212,24 @@ BOOLEAN CheckNonOccupancyChannel(
 		}
 	}
 	return TRUE;
+}
+
+USHORT CheckLargestNOP( 
+	IN PRTMP_ADAPTER pAd)
+{
+    UINT_8 i; 
+    USHORT Largest = 0;
+
+    for (i = 0; i < pAd->ChannelListNum; i++)
+    {        
+        if (pAd->ChannelList[i].RemainingTimeForUse > Largest)
+        {
+            Largest = pAd->ChannelList[i].RemainingTimeForUse;
+        }
+        
+    }  
+
+    return Largest;
 }
 
 ULONG JapRadarType(
@@ -287,54 +321,177 @@ VOID ChannelSwitchingCountDownProc(
 	pAd->Dot11_H.CSCount++;
 	if (pAd->Dot11_H.CSCount >= pAd->Dot11_H.CSPeriod)
 	{
-#ifdef DFS_SUPPORT
-		pAd->CommonCfg.RadarDetect.DFSAPRestart = 1;
-		schedule_dfs_task(pAd);
-#else
-		pAd->Dot11_H.Dot11HState.CurrState = RD_SWITCHING_MODE;
-        MlmeEnqueue(pAd, DOT11_H_STATE_MACHINE, RD_CSA_CNT_DOWN_TIMEOUT_MSG, 0, NULL, 0);
-        RTMP_MLME_HANDLER(pAd);
-
-#endif /* !DFS_SUPPORT */		
+#ifdef MT_DFS_SUPPORT
+		if (DfsDetRateModeCheck(pAd, RD_NORMAL_MODE))
+			return;
+#endif /*#ifdef MT_DFS_SUPPORT*/
+		RTEnqueueInternalCmd(pAd, CMDTHRED_DOT11H_SWITCH_CHANNEL, NULL, 0);
 	}
 }
+#ifdef CUSTOMER_DCC_FEATURE
+VOID ChannelSwitchingCountDownProcNew(
+	IN PRTMP_ADAPTER	pAd)
+{
 
+	MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("RTMPHandleTBTTInterrupt::Channel Switching...(%d/%d)\n", pAd->CommonCfg.channelSwitch.CHSWCount, pAd->CommonCfg.channelSwitch.CHSWPeriod));
+						
+	pAd->CommonCfg.channelSwitch.CHSWCount++;
+	if(pAd->CommonCfg.channelSwitch.CHSWCount >= pAd->CommonCfg.channelSwitch.CHSWPeriod)
+	{
+		pAd->CommonCfg.channelSwitch.CHSWMode = NORMAL_MODE;
+		MlmeEnqueue(pAd, AP_SYNC_STATE_MACHINE, APMT2_CHANNEL_SWITCH, 0, NULL, 0);
+		RTMP_MLME_HANDLER(pAd);
+				
+	}
+}
+#endif
 /*
 *
 */
-static VOID Dot11HCntDownTimeoutAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
+NTSTATUS Dot11HCntDownTimeoutAction(PRTMP_ADAPTER pAd, PCmdQElmt CMDQelmt)
 {
-	//UINT32 i;
-	//MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[APStartUp]Start WMM0~3 AC Queue\n"));
-	pAd->Dot11_H.RDMode = RD_SILENCE_MODE;	
-	pAd->Dot11_H.Dot11HState.CurrState = pAd->Dot11_H.RDMode;
-	APStop(pAd);
-	APStartUp(pAd);	
+#if defined(MT_DFS_SUPPORT) && defined(BACKGROUND_SCAN_SUPPORT)
+	BACKGROUND_SCAN_CTRL *BgndScanCtrl = &pAd->BgndScanCtrl;
+#endif /* defined(MT_DFS_SUPPORT) && defined(BACKGROUND_SCAN_SUPPORT) */
+
+#if defined(MT_DFS_SUPPORT) && defined(BACKGROUND_SCAN_SUPPORT)
+	if (IS_SUPPORT_MT_ZEROWAIT_DFS(pAd))
+	{
+		if (CHK_MT_ZEROWAIT_DFS_STATE(pAd, DFS_CAC))
+		{            
+			/* After ChSwAnn:
+			1. Zero wait(InservMonitor)->detected radar->uniform Ch is DFS Ch -> Zero wait(CAC) 
+			2. CAC period -> set DFS CH -> ZeroWait Stop ->ZeroWait Start 
+			3. Idle/InServ -> set DFS CH */
+			MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("[%s]Trigger DFS Zero wait:ZeroWaitCh=%d\n", 
+									__FUNCTION__,
+									BgndScanCtrl->DfsZeroWaitChannel));
+           
+			pAd->Dot11_H.RDMode = RD_NORMAL_MODE; 
+
+			APStopByRf(pAd, RFIC_5GHZ);            
+			if(DfsStopWifiCheck(pAd))
+			{
+				MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s] Stop AP Startup\n",__FUNCTION__));
+				return 0;  
+			}			
+			APStartUpByRf(pAd, RFIC_5GHZ);                                  
+		}
+		else if (CHK_MT_ZEROWAIT_DFS_STATE(pAd, DFS_OFF_CHNL_CAC_TIMEOUT))
+		{    
+			/* Zero wait CAC timeout case */
+			MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("[%s][ZeroWait]DFS_OFF_CHNL_CAC_TIMEOUT\n",__FUNCTION__));
+#ifdef MAC_REPEATER_SUPPORT
+			//Disable DFS zero wait support  for repeater mode dynamic enable
+			if (pAd->ApCfg.bMACRepeaterEn)
+			{
+				BgndScanCtrl->DfsZeroWaitSupport = FALSE;
+				UPDATE_MT_ZEROWAIT_DFS_Support(pAd, FALSE);
+				UPDATE_MT_ZEROWAIT_DFS_STATE(pAd, DFS_IDLE);
+			}
+#endif /* MAC_REPEATER_SUPPORT */
+
+			pAd->Dot11_H.RDMode = RD_NORMAL_MODE;
+           
+			APStopByRf(pAd, RFIC_5GHZ);
+			if(DfsStopWifiCheck(pAd))
+			{
+				MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s] Stop AP Startup\n",__FUNCTION__));
+				return 0;  
+			}			
+			APStartUpByRf(pAd, RFIC_5GHZ);
+		}
+		else
+		{
+			/* Zero wait(InservMonitor)->detected radar->uniform Ch is Non-DFS Ch */
+			MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("[%s][ZeroWait]AP start on NonDFS CH\n",__FUNCTION__));
+            
+			//Disable DFS zero wait support  for repeater mode dynamic enable
+#ifdef MAC_REPEATER_SUPPORT
+			if (pAd->ApCfg.bMACRepeaterEn)
+			{
+				BgndScanCtrl->DfsZeroWaitSupport = FALSE;
+				UPDATE_MT_ZEROWAIT_DFS_Support(pAd, FALSE);               
+			}
+#endif/*MAC_REPEATER_SUPPORT */			
+			UPDATE_MT_ZEROWAIT_DFS_STATE(pAd, DFS_IDLE);
+			pAd->Dot11_H.RDMode = RD_NORMAL_MODE; 
+			APStopByRf(pAd, RFIC_5GHZ);    
+			if(DfsStopWifiCheck(pAd))
+			{
+				MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s] Stop AP Startup\n",__FUNCTION__));
+				return 0;  
+			}
+			APStartUpByRf(pAd, RFIC_5GHZ);
+		}
+	}
+	else
+#endif /* MT_DFS_SUPPORT && BACKGROUND_SCAN_SUPPORT*/	        
+	{
+		/* Normal DFS */
+		pAd->Dot11_H.RDMode = RD_SILENCE_MODE;	
+		APStopByRf(pAd, RFIC_5GHZ);
+		if(DfsStopWifiCheck(pAd))
+		{
+			MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s] Stop AP Startup\n",__FUNCTION__));
+			return 0;  
+		}
+		APStartUpByRf(pAd, RFIC_5GHZ);	
+#ifdef MT_DFS_SUPPORT
+		if (pAd->CommonCfg.dbdc_mode)
+		{
+			MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s] SetDfsTxStart\n", __FUNCTION__));
+
+			MtCmdSetDfsTxStart(pAd, DBDC_BAND1);
+		}
+		else
+		{
+			MtCmdSetDfsTxStart(pAd, DBDC_BAND0);
+		}
+		DfsSetClass2DeauthDisable(pAd, FALSE);
+#endif		
+	} 
 
 #ifdef MT_DFS_SUPPORT	
-	if (pAd->CommonCfg.dbdc_mode)
+	if (IS_SUPPORT_MT_ZEROWAIT_DFS(pAd) &&
+	(CHK_MT_ZEROWAIT_DFS_STATE(pAd, DFS_CAC) ||
+	CHK_MT_ZEROWAIT_DFS_STATE(pAd, DFS_IDLE)))
 	{
-		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("Dot11HCntDownTimeoutAction. SetDfsTxStart\n"));
-
-		MtCmdSetDfsTxStart(pAd, BAND1);
-	}	
-	else
-		MtCmdSetDfsTxStart(pAd, BAND0);
+	        
+		/* DFS zero wait - Previous state is InServMontor need to recover TX queues and disable zero handoff  */
+		// 1.Dfs(Inserv) -> Radar detected -> Uniform Ch is Non-DFS Ch (Idle_o)
+		// 2.Dfs(Inserv) -> Radar detected -> Uniform Ch is DFS Ch (CAC_o)
+		// 3.Dfs(CAC)    -> set DFS CH -> ZeroWait Start (CAC_x)
+		// 4.Dfs(Idle/Inserv) -> set DFS CH -> ZeroWait Start (CAC_x)            
+		// 5.DFS(Idle/Inserv) -> set Non-DFS CH (Idle_x) 
+            
+#ifdef BACKGROUND_SCAN_SUPPORT             
+		if (!BgndScanCtrl->RadarDetected && IS_SUPPORT_MT_ZEROWAIT_DFS(pAd)) //New add 2016/03/03
+		{
+			MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s]Bypass ZeroWait case3~5 to do DfsTxStart\n", __FUNCTION__));
+		}
+		else
+#endif /* BACKGROUND_SCAN_SUPPORT */
+		{
+			if (IS_SUPPORT_MT_ZEROWAIT_DFS(pAd))
+			{
+#ifdef BACKGROUND_SCAN_SUPPORT                
+				BgndScanCtrl->RadarDetected = FALSE;
 #endif
+			}
     
-}
-
-
-/*
-*
-*/
-VOID ApDot11HMlmeInit(RTMP_ADAPTER *pAd)
-{
-	DOT11_H *dot_11h = &pAd->Dot11_H;
-	
-	StateMachineInit(&dot_11h->Dot11HState, (STATE_MACHINE_FUNC *)dot_11h->Dot11HStateFunc,
-		RD_MAX_STATE, RD_MAX_MSG, (STATE_MACHINE_FUNC)Drop, RD_NORMAL_MODE, RD_MACHINE_MSG_BASE);
-	StateMachineSetAction(&dot_11h->Dot11HState, RD_SWITCHING_MODE,RD_CSA_CNT_DOWN_TIMEOUT_MSG, (STATE_MACHINE_FUNC)Dot11HCntDownTimeoutAction);
+			MtCmdSetDfsTxStart(pAd, DBDC_BAND0);
+			MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s]Do SetDfsTxStart\n", __FUNCTION__));
+		}
+	}
+	else
+	{
+		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s]ZeroWait don't SetDfsTxStart(State=%d) \n", 
+							__FUNCTION__,
+							pAd->CommonCfg.DfsParameter.ZeroWaitDfsState));    
+	}
+#endif /* MT_DFS_SUPPORT */    
+	return 0;
 }
 
 #endif /* CONFIG_AP_SUPPORT */

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
     Who       When            What
     ---------------------------------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 #ifdef CARRIER_DETECTION_SUPPORT
@@ -754,8 +756,10 @@ VOID CarrierDetectionStop(IN PRTMP_ADAPTER	pAd)
 static VOID ToneRadarProgram(PRTMP_ADAPTER pAd)
 {
 	ULONG threshold;
+	struct wifi_dev *wdev = get_default_wdev(pAd);
+	CHAR bw = HcGetBw(pAd,wdev);
 	/* if wireless mode is 20Mhz mode, then the threshold should div by 2 */
-	if (pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_20)
+	if (bw  == BW_20)
 		threshold = pAd->CommonCfg.CarrierDetect.threshold >> 1;
 	else
 		threshold = pAd->CommonCfg.CarrierDetect.threshold;

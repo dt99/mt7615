@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -23,7 +24,7 @@
 	Who 		When			What
 	--------	----------		----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 /** 
  * @addtogroup wifi_dev_system
  * @{
@@ -34,7 +35,7 @@
 
 #include "rt_config.h"
 
-BOOLEAN check_if_fragment(RTMP_ADAPTER *pAd, PNDIS_PACKET pPacket)
+BOOLEAN check_if_fragment(struct wifi_dev *wdev, PNDIS_PACKET pPacket)
 {
 	PACKET_INFO pkt_info;
 	UCHAR *src_buf_va;
@@ -43,7 +44,8 @@ BOOLEAN check_if_fragment(RTMP_ADAPTER *pAd, PNDIS_PACKET pPacket)
 	RTMP_QueryPacketInfo(pPacket, &pkt_info, &src_buf_va, &src_buf_len);
 	
 	pkt_len = pkt_info.TotalPacketLength - LENGTH_802_3 + LENGTH_802_1_H;
-	frag_sz = (pAd->CommonCfg.FragmentThreshold) - LENGTH_802_11 - LENGTH_CRC;
+	frag_sz = wlan_operate_get_frag_thld(wdev);
+	frag_sz = frag_sz - LENGTH_802_11 - LENGTH_CRC;
 	
 	if (pkt_len < frag_sz)
 		return FALSE;	
@@ -85,9 +87,7 @@ INT wdev_tx_pkts(NDIS_HANDLE dev_hnd, PPNDIS_PACKET pkt_list, UINT pkt_cnt, stru
 	{
 		pPacket = pkt_list[Index];
 
-   		if (RTMP_TEST_FLAG(pAd, (fRTMP_ADAPTER_HALT_IN_PROGRESS |
-								fRTMP_ADAPTER_RADIO_OFF |
-								fRTMP_ADAPTER_BSS_SCAN_IN_PROGRESS))
+   		if (RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_HALT_IN_PROGRESS)
 					|| !RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_SYSEM_READY))
 		{
 			/* Drop send request since hardware is in reset state */
@@ -115,7 +115,7 @@ INT wdev_tx_pkts(NDIS_HANDLE dev_hnd, PPNDIS_PACKET pkt_list, UINT pkt_cnt, stru
 		}
 #endif /* CONFIG_FPGA_MODE */
 
-		if (((wdev->allow_data_tx == TRUE) 
+		if (((wdev->forbid_data_tx == 0)
 #ifdef CONFIG_FPGA_MODE
 			|| (force_tx == TRUE)
 #endif /* CONFIG_FPGA_MODE */
@@ -170,9 +170,9 @@ INT wdev_tx_pkts(NDIS_HANDLE dev_hnd, PPNDIS_PACKET pkt_list, UINT pkt_cnt, stru
 			{
 				unsigned long flags;
 		
-				RTMP_INT_LOCK(&pAd->page_lock, flags);
+				RTMP_IRQ_LOCK(&pAd->page_lock, flags);
 				ra_sw_nat_hook_tx(pPacket);
-				RTMP_INT_UNLOCK(&pAd->page_lock, flags);
+				RTMP_IRQ_UNLOCK(&pAd->page_lock, flags);
 			}
 #endif
 #endif /* CONFIG_RAETH */			
@@ -181,12 +181,29 @@ INT wdev_tx_pkts(NDIS_HANDLE dev_hnd, PPNDIS_PACKET pkt_list, UINT pkt_cnt, stru
 
 #ifdef CUT_THROUGH
 #ifdef CUT_THROUGH_FULL_OFFLOAD
-			if (wdev->tx_pkt_ct_handle && !check_if_fragment(pAd, pPacket))
+			if (wdev->tx_pkt_ct_handle && !check_if_fragment(wdev, pPacket))
 			{
 				INT32 Ret = 0;
 				UCHAR QueIdx = 0, UserPriority = QID_AC_BE;
 				STA_TR_ENTRY *tr_entry = &pAd->MacTab.tr_entry[wcid];
 				RTMP_SET_PACKET_WCID(pPacket, wcid);
+
+#ifdef RT_CFG80211_SUPPORT			
+				if(RTMP_CFG80211_HOSTAPD_ON(pAd))
+				{
+					UCHAR *pSrcBuf = GET_OS_PKT_DATAPTR(pPacket);
+					UINT16 TypeLen = 0;
+					if(pSrcBuf)
+					{
+						TypeLen = (pSrcBuf[12] << 8) | pSrcBuf[13];
+						if(TypeLen == ETH_TYPE_EAPOL)
+						{
+							MTWF_LOG(DBG_CAT_SEC, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+								("%s, %u send EAPOL from hostapd\n", __FUNCTION__, __LINE__));
+						}
+					}
+				}
+#endif /* RT_CFG80211_SUPPORT */
 
 				if (!pAd->chipCap.BATriggerOffload)
 				{
@@ -207,6 +224,9 @@ INT wdev_tx_pkts(NDIS_HANDLE dev_hnd, PPNDIS_PACKET pkt_list, UINT pkt_cnt, stru
 #ifdef RTMP_UDMA_SUPPORT
 #endif /*RTMP_UDMA_SUPPORT*/
 
+#ifdef REDUCE_TCP_ACK_SUPPORT
+				if (ReduceTcpAck(pAd, pPacket) == FALSE)
+#endif
 				{
 					Ret = wdev->tx_pkt_ct_handle(pAd, pPacket, QueIdx, UserPriority);
 				}
@@ -221,6 +241,9 @@ INT wdev_tx_pkts(NDIS_HANDLE dev_hnd, PPNDIS_PACKET pkt_list, UINT pkt_cnt, stru
 				RTMP_SET_PACKET_WCID(pPacket, wcid);
 				NDIS_SET_PACKET_STATUS(pPacket, NDIS_STATUS_PENDING);
 				pAd->RalinkCounters.PendingNdisPacketCount++;
+#ifdef REDUCE_TCP_ACK_SUPPORT
+				if (ReduceTcpAck(pAd, pPacket) == FALSE)
+#endif
 				{
 					wdev->tx_pkt_handle(pAd, pPacket);
 				}
@@ -239,6 +262,37 @@ INT wdev_tx_pkts(NDIS_HANDLE dev_hnd, PPNDIS_PACKET pkt_list, UINT pkt_cnt, stru
 
 	return 0;
 }
+
+#ifdef TX_AGG_ADJUST_WKR
+BOOLEAN tx_check_for_agg_adjust(RTMP_ADAPTER *pAd, MAC_TABLE_ENTRY *pEntry)
+{
+        BOOLEAN check_result = FALSE;
+	BOOLEAN support_four_stream = FALSE;
+
+	if (pAd->TxAggAdjsut == FALSE)
+		return FALSE;
+
+	if (!pEntry)
+		return FALSE;
+
+	if (pEntry->vendor_ie.is_rlt == TRUE ||
+		pEntry->vendor_ie.is_mtk == TRUE){
+		return FALSE;		
+	}
+
+	if ((pEntry->SupportHTMCS & 0xff000000) != 0 )
+		support_four_stream = TRUE;
+	
+	if (pEntry->SupportVHTMCS4SS != 0 )
+		support_four_stream = TRUE;
+
+	if (support_four_stream == FALSE)
+		check_result = TRUE;
+
+
+	return check_result;
+}
+#endif /* TX_AGG_ADJUST_WKR */
 
 /** @} */
 /** @} */

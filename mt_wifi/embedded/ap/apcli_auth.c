@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -24,7 +25,7 @@
 	Who			When			What
 	--------	----------		-------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #ifdef APCLI_SUPPORT
 
 #include "rt_config.h"
@@ -543,17 +544,20 @@ static VOID ApCliPeerDeauthAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 
 	if (PeerDeauthSanity(pAd, Elem->Msg, Elem->MsgLen, Addr1, Addr2, Addr3, &Reason))
 	{
+		if (MAC_ADDR_EQUAL(pAd->ApCfg.ApCliTab[ifIndex].MlmeAux.Bssid, Addr2))
+		{
 
-		MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("APCLI AUTH_RSP - receive DE-AUTH from our AP\n"));
-		*pCurrState = APCLI_AUTH_REQ_IDLE;
+			MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_TRACE, ("APCLI AUTH_RSP - receive DE-AUTH from our AP\n"));
+			*pCurrState = APCLI_AUTH_REQ_IDLE;
 
 
 #ifdef MAC_REPEATER_SUPPORT
-		ifIndex = (USHORT)(Elem->Priv);
+			ifIndex = (USHORT)(Elem->Priv);
 #endif /* MAC_REPEATER_SUPPORT */
 
-		MlmeEnqueue(pAd, APCLI_CTRL_STATE_MACHINE, APCLI_CTRL_PEER_DISCONNECT_REQ, 0, NULL, ifIndex);
-		RTMP_MLME_HANDLER(pAd);
+			MlmeEnqueue(pAd, APCLI_CTRL_STATE_MACHINE, APCLI_CTRL_PEER_DISCONNECT_REQ, 0, NULL, ifIndex);
+			RTMP_MLME_HANDLER(pAd);
+		}
 	}
 	else
 	{

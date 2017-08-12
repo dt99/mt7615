@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
 	--------	----------		----------------------------------------------
 	Albert		2008-4-3      	Supoort WAPI protocol
 */
+#endif /* MTK_LICENSE */
 /*#include <linux/stdio.h> */
 /*#include <linux/stdlib.h> */
 /*#include <linux/string.h> */
@@ -909,135 +911,132 @@ VOID RTMPWapiMskRekeyPeriodicExec(
 #endif /* CONFIG_AP_SUPPORT */
 }
 
-
-VOID RTMPInitWapiRekeyTimerAction(
+VOID RTMPInitWapiRekeyTimerByWdev(
 	IN PRTMP_ADAPTER 	pAd,
-	IN PMAC_TABLE_ENTRY	pEntry)
+	IN struct wifi_dev	*wdev)
 {
 #ifdef CONFIG_AP_SUPPORT
 	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
 	{
-
-	if (pEntry)
-	{
-		MTWF_LOG(DBG_CAT_SEC, CATSEC_WAPI, DBG_LVL_TRACE, (" RTMPInitWapiRekeyTimerAction : WAPI USK rekey timer (wcid-%d) \n", pEntry->wcid));
-		RTMPInitTimer(pAd, &pEntry->SecConfig.WapiUskRekeyTimer, GET_TIMER_FUNCTION(RTMPWapiUskRekeyPeriodicExec), pEntry, TRUE);
-		pEntry->SecConfig.WapiUskRekeyTimerRunning = FALSE;
-	}
-	else
-	{
-	    UINT8 apidx = 0;
-
-	    for (apidx = 0; apidx < pAd->ApCfg.BssidNum; apidx++)
-	    {	
-	        struct wifi_dev *wdev = &pAd->ApCfg.MBSSID[apidx].wdev;
 	        struct _SECURITY_CONFIG *pSecConfig = &wdev->SecConfig;
 	        if (IS_CIPHER_WPI_SMS4(pSecConfig->GroupCipher))
 	        {
 	            RTMPInitTimer(pAd, &pSecConfig->WapiMskRekeyTimer, GET_TIMER_FUNCTION(RTMPWapiMskRekeyPeriodicExec), pAd, TRUE);
 	            pSecConfig->WapiMskRekeyTimerRunning = FALSE;
 	        }
-	    }
-	}
 	}
 #endif /* CONFIG_AP_SUPPORT */
 }
 
 
-VOID RTMPStartWapiRekeyTimerAction(
+VOID RTMPInitWapiRekeyTimerByMacEntry(
 	IN PRTMP_ADAPTER 	pAd,
-	IN PMAC_TABLE_ENTRY pEntry)
-{	
+	IN PMAC_TABLE_ENTRY	pEntry) 
+{
 #ifdef CONFIG_AP_SUPPORT
 	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
 	{
+		MTWF_LOG(DBG_CAT_SEC, CATSEC_WAPI, DBG_LVL_TRACE, 
+			(" %s : WAPI USK rekey timer (wcid-%d) \n",__FUNCTION__, pEntry->wcid));
+		RTMPInitTimer(pAd, &pEntry->SecConfig.WapiUskRekeyTimer, GET_TIMER_FUNCTION(RTMPWapiUskRekeyPeriodicExec), pEntry, TRUE);
+		pEntry->SecConfig.WapiUskRekeyTimerRunning = FALSE;
+	}
+#endif
+}
 
-	if (pEntry)
+VOID RTMPStartWapiRekeyTimerByWdev(
+	IN PRTMP_ADAPTER *pAd,
+	IN struct wifi_dev *wdev)
+{
+#ifdef CONFIG_AP_SUPPORT
+	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
 	{
-		if ((pEntry->SecConfig.wapi_usk_rekey_method != REKEY_METHOD_DISABLE) && 
-			(pEntry->SecConfig.wapi_usk_rekey_threshold > 0))
+		struct _SECURITY_CONFIG *pSecConfig = &wdev->SecConfig;
+
+		if (IS_CIPHER_WPI_SMS4(pSecConfig->GroupCipher))
 		{
-			/* Regularly check the timer */
+			/* Group rekey related */
+			if ((pSecConfig->wapi_msk_rekey_method != REKEY_METHOD_DISABLE) 
+				&& (pSecConfig->wapi_msk_rekey_threshold > 0) 
+					&& (pSecConfig->WapiMskRekeyTimerRunning == FALSE)) 
+			{
+				RTMPModTimer(&pSecConfig->WapiMskRekeyTimer, WAPI_KEY_UPDATE_EXEC_INTV);
+				
+				pSecConfig->WapiMskRekeyTimerRunning = TRUE;
+				pSecConfig->wapi_msk_rekey_cnt = 0;
+				MTWF_LOG(DBG_CAT_SEC, CATSEC_WAPI, DBG_LVL_TRACE, (" %s : WAPI MSK rekey timer is started \n", __FUNCTION__));
+			}
+		}
+	}
+#endif /* CONFIG_AP_SUPPORT */
+
+}
+
+VOID RTMPStartWapiRekeyTimerByMacEntry( 
+	IN PRTMP_ADAPTER *pAd, 
+	IN PMAC_TABLE_ENTRY pEntry)
+{
+#ifdef CONFIG_AP_SUPPORT
+	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
+	{
+		if ((pEntry->SecConfig.wapi_usk_rekey_method != REKEY_METHOD_DISABLE) 
+			&& (pEntry->SecConfig.wapi_usk_rekey_threshold > 0))
+		{
+		/* Regularly check the timer */
 			if (pEntry->SecConfig.WapiUskRekeyTimerRunning == FALSE)
 			{
 				RTMPSetTimer(&pEntry->SecConfig.WapiUskRekeyTimer, WAPI_KEY_UPDATE_EXEC_INTV);
 
 				pEntry->SecConfig.WapiUskRekeyTimerRunning = TRUE;
 				pEntry->SecConfig.wapi_usk_rekey_cnt = 0;
-				MTWF_LOG(DBG_CAT_SEC, CATSEC_WAPI, DBG_LVL_TRACE, (" RTMPStartWapiRekeyTimerAction : WAPI USK rekey timer is started (%d) \n", pEntry->SecConfig.wapi_usk_rekey_threshold));
+				MTWF_LOG(DBG_CAT_SEC, CATSEC_WAPI, DBG_LVL_TRACE, 
+					(" %s : WAPI USK rekey timer is started (%d) \n",__FUNCTION__ , pEntry->SecConfig.wapi_usk_rekey_threshold));
 			}							
 		}
-	}
-	else
-	{
-		UINT8 apidx = 0;
-		
-		for (apidx = 0; apidx < pAd->ApCfg.BssidNum; apidx++)
-		{
-			struct wifi_dev *wdev = &pAd->ApCfg.MBSSID[apidx].wdev;
-			struct _SECURITY_CONFIG *pSecConfig = &wdev->SecConfig;
-		
-			if (IS_CIPHER_WPI_SMS4(pSecConfig->GroupCipher))
-			{
-					/* Group rekey related */
-					if ((pSecConfig->wapi_msk_rekey_method != REKEY_METHOD_DISABLE) 
-						&& (pSecConfig->wapi_msk_rekey_threshold > 0) 
-							&& (pSecConfig->WapiMskRekeyTimerRunning == FALSE)) 
-					{
-						RTMPSetTimer(&pSecConfig->WapiMskRekeyTimer, WAPI_KEY_UPDATE_EXEC_INTV);
-						
-						pSecConfig->WapiMskRekeyTimerRunning = TRUE;
-						pSecConfig->wapi_msk_rekey_cnt = 0;
-						MTWF_LOG(DBG_CAT_SEC, CATSEC_WAPI, DBG_LVL_TRACE, (" %s : WAPI MSK rekey timer is started \n", __FUNCTION__));
-					}
-			}
-		}
-	}
 	}
 #endif /* CONFIG_AP_SUPPORT */
 }
 
-VOID RTMPCancelWapiRekeyTimerAction(
-	IN PRTMP_ADAPTER 	pAd,
+VOID  RTMPCancelWapiRekeyTimerByWdev(
+	IN PRTMP_ADAPTER *pAd,
+	IN struct wifi_dev *wdev)
+{
+#ifdef CONFIG_AP_SUPPORT
+	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
+	{
+		struct _SECURITY_CONFIG *pSecConfig = &wdev->SecConfig;
+
+		if (pSecConfig->WapiMskRekeyTimerRunning == TRUE)
+		{
+			BOOLEAN Cancelled;
+
+			RTMPCancelTimer(&pSecConfig->WapiMskRekeyTimer, &Cancelled);
+			pSecConfig->wapi_msk_rekey_cnt = 0;
+			pSecConfig->WapiMskRekeyTimerRunning = FALSE;
+		}
+	}
+#endif /* CONFIG_AP_SUPPORT */
+
+}
+
+VOID RTMPCancelWapiRekeyTimerByMacEntry( 
+	IN PRTMP_ADAPTER *pAd, 
 	IN PMAC_TABLE_ENTRY pEntry)
 {
 #ifdef CONFIG_AP_SUPPORT
 	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
 	{
-	if(pEntry)
-	{
 		if (pEntry->SecConfig.WapiUskRekeyTimerRunning == TRUE)
 		{
 			BOOLEAN	Cancelled;
-
 			RTMPCancelTimer(&pEntry->SecConfig.WapiUskRekeyTimer, &Cancelled);
 			pEntry->SecConfig.wapi_usk_rekey_cnt = 0;
 			pEntry->SecConfig.WapiUskRekeyTimerRunning = FALSE;
 		}
 	}
-	else
-	{
-	    UINT8 apidx = 0;
-
-	    for (apidx = 0; apidx < pAd->ApCfg.BssidNum; apidx++)
-	    {	
-	        struct wifi_dev *wdev = &pAd->ApCfg.MBSSID[apidx].wdev;
-	        struct _SECURITY_CONFIG *pSecConfig = &wdev->SecConfig;
-
-	        if (pSecConfig->WapiMskRekeyTimerRunning == TRUE)
-	        {
-	            BOOLEAN Cancelled;
-			
-	            RTMPCancelTimer(&pSecConfig->WapiMskRekeyTimer, &Cancelled);
-	            pSecConfig->wapi_msk_rekey_cnt = 0;
-	            pSecConfig->WapiMskRekeyTimerRunning = FALSE;
-	        }
-	    }
-	}
-
-	}
 #endif /* CONFIG_AP_SUPPORT */
 }
+
 
 /*
 	========================================================================

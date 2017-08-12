@@ -77,6 +77,69 @@ PLATFORM = PC
 #PLATFORM = INTELP6
 #PLATFORM = MT7620
 #PLATFORM = MT7621
+ifeq ($(PLATFORM),INTELP6)
+ifndef TARG_ARCH
+    export 	TARG_ARCH=intel_gen3-linux
+endif
+ifndef BUILD_ROOT
+    export BUILD_ROOT=$(PWD)/../../..
+endif
+ifndef BUILD_DEST
+    export BUILD_DEST=$(BUILD_ROOT)/$(BUILD_DIR)/
+endif
+ifndef HOST_CC
+    export HOST_CC=gcc
+endif
+
+ifeq ($(TARG_ARCH),intel_gen3-linux)
+    BUILD_DIR=build_i686/staging_dir
+    HOST=LINUX
+    TARGET=LINUX
+    BUILD=LINUX
+    CROSS_COMPILE=$(BUILD_DEST)/bin/i686-cm-linux-
+endif
+export HOST 
+export TARGET
+export BUILD 
+export CROSS_COMPILE
+ifdef TARGETCC
+    export CC=$(TARGETCC)
+    export LD=$(TARGETLD)
+    export AR=$(TARGETAR)
+    export AR_RC=$(TARGETAR) rc
+    export STRIP=$(TARGETSTRIP)
+    export CXX=$(TARGETCXX)
+    export RANLIB=$(TARGETRANLIB)
+    export STRINGS=$(TARGETSTRINGS)
+    export M4=$(TARGETM4)
+    export BISON=$(TARGETBISON)
+    export YACC=$(TARGETYACC)
+else
+    export CC=$(CROSS_COMPILE)gcc
+    export LD=$(CROSS_COMPILE)ld
+    export AR=$(CROSS_COMPILE)ar
+    export AR_RC=$(CROSS_COMPILE)ar rc
+    export STRIP=$(CROSS_COMPILE)strip
+    export CXX=$(CROSS_COMPILE)g++
+    export RANLIB=$(CROSS_COMPILE)ranlib
+    export STRINGS=$(CROSS_COMPILE)strings
+    export M4=$(CROSS_COMPILE)m4
+    export BISON=$(CROSS_COMPILE)bison
+    export YACC=$(CROSS_COMPILE)yacc
+endif
+ifndef TARGETDEST
+        export TARGETDEST = $(BUILD_ROOT)/project_build_i686/IntelCE/
+endif
+ifndef FSROOT
+        export FSROOT = $(TARGETDEST)/root/
+endif
+ifndef KERNEL_VER
+    export KERNEL_VER=linux-2.6.28
+endif
+ifndef KERNEL_DIR
+    export KERNEL_DIR=$(BUILD_DEST)/kernel/$(KERNEL_VER)
+endif
+endif
 
 #APSOC
 ifeq ($(MODULE),3050)
@@ -220,8 +283,8 @@ CROSS_COMPILE =
 endif
 
 ifeq ($(PLATFORM),INTELP6)
-LINUX_SRC = /tftpboot/IntelCE-20.0.11052.243193/project_build_i686/IntelCE/kernel-20.0.11024.238456/linux-2.6.35
-CROSS_COMPILE = /tftpboot/IntelCE-20.0.11052.243193/build_i686/i686-linux-elf/bin/i686-cm-linux-
+LINUX_SRC = $(KERNEL_DIR)
+CROSS_COMPILE = 
 endif
 
 ifeq ($(PLATFORM),IXP)
@@ -372,6 +435,10 @@ else
 all: $(TARGET)
 endif 
 
+build_sku_tables:
+	$(MAKE) -C $(RT28xx_DIR)/txpwr
+	$(RT28xx_DIR)/txpwr/dat2h
+
 build_tools:
 	$(MAKE) -C tools
 	$(RT28xx_EMBEDDED_DIR)/tools/bin2h
@@ -482,6 +549,12 @@ ifeq ($(TARGET), LINUX)
 	cp -f $(RT28xx_OS_DIR)/linux/Makefile.clean $(RT28xx_OS_DIR)/linux/Makefile
 	$(MAKE) -C $(RT28xx_OS_DIR)/linux clean
 	rm -rf $(RT28xx_OS_DIR)/linux/Makefile
+ifeq ($(PLATFORM),INTELP6)
+	rm -rf $(BUILD_DEST)/etc/Wireless/7615AP/
+	rm -rf $(FSROOT)/etc/Wireless/7615AP/
+	rm -rf $(BUILD_DEST)/lib/modules/wifi/mt7615e_ap.ko
+	rm -rf $(FSROOT)/lib/modules/wifi/mt7615e_ap.ko
+endif
 endif	
 ifeq ($(TARGET), UCOS)
 	$(MAKE) -C $(RT28xx_OS_DIR)/ucos clean MODE=$(RT28xx_MODE)

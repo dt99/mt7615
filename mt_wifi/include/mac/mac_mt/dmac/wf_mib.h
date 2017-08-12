@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #ifndef __WF_MIB_H__
 #define __WF_MIB_H__
@@ -63,6 +64,11 @@
 #define MIB_M0SDR35 (WF_MIB_BASE + 0x94)
 #define MIB_M0SDR36      (WF_MIB_BASE + 0x98) /* 820FD098 */
 #define MIB_M0SDR37      (WF_MIB_BASE + 0x9c) /* 820FD09c */
+#ifdef CUSTOMER_RSG_FEATURE
+#define MIB_M0SDR38      (WF_MIB_BASE + 0xd0) /* 820FD0d0 */
+#define MIB_M0SDR39      (WF_MIB_BASE + 0xd4) /* 820FD0d4 */
+#define MIB_M0SDR40      (WF_MIB_BASE + 0xd8) /* 820FD0d8 */
+#endif
 
 #define MIB_M0DR0	(WF_MIB_BASE + 0xa0)
 #define MIB_M0DR1	(WF_MIB_BASE + 0xa4)

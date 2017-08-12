@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -26,6 +27,7 @@
 	YF Luo		06-28-2012		Init version
 		        12-26-2013		Integration of NXTC
 */
+#endif /* MTK_LICENSE */
 #define RTMP_MODULE_OS
 
 #include "rt_config.h"
@@ -270,7 +272,7 @@ static INT CFG80211_VirtualIF_Open(PNET_DEV dev_p)
 	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s: ===> %d,%s\n", __FUNCTION__, dev_p->ifindex,
 						RTMP_OS_NETDEV_GET_DEVNAME(dev_p)));
 
-	//if (VIRTUAL_IF_UP(pAd) != 0)
+	//if (VIRTUAL_IF_UP(pAd, dev_p) != 0)
 	//	return -1;
 
 	/* increase MODULE use count */
@@ -419,7 +421,7 @@ static INT CFG80211_VirtualIF_Ioctl(
 	pAd = RTMP_OS_NETDEV_GET_PRIV(dev_p);
 	ASSERT(pAd);
 
-	if (!RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_INTERRUPT_IN_USE))
+	if (RTMP_DRIVER_IOCTL_SANITY_CHECK(pAd, NULL) != NDIS_STATUS_SUCCESS)
 		return -ENETDOWN;
 
 	MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s --->\n", __FUNCTION__));
@@ -438,28 +440,32 @@ VOID RTMP_CFG80211_VirtualIF_Init(
 	PNET_DEV	new_dev_p;
 	APCLI_STRUCT	*pApCliEntry;
 	struct wifi_dev *wdev;
+	struct wifi_dev *wdev_main = &pAd->ApCfg.MBSSID[MAIN_MBSSID].wdev;
 #ifdef RT_CFG80211_P2P_SUPPORT
 	UINT apidx = CFG_GO_BSSID_IDX;
+	CHAR tr_tb_idx = MAX_LEN_OF_MAC_TABLE + apidx;
+	UINT32 Inf = INT_P2P;
 #else
 	UINT apidx = MAIN_MBSSID;
+	UINT32 Inf = INT_MBSSID;
 #endif /*RT_CFG80211_P2P_SUPPORT*/
 #ifdef MT_MAC
 	INT32 Value;
     UCHAR MacByte = 0;
 #endif /* MT_MAC */
-	CHAR tr_tb_idx = MAX_LEN_OF_MAC_TABLE + apidx;
+	
 	CHAR preIfName[12];
 	UINT devNameLen = strlen(pDevName);
 	UINT preIfIndex = pDevName[devNameLen-1] - 48;
 	CFG80211_CB *p80211CB = pAd->pCfg80211_CB;
 	struct wireless_dev *pWdev;
-	UINT32 MC_RowID = 0, IoctlIF = 0, Inf = INT_P2P;
+	UINT32 MC_RowID = 0, IoctlIF = 0;
 	memset(preIfName, 0, sizeof(preIfName));
 	NdisCopyMemory(preIfName, pDevName, devNameLen-1);
 
 	pNetDevOps=&netDevHook;
 
-	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s ---> (%s, %s, %d)\n", __FUNCTION__, pDevName, preIfName, preIfIndex));
+	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s ---> (%s, %s, %d)\n", __FUNCTION__, pDevName, preIfName, preIfIndex));
 
 	/* init operation functions and flags */
 	os_zero_mem(&netDevHook, sizeof(netDevHook));
@@ -482,7 +488,7 @@ VOID RTMP_CFG80211_VirtualIF_Init(
 	}
 	else
 	{
-		MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("Register CFG80211 I/F (%s)\n", RTMP_OS_NETDEV_GET_DEVNAME(new_dev_p)));
+		MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("Register CFG80211 I/F (%s)\n", RTMP_OS_NETDEV_GET_DEVNAME(new_dev_p)));
 	}
 
 	new_dev_p->destructor =  free_netdev;
@@ -492,34 +498,36 @@ VOID RTMP_CFG80211_VirtualIF_Init(
 	os_move_mem(&pNetDevOps->devAddr[0], &pAd->CurrentAddress[0], MAC_ADDR_LEN);
 
 #ifdef MT_MAC
+	
+	if(!RTMP_CFG80211_HOSTAPD_ON(pAd)) /* hostapd will assign hw ether addr from ifconfig */
+	{
+	    //TODO: shall we make choosing which byte to be selectable???
+	    Value = 0x00000000L;
+	    RTMP_IO_READ32(pAd, LPON_BTEIR, &Value);//read BTEIR bit[31:29] for determine to choose which byte to extend BSSID mac address.
+	    Value = Value | (0x2 << 29);//Note: Carter, make default will use byte4 bit[31:28] to extend Mac Address
+	    RTMP_IO_WRITE32(pAd, LPON_BTEIR, Value);
+	    MacByte = Value >> 29;
 
-    //TODO: shall we make choosing which byte to be selectable???
-    Value = 0x00000000L;
-    RTMP_IO_READ32(pAd, LPON_BTEIR, &Value);//read BTEIR bit[31:29] for determine to choose which byte to extend BSSID mac address.
-    Value = Value | (0x2 << 29);//Note: Carter, make default will use byte4 bit[31:28] to extend Mac Address
-    RTMP_IO_WRITE32(pAd, LPON_BTEIR, Value);
-    MacByte = Value >> 29;
+		pNetDevOps->devAddr[0] |= 0x2;
 
-	pNetDevOps->devAddr[0] |= 0x2;
-
-    switch (MacByte) {
-	    case 0x1: /* choose bit[23:20]*/
-	            pNetDevOps->devAddr[2] = (pNetDevOps->devAddr[2] = pNetDevOps->devAddr[2] & 0x0f);
-	            break;
-	    case 0x2: /* choose bit[31:28]*/
-	            pNetDevOps->devAddr[3] = (pNetDevOps->devAddr[3] = pNetDevOps->devAddr[3] & 0x0f);
-	            break;
-	    case 0x3: /* choose bit[39:36]*/
-	            pNetDevOps->devAddr[4] = (pNetDevOps->devAddr[4] = pNetDevOps->devAddr[4] & 0x0f);
-	            break;
-	    case 0x4: /* choose bit [47:44]*/
-	            pNetDevOps->devAddr[5] = (pNetDevOps->devAddr[5] = pNetDevOps->devAddr[5] & 0x0f);
-	            break;
-	    default: /* choose bit[15:12]*/
-	            pNetDevOps->devAddr[1] = (pNetDevOps->devAddr[1] = pNetDevOps->devAddr[1] & 0x0f);
-	            break;
-    }
-
+	    switch (MacByte) {
+		    case 0x1: /* choose bit[23:20]*/
+					pNetDevOps->devAddr[2] = pNetDevOps->devAddr[2] & 0x0f;
+		            break;
+		    case 0x2: /* choose bit[31:28]*/
+		            pNetDevOps->devAddr[3] = pNetDevOps->devAddr[3] & 0x0f;
+		            break;
+		    case 0x3: /* choose bit[39:36]*/
+		            pNetDevOps->devAddr[4] = pNetDevOps->devAddr[4] & 0x0f;
+		            break;
+		    case 0x4: /* choose bit [47:44]*/
+		            pNetDevOps->devAddr[5] = pNetDevOps->devAddr[5] & 0x0f;
+		            break;
+		    default: /* choose bit[15:12]*/
+		            pNetDevOps->devAddr[1] = pNetDevOps->devAddr[1] & 0x0f;
+		            break;
+	    }
+	}
 #else
 	//CFG_TODO
 	/*
@@ -542,6 +550,7 @@ VOID RTMP_CFG80211_VirtualIF_Init(
 
 	switch (DevType)
 	{
+
 		case RT_CMD_80211_IFTYPE_P2P_GO:
 			/* Only ForceGO init from here,
 			   Nego as GO init on AddBeacon Ops.
@@ -577,7 +586,7 @@ VOID RTMP_CFG80211_VirtualIF_Init(
 			COPY_MAC_ADDR(pAd->ApCfg.MBSSID[apidx].wdev.if_addr, pNetDevOps->devAddr);
 			COPY_MAC_ADDR(pAd->ApCfg.MBSSID[apidx].wdev.bssid, pNetDevOps->devAddr);
 
-            wdev->bss_info_argument.Active = TRUE;
+			WDEV_BSS_STATE(wdev) = BSS_ACTIVE;
             wdev->bss_info_argument.u4BssInfoFeature = (BSS_INFO_OWN_MAC_FEATURE |
                                                 BSS_INFO_BASIC_FEATURE |
                                                 BSS_INFO_RF_CH_FEATURE |
@@ -585,6 +594,43 @@ VOID RTMP_CFG80211_VirtualIF_Init(
 
             AsicBssInfoUpdate(pAd, wdev->bss_info_argument);
 
+			break;
+		case RT_CMD_80211_IFTYPE_AP:			
+			pNetDevOps->priv_flags = INT_MBSSID;
+			
+			pAd->cfg80211_ctrl.isCfgInApMode = RT_CMD_80211_IFTYPE_AP;
+			apidx = preIfIndex;
+			wdev = &pAd->ApCfg.MBSSID[apidx].wdev;
+
+			/* follow main wdev settings   */
+			wdev->channel = wdev_main->channel;
+			wdev->CentralChannel = wdev_main->CentralChannel;
+			wdev->PhyMode = wdev_main->PhyMode; 
+			wdev->bw = wdev_main->bw;	
+			wdev->extcha = wdev_main->extcha;
+			/* ================= */
+			
+			wdev_init(pAd, wdev, WDEV_TYPE_AP, new_dev_p, apidx, (VOID *)&pAd->ApCfg.MBSSID[apidx], (void *)pAd);			
+			wdev_attr_update(pAd,wdev);
+			
+			wdev->bss_info_argument.OwnMacIdx = wdev->OmacIdx;
+
+			bcn_buf_init(pAd, &pAd->ApCfg.MBSSID[apidx].wdev);
+
+			RTMP_OS_NETDEV_SET_PRIV(new_dev_p, pAd);
+			RTMP_OS_NETDEV_SET_WDEV(new_dev_p, wdev);
+			if (rtmp_wdev_idx_reg(pAd, wdev) < 0)
+			{
+				MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s: Assign wdev idx for %s failed, free net device!\n",
+												__FUNCTION__,RTMP_OS_NETDEV_GET_DEVNAME(new_dev_p)));
+				RtmpOSNetDevFree(new_dev_p);
+				break;
+			}
+
+			COPY_MAC_ADDR(pAd->ApCfg.MBSSID[apidx].wdev.if_addr, pNetDevOps->devAddr);
+			COPY_MAC_ADDR(pAd->ApCfg.MBSSID[apidx].wdev.bssid, pNetDevOps->devAddr);
+
+			WifiSysApLinkUp(pAd,wdev);
 			break;
 
 		default:
@@ -625,14 +671,17 @@ VOID RTMP_CFG80211_VirtualIF_Remove(
 {
 
 	PRTMP_ADAPTER pAd = (PRTMP_ADAPTER)pAdSrc;
-	BOOLEAN isGoOn = FALSE;
+	
 	struct wifi_dev *wdev;
 #ifdef RT_CFG80211_P2P_SUPPORT
+	BOOLEAN isGoOn = FALSE;
 	UINT apidx = CFG_GO_BSSID_IDX;
 #else
-	UINT apidx = MAIN_MBSSID;
+	//UINT apidx = MAIN_MBSSID;
 #endif /*RT_CFG80211_P2P_SUPPORT*/
-
+	CHAR *pDevName = dev_p->name;
+	UINT devNameLen = strlen(pDevName);
+	UINT preIfIndex = pDevName[devNameLen-1] - 48;
 
 	if (dev_p)
 	{
@@ -660,7 +709,8 @@ VOID RTMP_CFG80211_VirtualIF_Remove(
 
 			if (pAd->Mlme.bStartScc == TRUE)
 			{
-				MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("GO remove & switch to Infra BW = %d  pAd->StaCfg[0].wdev.CentralChannel %d \n",pAd->StaCfg[0].wdev.bw,pAd->StaCfg[0].wdev.CentralChannel));
+				MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("GO remove & switch to Infra BW = %d  pAd->StaCfg[0].wdev.CentralChannel %d \n",
+					wlan_operate_get_ht_bw(&pAd->StaCfg[0].wdev),pAd->StaCfg[0].wdev.CentralChannel));
 				pAd->Mlme.bStartScc = FALSE;
 				AsicSwitchChannel(pAd, pAd->StaCfg[0].wdev.CentralChannel, FALSE);
 				AsicLockChannel(pAd, pAd->StaCfg[0].wdev.CentralChannel);
@@ -670,15 +720,14 @@ VOID RTMP_CFG80211_VirtualIF_Remove(
 
 			pwdev->channel = 0;
 			pwdev->CentralChannel= 0;
-			pwdev->bw = 0;
-			pwdev->extcha = EXTCHA_NONE;
+			wlan_operate_set_ht_bw(pwdev,HT_BW_20);
+			wlan_operate_set_ext_cha(pwdev,EXTCHA_NONE);
 
 /*after p2p cli connect , neet to change to default configure*/
-			wdev->extcha  = EXTCHA_BELOW;
-			HcUpdateExtCha(pAd,wdev->channel,wdev->extcha);
-			pAd->CommonCfg.RegTransmitSetting.field.BW = BW_40;
+			wlan_operate_set_ext_cha(wdev,EXTCHA_BELOW);
+			wlan_operate_set_ht_bw(wdev,HT_BW_40);
 			pAd->CommonCfg.HT_Disable = 0;
-			SetCommonHtVht(pAd,NULL);
+			SetCommonHtVht(pAd,wdev);
 
 
 #endif /* RT_CFG80211_P2P_MULTI_CHAN_SUPPORT */
@@ -689,7 +738,6 @@ VOID RTMP_CFG80211_VirtualIF_Remove(
 			wdev->if_dev = NULL;
 		}
 		else
-#endif /* RT_CFG80211_P2P_CONCURRENT_DEVICE */
 		if (pAd->flg_apcli_init)
 		{
 			wdev = &pAd->ApCfg.ApCliTab[MAIN_MBSSID].wdev;
@@ -705,18 +753,20 @@ VOID RTMP_CFG80211_VirtualIF_Remove(
 			}else
 			//if (pAd->Mlme.bStartScc == TRUE)
 			{
-				MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("GC remove & switch to Infra BW = %d  pAd->StaCfg[0].wdev.CentralChannel %d \n",pAd->StaCfg[0].wdev.bw,pAd->StaCfg[0].wdev.CentralChannel));
+				struct wifi_dev *p2p_dev = &pAd->StaCfg[0].wdev;
+				UCHAR ht_bw = wlan_operate_get_ht_bw(p2p_dev);
+				MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("GC remove & switch to Infra BW = %d  pAd->StaCfg[0].wdev.CentralChannel %d \n",
+					ht_bw,pAd->StaCfg[0].wdev.CentralChannel));
 				pAd->Mlme.bStartScc = FALSE;
 				AsicSwitchChannel(pAd, pAd->StaCfg[0].wdev.CentralChannel, FALSE);
 				AsicLockChannel(pAd, pAd->StaCfg[0].wdev.CentralChannel);
-				HcBbpSetBwByChannel(pAd,pAd->StaCfg[0].wdev.bw,pAd->StaCfg[0].wdev.CentralChannel)
+				HcBbpSetBwByChannel(pAd,ht_bw,pAd->StaCfg[0].wdev.CentralChannel)
 			}
 
 			wdev->CentralChannel = 0;
 			wdev->channel= 0;
-			wdev->bw = HT_BW_20;
-			wdev->extcha = EXTCHA_NONE;
-			HcUpdateExtCha(pAd,wdev->channel,wdev->extcha);
+			wlan_operate_set_ht_bw(wdev,HT_BW_20);
+			wlan_operate_set_ext_cha(wdev,EXTCHA_NONE);
 #endif /* RT_CFG80211_P2P_MULTI_CHAN_SUPPORT */
 
 			OPSTATUS_CLEAR_FLAG(pAd, fOP_AP_STATUS_MEDIA_STATE_CONNECTED);
@@ -729,8 +779,13 @@ VOID RTMP_CFG80211_VirtualIF_Remove(
 			wdev->if_dev = NULL;
 		}
 		else /* Never Opened When New Netdevice on */
-		{
+#endif /* RT_CFG80211_P2P_CONCURRENT_DEVICE */
+		{			
+			wdev = &pAd->ApCfg.MBSSID[dev_p->ifindex].wdev;
+			//cfg80211_disconnected(dev_p, 0, NULL, 0, GFP_KERNEL);
 			RtmpOSNetDevDetach(dev_p);
+			rtmp_wdev_idx_unreg(pAd, wdev);
+			wdev->if_dev = NULL;						
 		}
 
 		if (dev_p->ieee80211_ptr)

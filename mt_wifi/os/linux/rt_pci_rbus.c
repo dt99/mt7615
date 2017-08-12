@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
     Who         When            What
     --------    ----------      ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #define RTMP_MODULE_OS
 
 /*#include <rt_config.h> */

@@ -1,5 +1,6 @@
 #include "rt_config.h"
 
+#define BRCM_VENDOR_VHT_TYPE		0x04
 
 ULONG build_vendor_ie(struct _RTMP_ADAPTER *pAd, 
         struct wifi_dev *wdev, UCHAR *frame_buffer)
@@ -52,7 +53,7 @@ ULONG build_vendor_ie(struct _RTMP_ADAPTER *pAd,
         ra_ie.cap0 |= RALINK_RDG_CAP;
     }
 
-    if (pAd->chipCap.g_band_256_qam 
+    if (pAd->CommonCfg.g_band_256_qam && pAd->chipCap.g_band_256_qam 
             && WMODE_CAP(wdev->PhyMode, WMODE_GN)) {
         ra_ie.cap0 |= RALINK_256QAM_CAP;
     }
@@ -84,7 +85,7 @@ ULONG build_vendor_ie(struct _RTMP_ADAPTER *pAd,
         memcpy(&mtk_vht_ie.vht_txpwr_env, (VHT_TX_PWR_ENV *)mtk_vht_txpwr_env,
                 sizeof(VHT_TX_PWR_ENV));
 
-        if (pAd->chipCap.g_band_256_qam
+        if (pAd->CommonCfg.g_band_256_qam && pAd->chipCap.g_band_256_qam
                 && WMODE_CAP(wdev->PhyMode, WMODE_GN)) {
             mtk_ie.cap0 |= MEDIATEK_256QAM_CAP;
         }
@@ -126,7 +127,8 @@ VOID check_vendor_ie(struct _RTMP_ADAPTER *pAd,
             && (info_elem->Len == 7))
     {
         vendor_ie->ra_cap = (ULONG)info_elem->Octet[3];
-        vendor_ie->ldpc = TRUE;
+	vendor_ie->is_rlt = TRUE;
+	vendor_ie->ldpc = TRUE;
         vendor_ie->sgi = TRUE;
         //hex_dump ("recv. vendor_ie: Ralink_OUI", (UCHAR *)info_elem, (info_elem->Len + 2));
     }
@@ -134,7 +136,8 @@ VOID check_vendor_ie(struct _RTMP_ADAPTER *pAd,
             && (info_elem->Len >= 7))
     {
         vendor_ie->mtk_cap = (ULONG)info_elem->Octet[3];
-        if (info_elem->Len > 7) {
+	vendor_ie->is_mtk = TRUE;
+	if (info_elem->Len > 7) {
 
             /* have MTK VHT IEs */
             vendor_ie->ldpc = TRUE;
@@ -150,10 +153,31 @@ VOID check_vendor_ie(struct _RTMP_ADAPTER *pAd,
             //&& NdisEqualMemory(info_elem->Octet+3, broadcom_fixed_pattern, 2))
         )
     {
-        vendor_ie->brcm_cap = BROADCOM_256QAM_CAP;
+   	VHT_CAP_IE *vht_cap_ie;
+    	UCHAR type, eid, eid_len;
+        vendor_ie->brcm_cap |= BROADCOM_256QAM_CAP;
         vendor_ie->ldpc = TRUE;
         vendor_ie->sgi = TRUE;
         //hex_dump ("recv. vendor_ie: Broadcom_OUI", (UCHAR *)info_elem, (info_elem->Len + 2));
+
+		if (info_elem->Len == 19) {
+			type = *(info_elem->Octet+3);
+			eid = *(info_elem->Octet+5);
+			eid_len = *(info_elem->Octet+6);
+
+			if ((type == BRCM_VENDOR_VHT_TYPE) &&
+				(eid == IE_VHT_CAP) &&
+				(eid_len == sizeof(VHT_CAP_IE))) {
+				vht_cap_ie = (VHT_CAP_IE *)(info_elem->Octet+7);
+				//dump_vht_cap(pAd, vht_cap_ie);
+
+				if ((vht_cap_ie->mcs_set.tx_mcs_map.mcs_ss4 != VHT_MCS_CAP_NA)) {
+					//printk("bad brcm 4x4 AP\n");
+					vendor_ie->brcm_cap |= BROADCOM_2G_4SS_CAP;
+					//printk("vendor_ie->brcm_cap = %ld\n",vendor_ie->brcm_cap);
+				}
+			}
+		}
     }
     else 
     {

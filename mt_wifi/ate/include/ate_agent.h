@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc. 
@@ -13,7 +14,7 @@
 	Module Name:
 	ate_agent.h
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __ATE_AGENT_H__
 #define __ATE_AGENT_H__
 
@@ -111,13 +112,13 @@ INT32 SetATEIBfPhaseComp(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATEIBfPhaseVerify(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATETxBfLnaGain(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATETxBfPhaseE2pUpdate(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
-INT32 SetATEConTxETxBfDutProc(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATEConTxETxBfGdProc(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATEConTxETxBfInitProc(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATESpeIdx(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATEEBfTx(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATEEBFCE(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATEEBFCEInfo(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
+INT32 SetATEEBFCEHelp(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 MT_ATEGenPkt(struct _RTMP_ADAPTER *pAd, UCHAR *buf, UINT32 band_idx);
 #endif /* TXBF_SUPPORT && MT_MAC */
 INT32 SetATETtr(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
@@ -125,9 +126,10 @@ INT32 SetATEShow(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATEHelp(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 ATESampleRssi(struct _RTMP_ADAPTER *pAd, RXWI_STRUC *pRxWI);
 VOID  ATEPeriodicExec(PVOID SystemSpecific1, PVOID FunctionContext, PVOID SystemSpecific2, PVOID SystemSpecific3);
-
 INT32 SetATE(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATEChannel(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
+INT32 set_ate_duty_cycle(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
+INT32 set_ate_pkt_tx_time(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 #ifdef MT7615
 INT32 set_ate_channel_ext(struct _RTMP_ADAPTER *pAd,RTMP_STRING *arg);
 INT32 set_ate_start_tx_ext(struct _RTMP_ADAPTER *pAd,RTMP_STRING *arg);
@@ -142,10 +144,14 @@ VOID EEReadAll(struct _RTMP_ADAPTER *pAd, UINT16 *Data);
 VOID rtmp_ate_init(struct _RTMP_ADAPTER *pAd);
 VOID RTMPCfgTssiGainFromEEPROM(struct _RTMP_ADAPTER *pAd);
 
+#ifdef SINGLE_SKU_V2
 INT32 SetATESingleSKUEn(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
+#endif /* SINGLE_SKU_V2 */
 INT32 SetATEBFBackoffMode(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATETempCompEn(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATEPowerPercentEn(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
+INT32 SetATEPowerPercentCtrl(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
+INT32 SetATEBFBackoffEn(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATETSSIEn(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 INT32 SetATETxPowerCtrlEn(struct _RTMP_ADAPTER *pAd, RTMP_STRING *Arg);
 

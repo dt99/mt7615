@@ -300,6 +300,9 @@ typedef struct _SECURITY_CONFIG {
     PMF_CFG PmfCfg;
 #endif /* DOT11W_PMF_SUPPORT */
 
+#if defined(CONFIG_HOTSPOT) && defined(CONFIG_AP_SUPPORT)
+	UCHAR HsUniGTK[LEN_MAX_GTK]; /* for storing HS DGAF uni GTK */
+#endif /* defined(CONFIG_HOTSPOT) && defined(CONFIG_AP_SUPPORT) */
 #ifdef WAPI_SUPPORT
     COMMON_WAPI_INFO comm_wapi_info;
 
@@ -342,10 +345,22 @@ typedef struct _SECURITY_CONFIG {
     UINT8 NasIdLen;
     UCHAR radius_srv_num;
     RADIUS_SRV_INFO radius_srv_info[MAX_RADIUS_SRV_NUM];
+#ifdef RADIUS_ACCOUNTING_SUPPORT
+	UINT8 radius_acct_srv_num;
+	RADIUS_SRV_INFO radius_acct_srv_info[MAX_RADIUS_SRV_NUM];
+	//int radius_request_cui;
+	int radius_acct_authentic;
+	int acct_interim_interval;	
+	int acct_enable;
+#endif /*RADIUS_ACCOUNTING_SUPPORT*/
 #endif /* DOT1X_SUPPORT */
     INT PMKID_CacheIdx;
 #if defined(DOT1X_SUPPORT) || defined(WPA_SUPPLICANT_SUPPORT)
 	BOOLEAN IEEE8021X; /* Only indicate if we are running in dynamic WEP mode (WEP+802.1x) */
+#endif
+
+#ifdef DISABLE_HOSTAPD_BEACON	
+	UINT8	RsnCap[2];
 #endif
 
     /* IE for WPA1/WPA2/WAPI */
@@ -383,6 +398,8 @@ typedef struct _SECURITY_CONFIG {
 #define AKM_APCLI_MASK     ((1 << SEC_AKM_WPA1PSK) \
                                                    | (1 << SEC_AKM_WPA2PSK))
 #endif /* APCLI_SUPPORT */
+
+#define MAX_PARAMETER_LEN  600 //worse case: WEP128 for MBSS0~15 = (32+1)*16=528
 
 #endif /* SEC_CMM_H */
 

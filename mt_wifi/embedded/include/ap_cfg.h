@@ -1,15 +1,15 @@
 #ifndef __AP_CFG_H__
 #define __AP_CFG_H__
 
-
-#include "rt_config.h"
-
 INT RTMPAPPrivIoctlSet(
 	IN RTMP_ADAPTER *pAd,
 	IN RTMP_IOCTL_INPUT_STRUCT *pIoctlCmdStr);
 
 INT RTMPAPPrivIoctlShow(
 	IN RTMP_ADAPTER *pAd,
+	IN RTMP_IOCTL_INPUT_STRUCT *pIoctlCmdStr);
+VOID RTMPAPGetAssoMacTable(
+	IN RTMP_ADAPTER *pAd, 
 	IN RTMP_IOCTL_INPUT_STRUCT *pIoctlCmdStr);
 
 #if defined(INF_AR9) || defined(BB_SOC)
@@ -87,6 +87,9 @@ VOID RtmpDrvMaxRateGet(
 	OUT	UINT32					*pRate);
 
 #ifdef WSC_AP_SUPPORT
+VOID RTMPGetCurrentCred(
+	IN PRTMP_ADAPTER pAdapter, 
+	IN RTMP_IOCTL_INPUT_STRUCT *wrq);
 VOID RTMPIoctlWscProfile(
 	IN PRTMP_ADAPTER pAdapter,
 	IN RTMP_IOCTL_INPUT_STRUCT *wrq);
@@ -139,6 +142,13 @@ VOID RTMPIoctlSetIdleTimeout(
 VOID RTMPIoctlQueryStaAid(
         IN      PRTMP_ADAPTER   pAd,
         IN      RTMP_IOCTL_INPUT_STRUCT *wrq);
+
+#ifdef RADIUS_ACCOUNTING_SUPPORT
+VOID RTMPIoctlQueryStaData(
+        IN      PRTMP_ADAPTER   pAd,
+        IN      RTMP_IOCTL_INPUT_STRUCT *wrq);
+#endif /* RADIUS_ACCOUNTING_SUPPORT */
+
 #endif /* DOT1X_SUPPORT */
 
 INT Set_AP_Daemon_Status(

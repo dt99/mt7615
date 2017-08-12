@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * Taiwan, R.O.C.
@@ -11,7 +12,7 @@
  * way altering the source code is stricitly prohibited, unless the prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
     Module Name:
     SHA2
@@ -28,6 +29,17 @@
 
 #ifndef __CRYPT_SHA2_H__
 #define __CRYPT_SHA2_H__
+
+#include "rtmp_type.h"
+#ifndef IN
+#define IN
+#endif
+#ifndef OUT
+#define OUT
+#endif
+#ifndef INOUT
+#define INOUT
+#endif
 
 
 /* Algorithm options */

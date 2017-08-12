@@ -15,6 +15,9 @@ CHAR RTMP_GetTxPwr(
 	IN HTTRANSMIT_SETTING HTTxMode,
 	IN UCHAR Channel);
 
+UINT8 GetMaxTxPwr(
+	IN PRTMP_ADAPTER pAd);
+
 /*
 	==========================================================================
 	Description:
@@ -147,8 +150,14 @@ VOID PeerSpectrumAction(
 INT Set_MeasureReq_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
 
 INT Set_TpcReq_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
+INT Set_TpcReqByAddr_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
 
 INT Set_PwrConstraint(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
+
+#ifdef TPC_SUPPORT
+INT Set_TpcCtrl_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
+INT Set_TpcEnable_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
+#endif /* TPC_SUPPORT */
 
 #ifdef DOT11K_RRM_SUPPORT
 #endif /* DOT11K_RRM_SUPPORT */
@@ -176,7 +185,9 @@ VOID InsertChannelRepIE(
 	OUT PUCHAR pFrameBuf,
 	OUT PULONG pFrameLen,
 	IN RTMP_STRING *pCountry,
-	IN UINT8 RegulatoryClass);
+	IN UINT8 RegulatoryClass,
+	IN UINT8 *ChReptList
+	);
 
 VOID InsertTpcReportIE(
 	IN PRTMP_ADAPTER pAd,
@@ -208,5 +219,18 @@ VOID RguClass_BuildBcnChList(
 	IN PRTMP_ADAPTER pAd,
 	OUT PUCHAR pBuf,
 	OUT	PULONG pBufLen);
+#ifdef CUSTOMER_DCC_FEATURE
+INT NotifyChSwAnnToConnectedSTAs(
+	IN PRTMP_ADAPTER pAd,
+	IN UINT8 		ChSwMode,
+	IN UINT8 		Channel);
+
+VOID EnqueueChSwAnnNew(
+	IN PRTMP_ADAPTER pAd,
+	IN PUCHAR pDA, 
+	IN UINT8 ChSwMode,
+	IN UINT8 NewCh,
+	IN PUCHAR pSA);
+#endif
 #endif /* __SPECTRUM_H__ */
 

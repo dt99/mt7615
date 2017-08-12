@@ -191,11 +191,11 @@ where
 		iwpriv ra0 set ATETXPOW1=18
 		iwpriv ra0 set ATETXCNT=100000
 		iwpriv ra0 set ATE=TXFRAME
-		¡K
+		Â¡K
 		iwpriv ra0 set ATETXPOW0=19
-		¡K
+		Â¡K
 		iwpriv ra0 set ATETXPOW0=20
-		¡K
+		Â¡K
 		iwpriv ra0 set ATE=ATESTART
 
 2.2 Check Carrier
@@ -242,7 +242,7 @@ where
 		iwpriv ra0 set ATE=ATESTART
 		iwpriv ra0 set ATECHANNEL=1			; set Channel
 		iwpriv ra0 set ResetCounter=1		        ; Reset statistic counter
-		iwpriv ra0 set ATETXFREQOFFSET=value            ;To use the ¡§value¡¨(decimal) you got in tx calibration
+		iwpriv ra0 set ATETXFREQOFFSET=value            ;To use the Â¡Â§valueÂ¡Â¨(decimal) you got in tx calibration
 		iwpriv ra0 set ATETXMODE=1			; set TX-Mode.
 		iwpriv ra0 set ATETXMCS=7			; set MCS type.
 		iwpriv ra0 set ATETXBW=0			; set Bandwidth
@@ -315,8 +315,8 @@ where
 			MlmePeriodicExec: Rx packet cnt = 2/4
 			MlmePeriodicExec: Rx AvgRssi0=-88, AvgRssi1=-80, AvgRssi2=-91
 			MlmePeriodicExec: Rx packet cnt = 2/6
-			MlmePeriodicExec: Rx AvgRssi0=-86, AvgRssi1=-77, AvgRssi2=-89¡K
-			¡K
+			MlmePeriodicExec: Rx AvgRssi0=-86, AvgRssi1=-77, AvgRssi2=-89Â¡K
+			Â¡K
 
 		iwpriv ra0 set ATERXANT=1		==> Enable Three Rx Antenna-1
 		iwpriv ra0 set ATERXFER=1		==> Enable Rx Frame Error Rate: RxCnt/RxTotal
@@ -325,8 +325,8 @@ where
 			MlmePeriodicExec: Rx AvgRssi=-87
 			MlmePeriodicExec: Rx packet cnt = 7/14
 			MlmePeriodicExec: Rx AvgRssi=-90
-			¡K
-			¡K
+			Â¡K
+			Â¡K
 
 
 ===================================================================================================
@@ -338,7 +338,7 @@ where
 		Read/Write BBP registers by ID number.
 	BBPID
 
-3.1.1 Read BBP register, BBPID only, no ¡§=¡¨ symbol.
+3.1.1 Read BBP register, BBPID only, no Â¡Â§=Â¡Â¨ symbol.
 	BBPID:
 		0 ~ xx			; decimal, 8-bit
 	BBPID=Value
@@ -354,7 +354,7 @@ where
 		Read/Write MAC registers by offset.
 	MAC_OFFSET
 
-3.2.1 Read MAC register, MAC_OFFSET only, no ¡§=¡¨ symbol.
+3.2.1 Read MAC register, MAC_OFFSET only, no Â¡Â§=Â¡Â¨ symbol.
 	MAC_OFFSET:
 		0000 ~ FFFF		; hexdecimal, 16-bit
 	MAC_OFFSET=Value
@@ -370,14 +370,14 @@ where
 		Read/Write EEPROM content by address.
 	EEP_ADDR
 
-3.3.1 Read EEPROM content, EEP_ADDR only, no ¡§=¡¨ symbol.
+3.3.1 Read EEPROM content, EEP_ADDR only, no Â¡Â§=Â¡Â¨ symbol.
 	EEP_ADDR:
-		00 ~ FF			; hexdecimal, 16-bit alignment (0, 2, 4, 6, 8, A, C, ¡K)
+		00 ~ FF			; hexdecimal, 16-bit alignment (0, 2, 4, 6, 8, A, C, Â¡K)
 	EEP_ADDR=Value
 
 3.3.2 Write EEPROM content.
 	EEP_ADDR:
-		00 ~ FF			; hexdecimal, 16-bit alignment (0, 2, 4, 6, 8, A, C, ¡K)
+		00 ~ FF			; hexdecimal, 16-bit alignment (0, 2, 4, 6, 8, A, C, Â¡K)
 	Value:
 		0000 ~FFFF		; hexdecimal, 16-bit
 

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -28,7 +29,7 @@
     Shiang Tu	08-28-2008   init version
 
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 
@@ -82,6 +83,10 @@ BUILD_TIMER_FUNCTION(WscUPnPMsgTimeOutAction);
 BUILD_TIMER_FUNCTION(WscM2DTimeOutAction);
 
 BUILD_TIMER_FUNCTION(WscPBCTimeOutAction);
+#ifdef CON_WPS
+BUILD_TIMER_FUNCTION(WscScanDoneCheckTimeOutAction);
+#endif /*CPN_WPS*/
+
 #ifdef WSC_STA_SUPPORT
 BUILD_TIMER_FUNCTION(WscPINTimeOutAction);
 #endif
@@ -115,10 +120,6 @@ BUILD_TIMER_FUNCTION(eTxBfProbeTimerExec);
 BUILD_TIMER_FUNCTION(ATEPeriodicExec);
 #endif /* CONFIG_ATE */
 
-#ifdef FTM_SUPPORT
-BUILD_TIMER_FUNCTION(FtmTxTimerCallback);
-BUILD_TIMER_FUNCTION(FtmReqTxTimerCallback);
-#endif /* FTM_SUPPORT */
 
 #ifdef BACKGROUND_SCAN_SUPPORT
 BUILD_TIMER_FUNCTION(BackgroundScanTimeout);

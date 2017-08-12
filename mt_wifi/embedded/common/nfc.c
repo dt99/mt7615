@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -18,7 +19,7 @@
 	Module Name:
 	wsc_v2.c
 */
-
+#endif /* MTK_LICENSE */
 #include    "rt_config.h"
 
 #ifdef WSC_NFC_SUPPORT
@@ -43,22 +44,22 @@ typedef struct _NFC_CMD_INFO {
 	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 	|           Vendor Id           |    Action     |     Type      |   
 	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	|           Length              |         Data¡K¡K
+	|           Length              |         DataÂ¡KÂ¡K
 	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
 
 	Vendor: 0x14C3
-	Action: b¡¦<7:6>: 0x0 ¡V To NFC, 0x1 ¡V From NFC
-	        b¡¦<5:0>: 0x00 ¡V Get, 0x01 - Set
+	Action: bÂ¡Â¦<7:6>: 0x0 Â¡V To NFC, 0x1 Â¡V From NFC
+	        bÂ¡Â¦<5:0>: 0x00 Â¡V Get, 0x01 - Set
 	Type:	
-		0 ¡V Command Result (1 byte)
+		0 Â¡V Command Result (1 byte)
 		1 -  Configuration (WSC TLV)
-		2 ¡V Password (32 bytes)
-		3 ¡V IP address (4 bytes) 
-		4 ¡V RTSP port (4 bytes)
-		5 ¡V NFC Status (1 byte)
+		2 Â¡V Password (32 bytes)
+		3 Â¡V IP address (4 bytes) 
+		4 Â¡V RTSP port (4 bytes)
+		5 Â¡V NFC Status (1 byte)
 				b'0: 1 - ON, 0 - OFF
 				b'1: 1 - nfc device detect
-		6 ¡V Wireless Radio Status (1byte)
+		6 Â¡V Wireless Radio Status (1byte)
 */
 #define ETH_MTK_NFC		0x6605
 #define NFC_VENDOR_ID	0x14C3
@@ -757,8 +758,8 @@ INT Set_NfcStatus_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 	UCHAR data = 0;
 
 	/*
-		Action: b¡¦<7:6>: 0x00 ¡V Request, 0x01 ¡V Notify
-        		b¡¦<5:0>: 0x00 ¡V Get, 0x01 - Set
+		Action: bÂ¡Â¦<7:6>: 0x00 Â¡V Request, 0x01 Â¡V Notify
+        		bÂ¡Â¦<5:0>: 0x00 Â¡V Get, 0x01 - Set
 	*/
 	UCHAR action = 1, type = TYPE_NFC_STATUS; /* 5 - NFC Status */
 
@@ -782,8 +783,8 @@ INT Set_NfcPasswdToken_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 	UCHAR val=0;
 	BOOLEAN		bHandover=FALSE;
 	/*
-		Action: b¡¦<7:6>: 0x00 ¡V Request, 0x01 ¡V Notify
-        		b¡¦<5:0>: 0x00 ¡V Get, 0x01 - Set
+		Action: bÂ¡Â¦<7:6>: 0x00 Â¡V Request, 0x01 Â¡V Notify
+        		bÂ¡Â¦<5:0>: 0x00 Â¡V Get, 0x01 - Set
 	*/
 	val = (UCHAR)simple_strtol(arg, 0, 10);
 	if (val == 1) /* Password Token */
@@ -834,8 +835,8 @@ INT Set_NfcConfigurationToken_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 	PUCHAR pBuf = NULL;
 	USHORT BufLen = 0;
 	/*
-		Action: b¡¦<7:6>: 0x00 ¡V Request, 0x01 ¡V Notify
-        		b¡¦<5:0>: 0x00 ¡V Get, 0x01 - Set
+		Action: bÂ¡Â¦<7:6>: 0x00 Â¡V Request, 0x01 Â¡V Notify
+        		bÂ¡Â¦<5:0>: 0x00 Â¡V Get, 0x01 - Set
 	*/
 	UCHAR action = 1, type = TYPE_CONFIGURATION;
 
@@ -875,8 +876,8 @@ INT Get_NfcStatus_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 {
  	UCHAR data = 0;
 	/*
-		Action: b¡¦<7:6>: 0x0 ¡V To NFC, 0x1 ¡V From NFC
-        		b¡¦<5:0>: 0x0 ¡V Get, 0x01 - Set
+		Action: bÂ¡Â¦<7:6>: 0x0 Â¡V To NFC, 0x1 Â¡V From NFC
+        		bÂ¡Â¦<5:0>: 0x0 Â¡V Get, 0x01 - Set
 	*/
 	UCHAR action = 0, type = TYPE_NFC_STATUS; /* 5 - NFC Status */
 	

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,10 +14,11 @@
 	Module Name:
 	ap_vow.c
 */
-#ifdef VOW_SUPPORT
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 #include "mcu/mt_cmd.h"
+
+#ifdef VOW_SUPPORT
 #define UMAC_DRR_TABLE_CTRL0            (0x00008388)
 
 #define UMAC_DRR_TABLE_WDATA0           (0x00008340)
@@ -94,6 +96,9 @@ UINT32 vow_rx_time[MAX_LEN_OF_MAC_TABLE];
 UINT32 vow_tx_ok[MAX_LEN_OF_MAC_TABLE];
 UINT32 vow_tx_fail[MAX_LEN_OF_MAC_TABLE];
 UINT32 vow_sum_tx_rx_time = 0;
+UINT32 vow_avg_sum_time = 0;
+UINT32 vow_last_tx_time[MAX_LEN_OF_MAC_TABLE];
+UINT32 vow_last_rx_time[MAX_LEN_OF_MAC_TABLE];
 UINT16 vow_idx = 0;
 UINT32 vow_tx_bss_byte[WMM_NUM_OF_AC];
 UINT32 vow_rx_bss_byte[WMM_NUM_OF_AC];
@@ -196,7 +201,7 @@ INT32 vow_set_sta(PRTMP_ADAPTER pad, UINT8 sta_id, UINT32 subcmd)
 
     ret = MtCmdSetVoWDRRCtrl(pad, &sta_ctrl);
     
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_VOW_DRR_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_VOW_DRR_CTRL_T)));
 
     return ret;
 }
@@ -217,7 +222,7 @@ INT vow_set_sta_DWRR_max_time(PRTMP_ADAPTER pad)
 
     ret = MtCmdSetVoWDRRCtrl(pad, &sta_ctrl);
     
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_VOW_DRR_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_VOW_DRR_CTRL_T)));
 
     return ret;
 }
@@ -389,7 +394,7 @@ INT vow_set_group(PRTMP_ADAPTER pad, UINT8 group_id, UINT32 subcmd)
 
     ret = MtCmdSetVoWGroupCtrl(pad, &group_ctrl);
     
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_BSS_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_BSS_CTRL_T)));
 
     return ret;
 }
@@ -411,7 +416,7 @@ INT vow_set_group_DWRR_max_time(PRTMP_ADAPTER pad)
 
     ret = MtCmdSetVoWDRRCtrl(pad, &sta_ctrl);
     
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_VOW_DRR_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_VOW_DRR_CTRL_T)));
     return ret;
 }
 
@@ -433,6 +438,7 @@ INT vow_set_feature_all(PRTMP_ADAPTER pad)
     feature_ctrl.u2IfApplyDbdc0SearchRuleFlag = TRUE; /* 1'b */
     feature_ctrl.u2IfApplyEnTxopNoChangeBssFlag = TRUE; /* 1'b */
     feature_ctrl.u2IfApplyAirTimeFairnessFlag = TRUE; /* 1'b */
+	feature_ctrl.u2IfApplyWeightedAirTimeFairnessFlag= TRUE; /* 1'b */
     feature_ctrl.u2IfApplyEnbwrefillFlag = TRUE; /* 1'b */
     feature_ctrl.u2IfApplyEnbwCtrlFlag = TRUE; /* 1'b */
 
@@ -447,6 +453,7 @@ INT vow_set_feature_all(PRTMP_ADAPTER pad)
     feature_ctrl.u2RefillPerildValue = pad->vow_cfg.refill_period; /* 8'b */
     feature_ctrl.u2Dbdc1SearchRuleValue = pad->vow_cfg.dbdc1_search_rule; /* 1'b */
     feature_ctrl.u2Dbdc0SearchRuleValue = pad->vow_cfg.dbdc0_search_rule; /* 1'b */
+	feature_ctrl.u2WeightedAirTimeFairnessValue = pad->vow_watf_en; /* 1'b */
     feature_ctrl.u2EnTxopNoChangeBssValue = pad->vow_cfg.en_txop_no_change_bss; /* 1'b */
     feature_ctrl.u2AirTimeFairnessValue = pad->vow_cfg.en_airtime_fairness; /* 1'b */
     feature_ctrl.u2EnbwrefillValue = pad->vow_cfg.en_bw_refill; /* 1'b */
@@ -468,12 +475,13 @@ INT vow_set_feature_all(PRTMP_ADAPTER pad)
 	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(u2AirTimeFairnessValue = 0x%x)\n", __FUNCTION__, pad->vow_cfg.en_airtime_fairness));
 	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(u2EnbwrefillValue = 0x%x)\n", __FUNCTION__, pad->vow_cfg.en_bw_refill));
 	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(u2EnbwCtrlValue = 0x%x)\n", __FUNCTION__, pad->vow_cfg.en_bw_ctrl));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(u2WeightedAirTimeFairnessValue = 0x%x)\n", __FUNCTION__, pad->vow_watf_en));
 	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(u2BssCheckTimeToken_0_to_16_CtrlValue = 0x%x)\n", __FUNCTION__, feature_ctrl.u2BssCheckTimeToken_0_to_16_CtrlValue));
 	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(u2BssCheckLengthToken_0_to_16_CtrlValue = 0x%x)\n", __FUNCTION__, feature_ctrl.u2BssCheckLengthToken_0_to_16_CtrlValue));
 
     ret = MtCmdSetVoWFeatureCtrl(pad, &feature_ctrl);
     
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_VOW_FEATURE_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_VOW_FEATURE_CTRL_T)));
 
     return ret;
 }
@@ -564,7 +572,7 @@ INT vow_set_rx_airtime(PRTMP_ADAPTER pad, UINT8 cmd, UINT32 subcmd)
 
     ret = MtCmdSetVoWRxAirtimeCtrl(pad, &rx_at_ctrl);
     
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_RX_AT_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_RX_AT_CTRL_T)));
 
     return ret;
 }
@@ -591,7 +599,7 @@ INT vow_set_wmm_selection(PRTMP_ADAPTER pad, UINT8 om)
     
     ret = MtCmdSetVoWRxAirtimeCtrl(pad, &rx_at_ctrl);
     
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_RX_AT_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_RX_AT_CTRL_T)));
 
     return ret;
 }
@@ -618,7 +626,7 @@ INT vow_set_mbss2wmm_map(PRTMP_ADAPTER pad, UINT8 bss_idx)
 
     ret = MtCmdSetVoWRxAirtimeCtrl(pad, &rx_at_ctrl);
     
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_RX_AT_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_RX_AT_CTRL_T)));
 
     return ret;
 }
@@ -731,7 +739,7 @@ INT vow_set_backoff_time(PRTMP_ADAPTER pad, UINT8 target)
 
     ret = MtCmdSetVoWRxAirtimeCtrl(pad, &rx_at_ctrl);
     
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_RX_AT_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_RX_AT_CTRL_T)));
 
     return ret;
 }
@@ -772,7 +780,7 @@ INT vow_get_rx_time_counter(PRTMP_ADAPTER pad, UINT8 target, UINT8 band_idx)
 
     ret = MtCmdGetVoWRxAirtimeCtrl(pad, &rx_at_ctrl);
 
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_RX_AT_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_RX_AT_CTRL_T)));
 
     if (target == ENUM_RX_AT_REPORT_SUB_TYPE_RX_NONWIFI_TIME)
         return rx_at_ctrl.rRxAtGeneralCtrl.rRxAtReportSubCtrl.u4RxNonWiFiBandTimer;
@@ -798,7 +806,10 @@ INT vow_set_at_estimator(PRTMP_ADAPTER pad, UINT32 subcmd)
 
     /* assign cmd and subcmd */
     at_proc.u4CtrlFieldID = ENUM_AT_RPOCESS_ESTIMATE_MODULE_CTRL;
-    at_proc.u4CtrlSubFieldID = subcmd;
+	at_proc.u4CtrlSubFieldID = cpu2le16(subcmd);
+#ifdef RT_BIG_ENDIAN
+    at_proc.u4CtrlFieldID = cpu2le16(at_proc.u4CtrlFieldID);
+#endif
 
     switch(subcmd)
     {
@@ -809,7 +820,7 @@ INT vow_set_at_estimator(PRTMP_ADAPTER pad, UINT32 subcmd)
             break;
 
         case ENUM_AT_PROC_EST_MONITOR_PERIOD_CTRL:
-            at_proc.rAtProcGeneralCtrl.rAtEstimateSubCtrl.u2AtEstMonitorPeriod = pad->vow_at_est.at_monitor_period;
+            at_proc.rAtProcGeneralCtrl.rAtEstimateSubCtrl.u2AtEstMonitorPeriod = cpu2le16(pad->vow_at_est.at_monitor_period);
             MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(cmd = 0x%x, subcmd = 0x%x, val = 0x%x)\n", 
                 __FUNCTION__, at_proc.u4CtrlFieldID, at_proc.u4CtrlSubFieldID, pad->vow_at_est.at_monitor_period));
             break;
@@ -820,7 +831,7 @@ INT vow_set_at_estimator(PRTMP_ADAPTER pad, UINT32 subcmd)
         
     ret = MtCmdSetVoWModuleCtrl(pad, &at_proc);
     
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_AT_PROC_MODULE_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_AT_PROC_MODULE_CTRL_T)));
     
     return ret;
 }
@@ -836,14 +847,20 @@ INT vow_set_at_estimator_group(PRTMP_ADAPTER pad, UINT32 subcmd, UINT8 group_id)
     /* assign cmd and subcmd */
     at_proc.u4CtrlFieldID = ENUM_AT_RPOCESS_ESTIMATE_MODULE_CTRL;
     at_proc.u4CtrlSubFieldID = subcmd;
-
+#ifdef RT_BIG_ENDIAN
+	at_proc.u4CtrlFieldID = cpu2le16(at_proc.u4CtrlFieldID);
+	at_proc.u4CtrlSubFieldID = cpu2le16(at_proc.u4CtrlSubFieldID);
+#endif
     switch(subcmd)
     {
         case ENUM_AT_PROC_EST_GROUP_RATIO_CTRL:
             at_proc.rAtProcGeneralCtrl.rAtEstimateSubCtrl.u4GroupRatioBitMask |= (1UL << group_id);
-            at_proc.rAtProcGeneralCtrl.rAtEstimateSubCtrl.u2GroupMaxRatioValue[group_id] = pad->vow_bss_cfg[group_id].max_airtime_ratio;
-            at_proc.rAtProcGeneralCtrl.rAtEstimateSubCtrl.u2GroupMinRatioValue[group_id] = pad->vow_bss_cfg[group_id].min_airtime_ratio;
-            
+            at_proc.rAtProcGeneralCtrl.rAtEstimateSubCtrl.u2GroupMaxRatioValue[group_id] = cpu2le16(pad->vow_bss_cfg[group_id].max_airtime_ratio);
+            at_proc.rAtProcGeneralCtrl.rAtEstimateSubCtrl.u2GroupMinRatioValue[group_id] = cpu2le16(pad->vow_bss_cfg[group_id].min_airtime_ratio);
+#ifdef RT_BIG_ENDIAN
+			at_proc.rAtProcGeneralCtrl.rAtEstimateSubCtrl.u4GroupRatioBitMask = 
+						cpu2le16(at_proc.rAtProcGeneralCtrl.rAtEstimateSubCtrl.u4GroupRatioBitMask);
+#endif
             MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(cmd = 0x%x, subcmd = 0x%x, group %d, val = 0x%x/0x%x)\n", 
                 __FUNCTION__, at_proc.u4CtrlFieldID, at_proc.u4CtrlSubFieldID, group_id,
                 pad->vow_bss_cfg[group_id].max_airtime_ratio,
@@ -863,7 +880,7 @@ INT vow_set_at_estimator_group(PRTMP_ADAPTER pad, UINT32 subcmd, UINT8 group_id)
         
     ret = MtCmdSetVoWModuleCtrl(pad, &at_proc);
     
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_AT_PROC_MODULE_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_AT_PROC_MODULE_CTRL_T)));
 
     return ret;
 }
@@ -878,8 +895,11 @@ INT vow_set_bad_node(PRTMP_ADAPTER pad, UINT32 subcmd)
 	NdisZeroMemory(&at_proc, sizeof(at_proc));
 
     /* assign cmd and subcmd */
-    at_proc.u4CtrlFieldID = ENUM_AT_RPOCESS_BAD_NODE_MODULE_CTRL;
-    at_proc.u4CtrlSubFieldID = subcmd;
+	at_proc.u4CtrlFieldID = ENUM_AT_RPOCESS_BAD_NODE_MODULE_CTRL;
+#ifdef RT_BIG_ENDIAN	
+    at_proc.u4CtrlFieldID = cpu2le16(at_proc.u4CtrlFieldID);
+#endif
+    at_proc.u4CtrlSubFieldID = cpu2le16(subcmd);
 
     switch(subcmd)
     {
@@ -890,7 +910,7 @@ INT vow_set_bad_node(PRTMP_ADAPTER pad, UINT32 subcmd)
             break;
 
         case ENUM_AT_PROC_BAD_NODE_MONITOR_PERIOD_CTRL:
-            at_proc.rAtProcGeneralCtrl.rAtBadNodeSubCtrl.u2AtBadNodeMonitorPeriod = pad->vow_badnode.bn_monitor_period;
+            at_proc.rAtProcGeneralCtrl.rAtBadNodeSubCtrl.u2AtBadNodeMonitorPeriod = cpu2le16(pad->vow_badnode.bn_monitor_period);
             MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(cmd = 0x%x, subcmd = 0x%x, val = 0x%x)\n", 
                 __FUNCTION__, at_proc.u4CtrlFieldID, at_proc.u4CtrlSubFieldID, pad->vow_badnode.bn_monitor_period));
             break;
@@ -913,7 +933,7 @@ INT vow_set_bad_node(PRTMP_ADAPTER pad, UINT32 subcmd)
         
     ret = MtCmdSetVoWModuleCtrl(pad, &at_proc);
     
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %d), sizeof %d\n", __FUNCTION__, ret, sizeof(EXT_CMD_AT_PROC_MODULE_CTRL_T)));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s:(ret = %zu), sizeof %zu\n", __FUNCTION__, ret, sizeof(EXT_CMD_AT_PROC_MODULE_CTRL_T)));
     
     return ret;
 }
@@ -931,6 +951,17 @@ void vow_dump_umac_CRs(PRTMP_ADAPTER pad)
     }
 }
 /* ---------------------- end -------------------------------*/
+
+BOOLEAN vow_is_enabled(PRTMP_ADAPTER pad)
+{
+    return (pad->vow_cfg.en_bw_ctrl || pad->vow_cfg.en_airtime_fairness);
+}
+
+BOOLEAN vow_watf_is_enabled(
+	IN PRTMP_ADAPTER pad)
+{
+    return (pad->vow_watf_en);
+}
 
 VOID vow_init(PRTMP_ADAPTER pad)
 {
@@ -980,8 +1011,12 @@ VOID vow_init_sta(PRTMP_ADAPTER pad)
     /* set max wait time for DWRR station */
     ret = vow_set_sta_DWRR_max_time(pad);
 
+    /* VOW is disabled, skip all setting */
+    if (vow_is_enabled(pad) == FALSE)
+        return;
+
     /* station DWRR quantum */
-    ret = vow_set_sta(pad, 0xff, ENUM_VOW_DRR_CTRL_FIELD_AIRTIME_QUANTUM_ALL);
+    ret = vow_set_sta(pad, VOW_ALL_STA, ENUM_VOW_DRR_CTRL_FIELD_AIRTIME_QUANTUM_ALL);
 
     /* per station DWRR configuration */
     for (i = 0; i < 128; i++)
@@ -998,11 +1033,15 @@ VOID vow_init_group(PRTMP_ADAPTER pad)
 {
 	BOOLEAN ret;
 	
+    /* VOW is disabled, skip all setting */
+    if (vow_is_enabled(pad) == FALSE)
+        return;
+
 	/* group DWRR quantum */
-	ret = vow_set_group(pad, 0xff, ENUM_BSSGROUP_CTRL_BW_GROUP_QUANTUM_ALL);
+	ret = vow_set_group(pad, VOW_ALL_GROUP, ENUM_BSSGROUP_CTRL_BW_GROUP_QUANTUM_ALL);
 
 	/* set group configuration */
-	ret = vow_set_group(pad, 0xff, ENUM_BSSGROUP_CTRL_ALL_ITEM_FOR_ALL_GROUP);
+	ret = vow_set_group(pad, VOW_ALL_GROUP, ENUM_BSSGROUP_CTRL_ALL_ITEM_FOR_ALL_GROUP);
 
 	/* set max BSS wait time and sta wait time */
     //RTMP_IO_WRITE32(pad, 0x8374, 0x00200020);
@@ -1019,6 +1058,15 @@ VOID vow_init_rx(PRTMP_ADAPTER pad)
 	UINT8 i;
     BOOLEAN ret;
 	
+    /* VOW is disabled, skip all setting */
+    if (vow_is_enabled(pad) == FALSE)
+    {
+        pad->vow_rx_time_cfg.rx_time_en = FALSE;
+        vow_set_rx_airtime(pad, ENUM_RX_AT_FEATURE_CTRL, ENUM_RX_AT_FEATURE_SUB_TYPE_AIRTIME_EN);
+
+        return;
+    }
+
 	/* reset all RX counters */ 
     ret = vow_set_rx_airtime(pad, ENUM_RX_AT_BITWISE_CTRL, ENUM_RX_AT_BITWISE_SUB_TYPE_AIRTIME_CLR);
     
@@ -1028,13 +1076,13 @@ VOID vow_init_rx(PRTMP_ADAPTER pad)
     /* set ED offset */
     ret = vow_set_rx_airtime(pad, ENUM_RX_AT_TIMER_VALUE_CTRL, ENUM_RX_AT_TIME_VALUE_SUB_TYPE_ED_OFFSET_CTRL);
 
-    /* set OBSS backoff time */
+    /* set OBSS backoff time - 1 set*/
     ret = vow_set_backoff_time(pad, ENUM_RX_AT_OBSS);
 
-    /* set non QOS backoff time */
+    /* set non QOS backoff time - 1 set */
     ret = vow_set_backoff_time(pad, ENUM_RX_AT_NON_QOS);
 
-    /* set repeater backoff time */
+    /* set repeater backoff time - 1 set */
     ret = vow_set_backoff_time(pad, ENUM_RX_AT_WMM_GROUP_PEPEATER);
 
     /* set OM backoff time */
@@ -1062,30 +1110,168 @@ VOID vow_init_rx(PRTMP_ADAPTER pad)
     for (i = 0; i < VOW_MAX_GROUP_NUM; i++)
     {
         vow_set_at_estimator_group(pad, ENUM_AT_PROC_EST_GROUP_RATIO_CTRL, i);
-        vow_set_at_estimator_group(pad, ENUM_AT_PROC_EST_GROUP_TO_BAND_MAPPING, i);
+        //vow_set_at_estimator_group(pad, ENUM_AT_PROC_EST_GROUP_TO_BAND_MAPPING, i);
     }
 
 	
 }
 
+
 VOID vow_init_misc(PRTMP_ADAPTER pad)
 {
 	
-	UINT32 reg32;
+	UINT32 reg32, i;
+
+	/* disable RTS failed airtime charge for RTS deadlock */
+	HW_IO_READ32(pad, AGG_SCR, &reg32);
+	reg32 |= RTS_FAIL_CHARGE_DIS;
+	HW_IO_WRITE32(pad, AGG_SCR, reg32);
+		
+    /* VOW is disabled, skip all setting */
+    if (vow_is_enabled(pad) == FALSE)
+    {        
+        return;
+    }
 
 	// RX_RIFS_MODE enable, 820F4000 bit[23] set to 1
 	// detect ED signal down for CCK CTS
-	HW_IO_READ32(pad, 0x21000, &reg32);
-	reg32 |= 0x800000;
-	HW_IO_WRITE32(pad, 0x21000, reg32);
+	HW_IO_READ32(pad, TMAC_TCR, &reg32);
+	reg32 |= RX_RIFS_MODE;
+	HW_IO_WRITE32(pad, TMAC_TCR, reg32);
 
+	//Configure 1 to force rmac_cr_eifs_time=0 for VOW OBSS counter, 820f52e0 bit[21] set to 1
+	HW_IO_READ32(pad, RMAC_RSVD0, &reg32);
+	reg32 |= RX_EIFS_TIME_ZERO;
+	HW_IO_WRITE32(pad, RMAC_RSVD0, reg32);
 
-	//Configure 1 to force tmac_cr_eifs_time=0 for VOW OBSS counter, 820f52e0 bit[21] set to 1
-	HW_IO_READ32(pad, 0x214e0, &reg32);
-	reg32 |= 0x200000;
-	HW_IO_WRITE32(pad, 0x214e0, reg32);
+    /* for SER (0x82060370 bit[26]=1 --> keep all VOW setting) */
+	HW_IO_READ32(pad, VOW_CONTROL, &reg32);
+	reg32 |= VOW_RESET_DISABLE;
+	HW_IO_WRITE32(pad, VOW_CONTROL, reg32);
+
+	if(vow_watf_is_enabled(pad))
+	{
+		pad->vow_cfg.vow_sta_dwrr_quantum[0] = pad->vow_watf_q_lv0;
+		pad->vow_cfg.vow_sta_dwrr_quantum[1] = pad->vow_watf_q_lv1;
+		pad->vow_cfg.vow_sta_dwrr_quantum[2] = pad->vow_watf_q_lv2;
+		pad->vow_cfg.vow_sta_dwrr_quantum[3] = pad->vow_watf_q_lv3;
+	}
+	else
+	{
+	    pad->vow_cfg.vow_sta_dwrr_quantum[0] = VOW_STA_DWRR_QUANTUM0;
+    	pad->vow_cfg.vow_sta_dwrr_quantum[1] = VOW_STA_DWRR_QUANTUM1;
+    	pad->vow_cfg.vow_sta_dwrr_quantum[2] = VOW_STA_DWRR_QUANTUM2;
+    	pad->vow_cfg.vow_sta_dwrr_quantum[3] = VOW_STA_DWRR_QUANTUM3;
+	}
+	for(i=0; i<VOW_WATF_LEVEL_NUM; i++)
+		vow_set_sta(pad, VOW_ALL_STA, ENUM_VOW_DRR_CTRL_FIELD_AIRTIME_QUANTUM_L0 + i);
+	
 }
 
+VOID vow_reset(PRTMP_ADAPTER pad)
+{
+	vow_reset_watf(pad);
+	vow_reset_dvt(pad);
+}
+
+VOID vow_update_om_wmm(PRTMP_ADAPTER pad, struct wifi_dev *wdev, PEDCA_PARM pApEdcaParm) 
+{
+    UCHAR wmm_idx;
+    UCHAR st;
+    UINT16 cw;
+    UCHAR ac_idx;
+    UCHAR ac_map[] = {WMM_AC_BE, WMM_AC_BK, WMM_AC_VI, WMM_AC_VO};
+	struct _EDCA_PARM *pBssEdca = wlan_config_get_ht_edca(wdev);
+
+    /* VOW is disabled, skip all setting */
+    if (vow_is_enabled(pad) == FALSE)
+        return;
+
+    if (WMODE_CAP_5G(wdev->PhyMode))
+        st = SLOT_TIME_5G;
+    else if(pad->CommonCfg.bUseShortSlotTime)
+        st = SLOT_TIME_24G_SHORT;
+    else 
+        st = SLOT_TIME_24G_LONG;
+
+	if (pBssEdca)
+	{
+		/* invalid */
+	    if (pBssEdca->bValid == FALSE)
+	        return;
+
+	    if ((pApEdcaParm == NULL) && (pApEdcaParm->bValid == FALSE))
+	        return;
+
+	    wmm_idx = pApEdcaParm->WmmSet;
+
+	    for (ac_idx = 0; ac_idx < WMM_NUM_OF_AC; ac_idx++)
+	    {
+	        cw = (1 << pBssEdca->Cwmin[ac_map[ac_idx]]) - 1;
+	        pad->vow_rx_time_cfg.wmm_backoff[wmm_idx][ac_idx] = 
+	            (WMODE_CAP_5G(wdev->PhyMode) ? SIFS_TIME_5G : SIFS_TIME_24G) +
+	                pBssEdca->Aifsn[ac_map[ac_idx]]*st + cw*st;
+	    }
+
+	    vow_set_backoff_time(pad, wmm_idx);
+	}
+}
+
+VOID vow_mbss_init(PRTMP_ADAPTER pad, struct wifi_dev *wdev)
+{
+    /* VOW is disabled, skip all setting */
+    if (vow_is_enabled(pad) == FALSE)
+        return;
+
+    if(wdev)
+    {
+        vow_mbss_grp_band_map(pad, wdev);
+        vow_mbss_wmm_map(pad, wdev);
+        /* configure BCMC entry */
+        vow_set_client(pad, wdev->wdev_idx, wdev->tr_tb_idx);
+    }
+}
+
+VOID vow_group_band_map(PRTMP_ADAPTER pad, UCHAR band_idx, UCHAR group_idx)
+{
+	UINT32 reg32;
+
+	HW_IO_READ32(pad, VOW_DBDC_BW_GROUP_CTRL, &reg32);
+	reg32 &= ~(1 << group_idx);
+	reg32 |= (band_idx << group_idx);
+	HW_IO_WRITE32(pad, VOW_DBDC_BW_GROUP_CTRL, reg32);
+}
+
+/* do bss(group) and band mapping */
+VOID vow_mbss_grp_band_map(PRTMP_ADAPTER pad, struct wifi_dev *wdev)
+{
+    UCHAR band_idx;
+    UCHAR wdev_idx;
+
+    if (wdev)
+    {
+        band_idx = HcGetBandByWdev(wdev);
+        wdev_idx = wdev->wdev_idx;
+        /* MBSS <--> group 1 to 1 mapping, ex: SSID0 --> Group0 */
+        vow_group_band_map(pad, band_idx, wdev_idx);
+        pad->vow_bss_cfg[wdev_idx].band_idx = band_idx;
+        vow_set_at_estimator_group(pad, ENUM_AT_PROC_EST_GROUP_TO_BAND_MAPPING, wdev_idx);
+
+    }
+}
+
+/* do bss and wmm mapping for RX */
+VOID vow_mbss_wmm_map(PRTMP_ADAPTER pad, struct wifi_dev *wdev)
+{
+    UCHAR wmm_idx;
+
+    if (wdev)
+    {
+        wmm_idx = HcGetWmmIdx(pad, wdev);
+        pad->vow_rx_time_cfg.bssid2wmm_set[wdev->wdev_idx] = wmm_idx;
+        vow_set_mbss2wmm_map(pad, wdev->wdev_idx);
+    }
+}
 
 static UINT32 vow_get_availabe_airtime(VOID)
 {
@@ -1158,6 +1344,7 @@ VOID vow_set_client(PRTMP_ADAPTER pad, UINT8 group, UINT8 sta_id)
     pad->vow_sta_cfg[sta_id].group = group;
 
     /* update station bitmap */
+    /* don't change command sequence - STA_BSS_GROUP will refer to STA_ALL's old setting */
     ret = vow_set_sta(pad, sta_id, ENUM_VOW_DRR_CTRL_FIELD_STA_BSS_GROUP);
     ret = vow_set_sta(pad, sta_id, ENUM_VOW_DRR_CTRL_FIELD_STA_ALL);
 
@@ -1878,7 +2065,7 @@ INT set_vow_sta_dwrr_quantum(
 
             pad->vow_cfg.vow_sta_dwrr_quantum[id] = val;
 
-            ret = vow_set_sta(pad, 0xff, ENUM_VOW_DRR_CTRL_FIELD_AIRTIME_QUANTUM_L0 + id);
+            ret = vow_set_sta(pad, VOW_ALL_STA, ENUM_VOW_DRR_CTRL_FIELD_AIRTIME_QUANTUM_L0 + id);
             MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
                 ("%s: set quantum id %u, val %d.\n", __FUNCTION__, id, val));
             
@@ -1898,6 +2085,29 @@ INT set_vow_sta_dwrr_quantum(
     return TRUE;
 }
 
+INT set_vow_sta_frr_quantum(
+		IN	PRTMP_ADAPTER pad,
+		IN	RTMP_STRING *arg)
+{
+	UINT32 val, rv;
+
+	if (arg)
+	{
+		rv = sscanf(arg, "%d", &val);
+		if ((rv > 0) && (val <= 0xff))
+		{
+			pad->vow_sta_frr_quantum = val;
+			MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+				("%s: set FRR quantum %d.\n", __FUNCTION__, val));	
+		}
+		else
+			return FALSE;
+	}
+	else
+		return FALSE;
+
+	return TRUE;
+}
 INT set_vow_airtime_ctrl_en(
     IN  PRTMP_ADAPTER pad,
     IN  RTMP_STRING *arg)
@@ -3077,8 +3287,19 @@ INT set_vow_help(
          "vow_monitor_bss = <BSS num>\n"
          "vow_monitor_mbss = <MBSS num>\n"
          "vow_show_mbss = <MBSS num>\n"
-         "vow_avg_num = <average num> sec\n"));
-         
+         "vow_avg_num = <average num> sec\n"
+         "======== RED ===========\n"
+         "vow_set_red_en = <0/1> 0:disable, 1:enable\n"
+         "vow_set_red_show_sta = <STA num>\n"
+         "vow_set_red_tar_delay = <tarDelay> us\n"
+         "======== WATF ===========\n"
+         "vow_watf_en = <0/1> 0:disable, 1:enable\n"
+         "vow_watf_q = <level>-<quantum> unit 256us\n"
+         "vow_watf_add_entry = <level>-<Addr>\n"
+         "vow_watf_del_entry = <Addr>\n"
+			));
+
+
     return TRUE;
 }
 
@@ -4469,6 +4690,431 @@ INT set_vow_counter_test_target(
     return TRUE;
 }
 
+INT show_vow_watf_info(
+    IN  PRTMP_ADAPTER pAd,
+    IN  RTMP_STRING *arg)
+{
+    VOW_WATF	*pwatf;
+	UINT8		macAddr[MAC_ADDR_LEN];
+	INT			level, Num;
+	
+	pwatf = &pAd->vow_watf_mac[0];
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+		("======== WATF Information ========\n"));	
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+		("vow_watf_en: %d\n",pAd->vow_watf_en));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("vow_watf_q_lv0: %d\n", pAd->vow_watf_q_lv0)); 
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("vow_watf_q_lv1: %d\n", pAd->vow_watf_q_lv1));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("vow_watf_q_lv2: %d\n", pAd->vow_watf_q_lv2));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("vow_watf_q_lv3: %d\n", pAd->vow_watf_q_lv3));
+
+	
+	for (level = 0; level < VOW_WATF_LEVEL_NUM; level++)
+	{
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	                ("======== WATF LV%d's MAC Address List ========\n", level));
+    	for (Num = 0; Num < pwatf->Num; Num++)
+	    {
+	    	NdisMoveMemory(&macAddr, pwatf->Entry[Num].Addr, MAC_ADDR_LEN);
+	        MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	                ("Entry %d: %02x:%02x:%02x:%02x:%02x:%02x\n", 
+	                Num, macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]));
+	    }
+		pwatf++;
+	}
+	return TRUE;
+}
+
+
+INT set_vow_watf_en(
+    IN  PRTMP_ADAPTER pAd,
+    IN  RTMP_STRING *arg)
+{
+    UINT32 val, rv, ret;
+
+    if (arg)
+    {
+        rv = sscanf(arg, "%d", &val);
+        if (rv > 0)
+        {
+
+            pAd->vow_watf_en = val;
+			ret = vow_set_feature_all(pAd);
+            MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+                ("%s: vow_watf_en is set to %u.\n", __FUNCTION__, val));
+
+			if (ret)
+            {
+                MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+                ("%s: set command failed.\n", __FUNCTION__));
+                return FALSE;
+            }
+        }
+        else
+            return FALSE;
+    }
+    else
+        return FALSE;
+
+    return TRUE;
+
+}
+
+INT set_vow_watf_q(
+    IN  PRTMP_ADAPTER pAd,
+    IN  RTMP_STRING *arg)
+{
+	UINT8		*pwatf_string;
+	UINT32 		val, rv, level;
+	
+    if (arg && vow_watf_is_enabled(pAd))
+    {
+        rv = sscanf(arg, "%d-%d", &level, &val);
+        if (rv > 1)
+        {
+        	os_alloc_mem(NULL, (UCHAR **)&pwatf_string, sizeof(32));
+			switch(level)
+			{
+				case 0:
+				{
+					pAd->vow_watf_q_lv0 =  val;
+					sprintf(pwatf_string,"%d-%d", 0, pAd->vow_watf_q_lv0);
+					set_vow_sta_dwrr_quantum(pAd, pwatf_string);
+					MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("vow_watf_q_lv0 is set to %d\n", pAd->vow_watf_q_lv0));
+					break;
+				}
+				case 1:
+				{
+					pAd->vow_watf_q_lv1 =  val;
+					sprintf(pwatf_string,"%d-%d", 1, pAd->vow_watf_q_lv1);
+					set_vow_sta_dwrr_quantum(pAd, pwatf_string);
+					MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("vow_watf_q_lv1 is set to %d\n", pAd->vow_watf_q_lv1));
+					break;
+				}
+				case 2:
+				{
+					pAd->vow_watf_q_lv2 =  val;
+					sprintf(pwatf_string,"%d-%d", 2, pAd->vow_watf_q_lv2);
+					set_vow_sta_dwrr_quantum(pAd, pwatf_string);
+					MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("vow_watf_q_lv2 is set to %d\n", pAd->vow_watf_q_lv2));
+					break;
+				}
+				case 3:
+				{
+					pAd->vow_watf_q_lv3 =  val;
+					sprintf(pwatf_string,"%d-%d", 3, pAd->vow_watf_q_lv3);
+					set_vow_sta_dwrr_quantum(pAd, pwatf_string);
+					MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("vow_watf_q_lv3 is set to %d\n", pAd->vow_watf_q_lv3));
+					break;
+				}
+				default:
+					MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("vow_watf_q_lv is setting fail.\n"));
+			}
+			
+			if(pwatf_string != NULL)
+				os_free_mem(pwatf_string);
+        }
+        else
+        {
+        	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+				("Wrong format, vow_watf_q=[Level]-[Quantum]\n"
+				"[Level] should be among 0 to 3 !\n"
+				"[Quantum] unit is 256us.\n"));
+			
+            return FALSE;
+        }
+    }
+    else
+        return FALSE;
+
+    return TRUE;
+
+}
+
+
+INT set_vow_watf_add_entry(
+    IN  PRTMP_ADAPTER pAd,
+    IN  RTMP_STRING *arg)
+{
+    UINT32 			rv, level;
+	UINT32			tmp_macAddr[MAC_ADDR_LEN];
+	UINT8			macAddr[MAC_ADDR_LEN];
+	VOW_WATF		*pwatf, *ptmpwatf;
+	INT 			i, j;
+	BOOLEAN 		isDuplicate = FALSE;
+
+    if (arg)
+    {
+        rv = sscanf(arg, "%d-%02x:%02x:%02x:%02x:%02x:%02x", 
+			&level, &tmp_macAddr[0], &tmp_macAddr[1], &tmp_macAddr[2], &tmp_macAddr[3], &tmp_macAddr[4], &tmp_macAddr[5]);
+		pwatf = &pAd->vow_watf_mac[level];
+		ptmpwatf = &pAd->vow_watf_mac[0];
+		
+        if ((rv == 7) && (level<VOW_WATF_LEVEL_NUM) && (level >= 0))
+        {
+        	for(i=0; i<MAC_ADDR_LEN; i++)
+				macAddr[i] = tmp_macAddr[i];
+			
+			for(i=0; i<VOW_WATF_LEVEL_NUM; i++)
+			{
+				for(j=0; j < ptmpwatf->Num; j++)
+					if (memcmp(ptmpwatf->Entry[j].Addr, &macAddr, MAC_ADDR_LEN) == 0)
+					{
+						isDuplicate = TRUE;
+						MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+							("This MAC Address %02x:%02x:%02x:%02x:%02x:%02x is duplicate.\n",
+								macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]));
+						break;
+					}
+				ptmpwatf++;
+			}
+			if (!isDuplicate)
+			{
+				NdisMoveMemory(pwatf->Entry[pwatf->Num++].Addr, &macAddr, MAC_ADDR_LEN);
+				MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	                ("The entry Level %d - %02x:%02x:%02x:%02x:%02x:%02x is set complete! \n", 
+	                level, macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]));
+			}
+        }
+        else
+        {
+        	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+				("Wrong format, vow_watf_add_entry=[Level]-[Addr]:[Addr]:[Addr]:[Addr]:[Addr]:[Addr]\n"
+				"[Level] should be among 0 to 3 !\n"));
+            return FALSE;
+		}
+    }
+    else
+        return FALSE;
+
+    return TRUE;
+}
+
+INT set_vow_watf_del_entry(
+    IN  PRTMP_ADAPTER pAd,
+    IN  RTMP_STRING *arg)
+{
+    UINT32 			rv, level;
+	UINT32			tmp_macAddr[MAC_ADDR_LEN];
+	UINT8			macAddr[MAC_ADDR_LEN];
+	UINT8			nullAddr[MAC_ADDR_LEN];
+	VOW_WATF		*pwatf;
+	INT 			i;
+	INT				j = 0;
+	BOOLEAN 		isFound = FALSE;
+
+    if (arg)
+    {
+        rv = sscanf(arg, "%d-%02x:%02x:%02x:%02x:%02x:%02x", 
+			&level, &tmp_macAddr[0], &tmp_macAddr[1], &tmp_macAddr[2], &tmp_macAddr[3], &tmp_macAddr[4], &tmp_macAddr[5]);
+		pwatf = &pAd->vow_watf_mac[level];
+		NdisZeroMemory(nullAddr, MAC_ADDR_LEN);
+		
+        if ((rv == 7) && (level<VOW_WATF_LEVEL_NUM) && (level >= 0))
+        {
+        	for(i=0; i<MAC_ADDR_LEN; i++)
+				macAddr[i] = tmp_macAddr[i];
+
+			for (i=0; i<pwatf->Num; i++)
+			{
+				if (memcmp(pwatf->Entry[i].Addr, &macAddr, MAC_ADDR_LEN) == 0)
+				{
+					isFound = TRUE;
+					NdisZeroMemory(pwatf->Entry[i].Addr, MAC_ADDR_LEN);
+					MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+						("The entry %02x:%02x:%02x:%02x:%02x:%02x founded will be deleted!\n",
+						macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]));
+					break;
+				}
+			}
+			
+			if (!isFound)
+			{
+				MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+					("The entry %02x:%02x:%02x:%02x:%02x:%02x is not in the list!\n",
+					macAddr[0],macAddr[1],macAddr[2],macAddr[3],macAddr[4],macAddr[5]));
+			}
+			else
+			{
+				for (i=0; i<pwatf->Num; i++)
+				{
+					if (memcmp(pwatf->Entry[i].Addr, &nullAddr, MAC_ADDR_LEN) == 0)
+					{
+						continue;			
+					}
+					else
+					{
+						NdisMoveMemory(&(pAd->vow_watf_mac[level].Entry[j++].Addr), pwatf->Entry[i].Addr, MAC_ADDR_LEN);
+					}
+				}
+				pwatf->Num--;
+			}
+
+        }
+        else
+		{
+			MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+				("Wrong format, vow_watf_add_entry=[Level]-[Addr]:[Addr]:[Addr]:[Addr]:[Addr]:[Addr]\n"
+				"[Level] should be among 0 to 3 !\n"));
+			return FALSE;
+		}
+
+    }
+    else
+        return FALSE;
+
+    return TRUE;
+}
+
+VOID set_vow_watf_sta_dwrr(
+	PRTMP_ADAPTER pAd,
+	UINT8 *Addr,
+	UINT8 Wcid)
+{
+	VOW_WATF		*pwatf;
+	UINT8			*pwatf_string;
+	UINT8 			i, j;
+	UINT8			level = 0;
+	BOOLEAN 		isFound = FALSE;
+
+	if(vow_watf_is_enabled(pAd))
+	{
+		pwatf = &pAd->vow_watf_mac[0];
+		os_alloc_mem(NULL, (UCHAR **)&pwatf_string, sizeof(32));
+
+		for(i=0; i<VOW_WATF_LEVEL_NUM; i++)
+		{
+			for(j=0; j < pwatf->Num; j++)
+			{
+				if (memcmp(pwatf->Entry[j].Addr, Addr, MAC_ADDR_LEN) == 0)
+				{
+					isFound = TRUE;
+					level = i;
+					MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+						("This MAC Address %02x:%02x:%02x:%02x:%02x:%02x is found in list.\n",
+							Addr[0], Addr[1], Addr[2], Addr[3], Addr[4], Addr[5]));
+					break;
+				}
+			}
+			pwatf++;
+		}
+		
+		if(isFound)
+		{
+			for(i=0; i<4;i++)
+				pAd->vow_sta_cfg[Wcid].dwrr_quantum[i] = level;	
+			MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+				("Update STA %d's DWRR quantum with LV%d\n", Wcid, level));
+		}
+		else
+		{
+			for(i=0; i<4;i++)
+				pAd->vow_sta_cfg[Wcid].dwrr_quantum[i] = level;
+			MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+				("Update STA %d's DWRR quantum with default LV%d\n", Wcid, level));
+		}
+
+		if(pwatf_string != NULL)
+			os_free_mem(pwatf_string);
+	}
+}
+
+
+VOID vow_reset_watf(
+	IN PRTMP_ADAPTER pad)
+{
+	/* When interface down, it will reset WATF table. */
+	VOW_WATF	*pwatf;
+	INT	i, j;
+
+	if(pad->vow_watf_en)
+	{
+		pwatf = &pad->vow_watf_mac[0];
+		for(i=0; i<VOW_WATF_LEVEL_NUM; i++)
+		{
+			for (j=0; j<pwatf->Num; j++)
+			{
+				NdisZeroMemory(pwatf->Entry[j].Addr, MAC_ADDR_LEN);
+			}
+			pwatf->Num = 0;
+			pwatf++;
+		}
+	}
+}
+
+
+INT show_vow_info(
+    IN  PRTMP_ADAPTER pAd,
+    IN  RTMP_STRING *arg)
+{
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+		("======== VOW Control Information ========\n"));	
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+		("ATC Enbale: %d\n",pAd->vow_cfg.en_bw_ctrl));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("ATF Enbale: %d\n", pAd->vow_cfg.en_airtime_fairness)); 
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("WATF Enable: %d\n", pAd->vow_watf_en));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+		("en_bw_refill: %d\n",pAd->vow_cfg.en_bw_refill));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+		("en_txop_no_change_bss: %d\n",pAd->vow_cfg.en_txop_no_change_bss));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("dbdc0_search_rule: %d\n", pAd->vow_cfg.dbdc0_search_rule));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("dbdc1_search_rule: %d\n", pAd->vow_cfg.dbdc1_search_rule));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+		("refill_period: %d\n", pAd->vow_cfg.refill_period));
+
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+		("======== VOW Max Deficit Information ========\n"));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("VOW Max Deficit(unit 256us): %d\n", pAd->vow_cfg.sta_max_wait_time)); 
+
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+		("======== VOW Quantum Information ========\n"));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("Quantum ID 0 value(unit 256us): %d\n", pAd->vow_cfg.vow_sta_dwrr_quantum[0])); 
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("Quantum ID 1 value(unit 256us): %d\n", pAd->vow_cfg.vow_sta_dwrr_quantum[1]));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("Quantum ID 2 value(unit 256us): %d\n", pAd->vow_cfg.vow_sta_dwrr_quantum[2]));
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("Quantum ID 3 value(unit 256us): %d\n", pAd->vow_cfg.vow_sta_dwrr_quantum[3]));
+
+
+    return TRUE;
+}
+
+VOID vow_reset_dvt(
+	IN PRTMP_ADAPTER pad)
+{
+	/* When interface down, it will reset DVT parameters. */
+	pad->vow_dvt_en = 0;
+	
+	NdisZeroMemory(vow_tx_time, MAX_LEN_OF_MAC_TABLE);
+	NdisZeroMemory(vow_rx_time, MAX_LEN_OF_MAC_TABLE);
+	NdisZeroMemory(vow_tx_ok, MAX_LEN_OF_MAC_TABLE);
+	NdisZeroMemory(vow_tx_fail, MAX_LEN_OF_MAC_TABLE);
+	NdisZeroMemory(vow_last_tx_time, MAX_LEN_OF_MAC_TABLE);
+	NdisZeroMemory(vow_last_rx_time, MAX_LEN_OF_MAC_TABLE);
+	NdisZeroMemory(vow_tx_bss_byte, WMM_NUM_OF_AC);
+	NdisZeroMemory(vow_rx_bss_byte, WMM_NUM_OF_AC);	
+	NdisZeroMemory(vow_tx_mbss_byte, VOW_MAX_GROUP_NUM);
+	NdisZeroMemory(vow_rx_mbss_byte, VOW_MAX_GROUP_NUM);	
+	
+	vow_sum_tx_rx_time = 0;
+	vow_avg_sum_time = 0;
+	vow_idx = 0;
+	vow_ampdu_cnt = 0;
+	vow_interval = 0;
+	vow_last_free_cnt = 0;
+	
+}
 
 VOID vow_display_info_periodic(
     IN  PRTMP_ADAPTER pAd)
@@ -4479,12 +5125,13 @@ VOID vow_display_info_periodic(
     {
         CHAR i, ac, bw;
         UINT32 wtbl_offset;
-        UINT32 tx_sum, tx, rx_sum, rx, tx_ok[2], tx_fail[2], tx_cnt, tx_ok_sum, tx_fail_sum;
+        UINT32 tx_sum, tx, rx_sum, rx, tx_ok[2], tx_fail[2], tx_cnt, tx_ok_sum, tx_fail_sum, tx_diff_time, rx_diff_time;
         UINT32 cnt, free_cnt;
 		UINT32 ple_stat[17]={0}, pg_flow_ctrl[6]={0};
 		UINT32 sta_pause[4]={0}, dis_sta_map[4]={0};
 		INT32 k, l;
 		UINT32 counter[2];
+		UINT32 addr, phymode, rate, DW6;
 
         vow_idx++;
 
@@ -4492,7 +5139,7 @@ VOID vow_display_info_periodic(
         /* airtime */
         for (i = 0; i <= pAd->vow_monitor_sta; i++)
         {
-            UINT32 clr_wtbl = 0x1000;
+  
 
             wtbl_offset = (i << 8) | 0x3004C;
             tx_sum = rx_sum = 0;
@@ -4506,42 +5153,74 @@ VOID vow_display_info_periodic(
             }
 
             /* clear WTBL airtime statistic */
-            RTMP_IO_WRITE32(pAd, 0x23430, clr_wtbl | i);
 
-            if (i <= pAd->vow_show_sta)
-                MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF,("sta%d: tx -> %u, rx -> %u, vow_idx %d\n", i, tx_sum, rx_sum, vow_idx));
 
-            vow_tx_time[i] += tx_sum;
-            vow_rx_time[i] += rx_sum;
+            tx_diff_time = tx_sum - vow_last_tx_time[i];
+            rx_diff_time = rx_sum - vow_last_rx_time[i];
 
+			vow_tx_time[i] += tx_diff_time;
+			vow_rx_time[i] += rx_diff_time;
+#ifdef CUSTOMER_DCC_FEATURE
+			{
+				PMAC_TABLE_ENTRY pEntry = NULL;
+				if(VALID_UCAST_ENTRY_WCID(pAd, i))
+			    pEntry = &pAd->MacTab.Content[i];
+				if(IS_ENTRY_CLIENT(pEntry) && (pEntry->Sst == SST_ASSOC) && pEntry->pMbss)
+				{
+					pEntry->ChannelUseTime += tx_diff_time + rx_diff_time;
+					pEntry->pMbss->ChannelUseTime += tx_diff_time + rx_diff_time;
+				}
+			}
+#endif
+
+			vow_last_tx_time[i] = tx_sum;
+			vow_last_rx_time[i] = rx_sum;
+
+			vow_sum_tx_rx_time += tx_diff_time + rx_diff_time;
+			vow_avg_sum_time += tx_diff_time + rx_diff_time;
+
+
+			wtbl_offset = (i << 8) | 0x30000;
+			RTMP_IO_READ32(pAd, wtbl_offset, &addr);
+			addr = addr & 0xffff;
+
+			wtbl_offset = (i << 8) | 0x30018;
+			RTMP_IO_READ32(pAd, wtbl_offset, &DW6);
+			phymode = (DW6 & 0x1c0) >> 6 ;
+			rate = DW6 & 0x3f;
+			
+
+			if (i <= pAd->vow_show_sta)
+			{
+                MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF,("sta%d: tx -> %u, rx -> %u, vow_idx %d\n", 
+																	i, tx_diff_time, rx_diff_time, vow_idx));
+
+				MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF,("sta%d: addr %x:%x, Mode %d, MCS %d, vow_idx %d\n", 
+                													i, (addr & 0xff), (addr >> 8), phymode, rate, vow_idx));
+			}
+			
             if (vow_idx == pAd->vow_avg_num)
             {
-                MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-                    ("AVG sta%d: tx -> %u(%u), rx -> %u(%u)\n", i, 
+                MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF,("AVG sta%d: tx -> %u(%u), rx -> %u(%u)\n", i, 
                         vow_tx_time[i]/pAd->vow_avg_num, 
                         vow_tx_time[i], 
                         vow_rx_time[i]/pAd->vow_avg_num, 
                         vow_rx_time[i]));
-				vow_sum_tx_rx_time += vow_tx_time[i]/pAd->vow_avg_num;
-				vow_sum_tx_rx_time += vow_rx_time[i]/pAd->vow_avg_num;
+				vow_avg_sum_time = 0;																			
                 vow_tx_time[i] = 0;
                 vow_rx_time[i] = 0;
 
             }
         }
 
-		if (vow_idx == pAd->vow_avg_num)
-		{
-			MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-				("AVG Total Airtime: %u\n", vow_sum_tx_rx_time));
-			vow_sum_tx_rx_time = 0;
-		}
+		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF,("Total Airtime: %u\n", vow_sum_tx_rx_time));
+		vow_sum_tx_rx_time = 0;
 
 
         /* tx counter */
         for (i = 1; i <= pAd->vow_monitor_sta; i++)
         {
-            UINT32 clr_wtbl = 0x4000;
+
 
             wtbl_offset = (i << 8) | 0x30040;
             tx_ok_sum = tx_fail_sum = 0;
@@ -4554,9 +5233,7 @@ VOID vow_display_info_periodic(
                 tx_fail_sum += ((tx_cnt >> 16) & 0xffff);
                 tx_fail[bw] = ((tx_cnt >> 16) & 0xffff);
             }
-
-            /* clear WTBL airtime statistic */
-            RTMP_IO_WRITE32(pAd, 0x23430, clr_wtbl | i);
+ 
 
             if (i <= pAd->vow_show_sta)
             {
@@ -4761,4 +5438,24 @@ MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_OFF,
     }
 }
 
+#else
+VOID vow_atf_off_init(PRTMP_ADAPTER pad)
+{
+	UINT32 reg32;
+
+    /* disable RX airtime */
+    HW_IO_READ32(pad, WTBL_OFF_ACR, &reg32);
+    reg32 &= ~WTBL_ADM_RX_EN;
+    HW_IO_WRITE32(pad, WTBL_OFF_ACR, reg32);
+  
+	HW_IO_READ32(pad, AIRTIME_DRR_SIZE, &reg32);
+	reg32 &= ~STA_MAX_DEFICIT_MASK;
+	reg32 |= 1; //256us
+	HW_IO_WRITE32(pad, AIRTIME_DRR_SIZE, reg32);
+	
+	/* disable RTS failed airtime charge for RTS deadlock */
+	HW_IO_READ32(pad, AGG_SCR, &reg32);
+	reg32 |= RTS_FAIL_CHARGE_DIS;
+	HW_IO_WRITE32(pad, AGG_SCR, reg32);
+}
 #endif /* VOW_SUPPORT */

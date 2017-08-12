@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc. 
@@ -13,7 +14,7 @@
 	Module Name:
 	mt_hif_usb.h
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __MT_HIF_USB_H__
 #define __MT_HIF_USB_H__
 

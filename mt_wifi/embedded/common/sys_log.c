@@ -196,12 +196,19 @@ VOID RtmpDrvSendWirelessEvent(
 
 		pBufPtr = pBuf;		
 
+#ifdef VENDOR_FEATURE6_SUPPORT
+	  if (pAddr && (type != IW_WSC_EVENT_FLAG_START))
+	  {
+	      pBufPtr += sprintf(pBufPtr, "%02x:%02x:%02x:%02x:%02x:%02x BSS(%d) ", PRINT_MAC(pAddr), wdev_idx+8);
+	  }
+#else
 		if (pAddr)
 			pBufPtr += sprintf(pBufPtr, "(RT2860) STA(%02x:%02x:%02x:%02x:%02x:%02x) ", PRINT_MAC(pAddr));				
 		else if ((wdev->wdev_type == WDEV_TYPE_AP || wdev->wdev_type == WDEV_TYPE_GO) && (wdev->func_idx < MAX_MBSSID_NUM(pAd)))
 			pBufPtr += sprintf(pBufPtr, "(RT2860) BSS(ra%d) ", wdev->func_idx);
 		else
 			pBufPtr += sprintf(pBufPtr, "(RT2860) ");
+#endif
 
 		if (type == IW_SYS_EVENT_FLAG_START)
         {
@@ -220,7 +227,18 @@ VOID RtmpDrvSendWirelessEvent(
 #endif /* IDS_SUPPORT */		
 #ifdef WSC_INCLUDED
 		else if (type == IW_WSC_EVENT_FLAG_START)
+#ifdef VENDOR_FEATURE6_SUPPORT
+      if(!pAddr)
+      {
+#endif
 			pBufPtr += sprintf(pBufPtr, "%s", pWirelessWscEventText[event]);
+#ifdef VENDOR_FEATURE6_SUPPORT
+      }
+      else
+      {
+          pBufPtr += sprintf(pBufPtr, "%s\n%s", pWirelessWscEventText[event], pAddr);
+      }
+#endif
 #endif /* WSC_INCLUDED */
 		else
 			pBufPtr += sprintf(pBufPtr, "%s", "unknown event");

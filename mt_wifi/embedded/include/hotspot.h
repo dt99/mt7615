@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -24,6 +25,7 @@
 	Who         When          What
 	--------    ----------    ----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #ifndef __HOTSPOT_H__
 #define __HOTSPOT_H__
 
@@ -58,6 +60,17 @@ typedef struct GNU_PACKED _HSCTRL_EVENT_DATA {
 	UCHAR EventType;
 } HSCTRL_EVENT_DATA, *PHSCTRL_EVENT_DATA;
 
+#define MAX_QOS_MAP_TABLE_SIZE				8
+
+typedef struct _QOS_MAP_TABLE_T {	
+    UINT8			ucPoolValid;
+    UINT8			ucDscpExceptionCount;
+	UINT32			u4Ac;
+    UINT16 			au2DscpRange[8];
+	UINT16			au2DscpException[21];
+} QOS_MAP_TABLE_T, *P_QOS_MAP_TABLE_T;
+
+
 typedef struct _HOTSPOT_CTRL {
 	UINT32 HSIndicationIELen;
 	UINT32 P2PIELen;
@@ -89,7 +102,32 @@ typedef struct _HOTSPOT_CTRL {
 	UCHAR  	QLoadTestEnable;	/* for BSS Load IE Test */
 	UCHAR  	QLoadCU;			/* for BSS Load IE Test */
 	USHORT 	QLoadStaCnt;		/* for BSS Load IE Test */
+	UINT8 	HotspotBSSFlags;	/* for 7615 offload to CR4 */
+	BOOLEAN QosMapAddToPool;
+	UINT8	QosMapPoolID;		/* per BSS default DSCP pool map ID */
+	BOOLEAN bHSOnOff;  /* for recording wdev HS on/off status, to prevent HSCtrlOn or HSCtrlOff gets insanly called repeatedly */
 } HOTSPOT_CTRL, *PHOTSPOT_CTRL;
+
+/* for 7615 offload to CR4 */
+enum HS_R2_CAPABILITY_FLAGS {
+	fgHotspotEnable						= (1 << 0),
+	fgProxyArpEnable					= (1 << 1),
+	fgASANEnable						= (1 << 2),
+	fgDGAFDisable						= (1 << 3),
+	fgQosMapEnable						= (1 << 4),
+};
+enum HS_R2_UPDATE_TYPE {
+	fgUpdateBssCapability				= (1 << 0),
+	fgUpdateStaDSCP						= (1 << 1),
+	fgUpdateDSCPPool					= (1 << 2),
+};
+#define IS_HOTSPOT_ENABLE(ucHotspotBssFlags) ((ucHotspotBssFlags & fgHotspotEnable) != 0)
+#define IS_PROXYARP_ENABLE(ucHotspotBssFlags) ((ucHotspotBssFlags & fgProxyArpEnable) != 0)
+#define IS_ASAN_ENABLE(ucHotspotBssFlags) ((ucHotspotBssFlags & fgASANEnable) != 0)
+#define IS_DGAF_DISABLE(ucHotspotBssFlags) ((ucHotspotBssFlags & fgDGAFDisable) != 0)
+#define IS_QOSMAP_ENABLE(ucHotspotBssFlags) ((ucHotspotBssFlags & fgQosMapEnable) != 0)
+#define IS_PROXYARP_ASAN_ENABLE(ucHotspotBssFlags) ((ucHotspotBssFlags & (fgHotspotEnable|fgProxyArpEnable|fgASANEnable|fgDGAFDisable)) != 0)
+
 
 enum {
 	L2FilterDisable,
@@ -107,6 +145,7 @@ enum {
 	PARAM_GAS_COME_BACK_DELAY,
 	PARAM_WNM_NOTIFICATION,
 	PARAM_QOSMAP,
+	PARAM_WNM_BSS_TRANSITION_MANAGEMENT,
 };
 
 BOOLEAN L2FilterInspection(
@@ -158,13 +197,54 @@ VOID Clear_Hotspot_All_IE(IN PRTMP_ADAPTER PAd);
 #define GAS_STATE_MESSAGES    0
 #define ACTION_STATE_MESSAGES 1
 
-void HotspotOnOffEvent(PNET_DEV net_dev, int onoff);
-void HotspotAPReload(PNET_DEV net_dev);
+VOID HotspotOnOffEvent(
+	IN PNET_DEV net_dev, 
+	IN int onoff);
+	
+VOID HotspotAPReload(
+	IN PNET_DEV net_dev);
+
+VOID hotspot_update_ap_qload_to_bcn(
+	IN RTMP_ADAPTER *pAd);
+
+BOOLEAN hotspot_check_dhcp_arp(
+	IN RTMP_ADAPTER *pAd,
+	IN PNDIS_PACKET	pPacket
+	);
 
 INT Set_HotSpot_Param(
 	IN PRTMP_ADAPTER pAd,
 	UINT32 Param,
 	UINT32 Value);
+	
+VOID hotspot_bssflag_dump(
+	UINT8 ucHotspotBSSFlags);
+	
+VOID hotspot_update_bssflag(
+	RTMP_ADAPTER *pAd,
+	UINT8 flag,
+	UINT8 value,
+	PHOTSPOT_CTRL pHSCtrl);
+	
+VOID hotspot_update_bss_info_to_cr4(
+	RTMP_ADAPTER *pAd,
+	UCHAR APIndex);
+
+VOID hotspot_add_qos_map_pool_to_cr4(
+	RTMP_ADAPTER *pAd,
+	UINT8 PoolID);
+
+VOID hotspot_qosmap_update_sta_mapping_to_cr4(
+	RTMP_ADAPTER *pAd,
+	struct _MAC_TABLE_ENTRY *pEntry,
+	UINT8 PoolID);
+
+UINT8 hotspot_qosmap_add_pool(
+	RTMP_ADAPTER *pAd,
+	struct _MAC_TABLE_ENTRY *pEntry);
+
+
+
 
 enum {
 	HS_ON_OFF_BASE,

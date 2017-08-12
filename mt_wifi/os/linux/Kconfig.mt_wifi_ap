@@ -50,11 +50,6 @@ config MUMIMO_SUPPORT
         select MU_RA_SUPPORT
         default y
 
-config SER_SUPPORT
-        bool "SER Support"
-        depends on WIFI_DRIVER
-        default y
-
 config MU_RA_SUPPORT
   	bool "MU-RGA Support"
   	depends on MUMIMO_SUPPORT
@@ -74,10 +69,20 @@ config DOT11K_RRM_SUPPORT
 #	depends on MT_AP_SUPPORT
 #	default n
 
-#config CFG80211_SUPPORT
-#	bool "CFG80211"
-#	depends on MT_AP_SUPPORT
-#	default n
+config CFG80211_SUPPORT
+	bool "CFG80211"
+	depends on MT_AP_SUPPORT
+	default n
+
+config CUSTOMIZED_HOSTAPD
+	bool "Customized Hostapd Support"
+	depends on CFG80211_SUPPORT
+	default n
+
+config DSCP_QOS_MAP_SUPPORT
+	bool "Dscp Qos Mapping Support"
+	depends on MT_AP_SUPPORT
+	default n
 
 config CON_WPS_SUPPORT
 	bool "Concurrent WPS Support"
@@ -85,7 +90,7 @@ config CON_WPS_SUPPORT
 	depends on APCLI_SUPPORT
 	depends on WSC_INCLUDED
 	depends on WSC_V2_SUPPORT
-	depends on MULTI_INF_SUPPORT
+#	depends on MULTI_INF_SUPPORT
 	default n
 	
 #config LLTD_SUPPORT
@@ -101,9 +106,10 @@ config CON_WPS_SUPPORT
 #	bool "Net-SNMP Support"
 #	depends on MT_AP_SUPPORT
 
-#config MCAST_RATE_SPECIFIC
-#	bool "User specific tx rate of mcast pkt"
-#	depends on MT_AP_SUPPORT
+config MCAST_RATE_SPECIFIC
+	bool "User specific tx rate of mcast pkt"
+	depends on MT_AP_SUPPORT
+	default y
 
 #config EXT_BUILD_CHANNEL_LIST
 #	bool "Extension Channel List"
@@ -116,7 +122,7 @@ config CON_WPS_SUPPORT
 config VOW_SUPPORT
 	bool "MediaAir(VOW) support"
 	depends on MT_AP_SUPPORT
-	default n
+	default y
 
 #config AIRPLAY_SUPPORT
 #	bool "AIRPLAY Support"
@@ -131,3 +137,17 @@ config BAND_STEERING
 config LED_CONTROL_SUPPORT
         bool "LED Control Support"
         default y
+
+config RADIUS_ACCOUNTING_SUPPORT
+	bool "Radius Accounting Support"
+	depends on MT_AP_SUPPORT
+	default n
+        
+config GREENAP_SUPPORT
+	bool "GreenAP Support"
+	depends on MT_AP_SUPPORT
+	default y
+
+config LINUX_NET_TXQ_SUPPORT
+	bool "NET TX Queue Support"
+	default y

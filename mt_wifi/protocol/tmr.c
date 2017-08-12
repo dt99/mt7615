@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
     --------------  ----------      ----------------------------------------------
     Carter          2014-1120       created
 */
-
+#endif /* MTK_LICENSE */
 #ifdef MT_MAC
 
 #include "rt_config.h"
@@ -51,70 +52,60 @@ void tmr_raw_dump(char *str, UCHAR *pSrcBufVA, UINT SrcBufLen)
     printk("\n");
 }
 
-VOID TmrReportParser(RTMP_ADAPTER *pAd, TMR_FRM_STRUC *tmr, BOOLEAN fgFinalResult)
+
+VOID TmrReportParser(RTMP_ADAPTER *pAd, TMR_FRM_STRUC *tmr, BOOLEAN fgFinalResult, UINT32 TOAECalibrationResult)
 {
-	struct _RMAC_RXD_0_TMR *ptmr_d0 = &tmr->TmrD0;
-	UINT32 *ptod_0 = &tmr->ToD0;
-	UINT32 *ptoa_0 = &tmr->ToA0;
-	TMR_D_6 *tmr_d6 = &tmr->TmrD6;
-	TMR_D_2 *ptmr_d2 = &tmr->TmrD2;
-	TMR_D_1 *tmr_d1 = &tmr->TmrD1;
-	UCHAR   *pta_16 = (UCHAR *)&tmr->Ta16;
+    struct _RMAC_RXD_0_TMR *ptmr_d0 = &tmr->TmrD0;
+    UINT32 *ptod_0 = &tmr->ToD0;
+    UINT32 *ptoa_0 = &tmr->ToA0;
+    TMR_D_6 *tmr_d6 = &tmr->TmrD6;
+    TMR_D_2 *ptmr_d2 = &tmr->TmrD2;
+    TMR_D_1 *tmr_d1 = &tmr->TmrD1;
+    UCHAR   *pta_16 = (UCHAR *)&tmr->Ta16;
 #ifdef TMR_GEN2
-	TMR_D_7 *tmr_d7 = &tmr->TmrD7;
-	TMR_D_8 *tmr_d8 = &tmr->TmrD8;
-	INT32 LtfSyncAddr = 0;
-	UINT32 DacOutput = 0;
+    TMR_D_7 *tmr_d7 = &tmr->TmrD7;
+    TMR_D_8 *tmr_d8 = &tmr->TmrD8;
+    INT32 LtfSyncAddr = 0;
+    UINT32 DacOutput = 0;
 #endif
-	UCHAR   PeerAddr[MAC_ADDR_LEN] = {0};
+    UCHAR   PeerAddr[MAC_ADDR_LEN] = {0};
 
-	static UINT32 lastest_TOA = 0;
-	static UINT32 lastest_sn = 0;
-	UINT32 tod_fine = tmr_d1->field_init.TodFine;
-	UINT32 tod_low = 0;
-	UINT32 toa_low = 0;
-	UINT32 delta_low = 0;
-	UINT32 tod_high = 0;
-	UINT32 toa_high = 0;
-	UINT32 delta_high = 0;
-	UCHAR dbg_lvl = DBG_LVL_OFF;
-	UCHAR dbg_lvl_error = DBG_LVL_OFF;
+    static UINT32 lastest_TOA = 0;
+    static UINT32 lastest_sn = 0;
+    UINT32 tod_fine = tmr_d1->field_init.TodFine;
+    UINT32 tod_low = 0;
+    UINT32 toa_low = 0;
+    UINT32 delta_low = 0;
+    UINT32 tod_high = 0;
+    UINT32 toa_high = 0;
+    UINT32 delta_high = 0;
+    UCHAR dbg_lvl = DBG_LVL_OFF;
+    UCHAR dbg_lvl_error = DBG_LVL_OFF;
 
-	if (pAd->pTmrCtrlStruct == NULL)
-		return;
+    if (pAd->pTmrCtrlStruct == NULL)
+        return;
 
-	if (pAd->pTmrCtrlStruct->TmrEnable == TMR_DISABLE)
-		return;
+    if (pAd->pTmrCtrlStruct->TmrEnable == TMR_DISABLE)
+        return;
 
-#ifdef FTM_SUPPORT
-	if (ptmr_d0->IR == TMR_IR0_TX)
-		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("TMR(%d%d)PID:0x%02X\n",
-		ptmr_d0->ToaVld, ptmr_d0->TodVld, tmr_d1->field_init.Pid));
-	else
-		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("TMR: TYPE=%x, SUB_TYPE=%x, SN=0x%04X\n",
-		ptmr_d0->Type, ptmr_d0->SubType, ptmr_d2->field.SnField));
+    pAd->pTmrCtrlStruct->TmrCalResult = TOAECalibrationResult;
 
-	dbg_lvl = DBG_LVL_INFO;
-	dbg_lvl_error = DBG_LVL_WARN;
-
-	if (DebugLevel >= dbg_lvl)
-#endif /* FTM_SUPPORT */
 	{
 		tmr_raw_dump("TMR RAW data: ", (UCHAR *)tmr, sizeof(TMR_FRM_STRUC));
 	}
 
 
-	tod_low = tmr->ToD0;
-	toa_low = tmr->ToA0;
-	tod_high = tmr->TmrD6.field.ToD32;
-	toa_high = tmr->TmrD6.field.ToA32;
+    tod_low = tmr->ToD0;
+    toa_low = tmr->ToA0;
+    tod_high = tmr->TmrD6.field.ToD32;
+    toa_high = tmr->TmrD6.field.ToA32;
 
 
 #ifdef TMR_GEN2
 	LtfSyncAddr = tmr_d8->field_ofdm.LtfSyncStartAddr;
-	printk("LtfSyncAddr = %x, in unit(12.5ns)\n", LtfSyncAddr);
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("LtfSyncAddr = %x, in unit(12.5ns)\n", LtfSyncAddr));
 	DacOutput = tmr_d7->field.DacOutput;
-	printk("DacOutput = %x\n", DacOutput);
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("DacOutput = %x\n", DacOutput));
 
 	if (fgFinalResult == FALSE)
 	{
@@ -123,136 +114,65 @@ VOID TmrReportParser(RTMP_ADAPTER *pAd, TMR_FRM_STRUC *tmr, BOOLEAN fgFinalResul
 	}
 #endif /*TMR_GEN2*/
 
-	/* calculate delta time */
-	if (ptmr_d0->IR == TMR_IR1_RX) {
-		delta_low = tod_low - toa_low;
-		delta_high = tod_high - toa_high;
-	}
-	else {
-		delta_low = toa_low - tod_low;
-		delta_high = toa_high - tod_high;
+    /* calculate delta time */
+    if (ptmr_d0->IR == TMR_IR1_RX) {
+        delta_low = tod_low - toa_low;
+        delta_high = tod_high - toa_high;
+    }
+    else {
+        delta_low = toa_low - tod_low;
+        delta_high = toa_high - tod_high;
+    }
+    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl,
+                ("DWORD_0: ByteCnt=%d, NC=%d, TMF=%d, "
+                    "ToaVld=%d, TodVld=%d, tod_fine=%x\n",
+                    ptmr_d0->RxByteCnt, ptmr_d0->Nc, ptmr_d0->Tmf,
+                    ptmr_d0->ToaVld, ptmr_d0->TodVld, tod_fine));
 
-	//         if (pAd->pTmrCtrlStruct->TmrState == SEND_OUT)
-	//         {
-	//             MtSetTmrCR(pAd, TMR_DISABLE);
-	//             pAd->pTmrCtrlStruct->TmrState = SEND_IDLE;
-	//         }
-	}
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl,
-			("DWORD_0: ByteCnt=%d, NC=%d, TMF=%d, "
-			"ToaVld=%d, TodVld=%d, tod_fine=%x\n",
-			ptmr_d0->RxByteCnt, ptmr_d0->Nc, ptmr_d0->Tmf,
-			ptmr_d0->ToaVld, ptmr_d0->TodVld, tod_fine));
 
-	if (ptmr_d0->IR == TMR_IR1_RX)
-	{   /* TMR Responder, Rx case */
-		if (lastest_sn == ptmr_d2->field.SnField)
-		{
-		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl_error, ("##### latest sn is same as last time\n"));
-		}
+    if (ptmr_d0->IR == TMR_IR1_RX)
+    {   /* TMR Responder, Rx case */
+        if (lastest_sn == ptmr_d2->field.SnField)
+        {
+            MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl_error, ("##### latest sn is same as last time\n"));
+        }
 
-		lastest_sn = ptmr_d2->field.SnField;
+        lastest_sn = ptmr_d2->field.SnField;
 
-		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("TYPE=%x, SUB_TYPE=%x, SN=%x\n",
-			ptmr_d0->Type, ptmr_d0->SubType, ptmr_d2->field.SnField));
-		PeerAddr[0] = ptmr_d2->field.Ta0;
-		PeerAddr[1] = ptmr_d2->field.Ta0 >> 8;
-		NdisCopyMemory(PeerAddr+2, (UCHAR *)pta_16, 4);
+        MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("TYPE=%x, SUB_TYPE=%x, SN=%x\n",
+                ptmr_d0->Type, ptmr_d0->SubType, ptmr_d2->field.SnField));
+        PeerAddr[0] = ptmr_d2->field.Ta0;
+        PeerAddr[1] = ptmr_d2->field.Ta0 >> 8;
+        NdisCopyMemory(PeerAddr+2, (UCHAR *)pta_16, 4);
 
-		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl,
-			("Readable TA = %02x:%02x:%02x:%02x:%02x:%02x\n",
-			PRINT_MAC(PeerAddr)));
-	}
-	else
-	{   /* TMR Initiator, Tx case */
-		if (*ptoa_0 == lastest_TOA)
-		{
-			MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl_error,
-				("##### latest TOA is same as last time\n"));
-			return;
-		}
-		lastest_TOA = *ptoa_0;
-	}
+        MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl,
+                ("Readable TA = %02x:%02x:%02x:%02x:%02x:%02x\n",
+                PRINT_MAC(PeerAddr)));
+    }
+    else
+    {   /* TMR Initiator, Tx case */
+        if (*ptoa_0 == lastest_TOA)
+        {
+            MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("##### latest TOA is same as last time\n"));
 
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("DWORD_4: TOD[0:31]=0x%x\n", *ptod_0));
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("DWORD_6: TOD[32:47]=0x%x\n", tmr_d6->field.ToD32));
+/* 2015.06.22 location plugfest: do not return */
+            return;
+        }
+        lastest_TOA = *ptoa_0;
+    }
 
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("DWORD_5: TOA[0:31]=0x%x\n", *ptoa_0));
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("DWORD_6: TOA[32:47]=0x%x\n", tmr_d6->field.ToA32));
-	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl,
-		("TMR Report: ir = %d, delta_high = %d, delta_low = %d\n\n",
-			ptmr_d0->IR, delta_high, delta_low));
+    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("TOAECalibrationResult=0x%X\n", TOAECalibrationResult));
 
-	/*
-		Carter review:
-		below is better to move to other place,
-		like FTM handler or somewhere else.
-	*/
-#ifdef FTM_SUPPORT
-	{
-		PFTM_PEER_ENTRY pFtmEntry = NULL;
+    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("DWORD_4: TOD[0:31]=0x%x\n", *ptod_0));
+    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("DWORD_6: TOD[32:47]=0x%x\n", tmr_d6->field.ToD32));
 
-		/* Get Peer FTM Entry */
-		if (ptmr_d0->IR == TMR_IR1_RX)
-		pFtmEntry = FtmEntrySearch(pAd, PeerAddr);
-		else
-		pFtmEntry = FtmGetPidPendingNode(pAd, tmr_d1->field_init.Pid);
+    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("DWORD_5: TOA[0:31]=0x%x\n", *ptoa_0));
+    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl, ("DWORD_6: TOA[32:47]=0x%x\n", tmr_d6->field.ToA32));
+    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, dbg_lvl,
+        ("TMR Report: ir = %d, delta_high = %d, delta_low = %d\n\n",
+            ptmr_d0->IR, delta_high, delta_low));
 
-		if (!pFtmEntry)
-		{
-			MTWF_LOG(DBG_CAT_PROTO, CATPROTO_FTM, DBG_LVL_INFO, ("%s()#%d: invalid FTM entry !!\n", __FUNCTION__, __LINE__));
-			return;
-		}
-
-		/* Record TMR */
-		if (ptmr_d0->IR == TMR_IR0_TX)
-		{   /* Tx case: for FTM responder */
-			if (pFtmEntry->PendingPid == tmr_d1->field_init.Pid)
-			{
-				if (pFtmEntry->bGotTmr)
-		;//                    FtmCheckDuplicatedTmr(pAd, pFtmEntry, tmr, &toa, &tod);
-				else
-				pFtmEntry->bGotTmr = TRUE;
-
-				NdisCopyMemory(&pFtmEntry->Tmr.HwReport, tmr, sizeof(TMR_FRM_STRUC));
-		//                pFtmEntry->Tmr.toa = toa;
-		//                pFtmEntry->Tmr.tod = tod;
-			}
-			else
-			{
-				MTWF_LOG(DBG_CAT_PROTO, CATPROTO_FTM, DBG_LVL_WARN,
-				("%s()#%d: entry PendingPid is 0x%02X while TMR PID is 0x%02X: not matched !\n",
-				__FUNCTION__, __LINE__, pFtmEntry->PendingPid, tmr_d1->field_init.Pid));
-			}
-		}
-#ifdef FTM_INITIATOR
-		else
-		{   /* Rx case: for FTM initiator */
-			ULONG IrqFlags = 0;
-			PFTM_MAPPING pNode = NULL;
-
-			RTMP_IRQ_LOCK(&pFtmEntry->RxTmrQLock, IrqFlags);
-			os_alloc_mem(NULL, (UCHAR **)&pNode, sizeof(FTM_MAPPING));
-			NdisZeroMemory(pNode, sizeof(FTM_MAPPING));
-
-			if (!pNode)
-			{
-				RTMP_IRQ_UNLOCK(&pFtmEntry->RxTmrQLock, IrqFlags);
-				return;
-			}
-
-			NdisCopyMemory(&pNode->tmr.HwReport, tmr, sizeof(TMR_FRM_STRUC));
-		//            pNode->tmr.toa = toa;
-		//            pNode->tmr.tod = tod;
-			pNode->sn = ptmr_d2->field.SnField;
-
-			DlListAddTail(&pFtmEntry->RxTmrQ, &pNode->list);
-			RTMP_IRQ_UNLOCK(&pFtmEntry->RxTmrQLock, IrqFlags);
-		}
-#endif /* FTM_INITIATOR */
-	}
-#endif /* FTM_SUPPORT */
-	return;
+    return;
 }
 
 INT TmrCtrlInit(RTMP_ADAPTER *pAd, UCHAR TmrType, UCHAR Ver)
@@ -274,9 +194,9 @@ INT TmrCtrlInit(RTMP_ADAPTER *pAd, UCHAR TmrType, UCHAR Ver)
                         ("%s(): alloc TmrCtrl fail!\n", __func__));
             return Ret;
         }
-    }
 
-    pAd->pTmrCtrlStruct = TmrCtrlStructMem;
+        pAd->pTmrCtrlStruct = TmrCtrlStructMem;
+    }
 
     if (!pAd->pTmrCtrlStruct)
         return NDIS_STATUS_FAILURE;

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
     Who         When            What
     --------    ----------      ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/proc_fs.h>

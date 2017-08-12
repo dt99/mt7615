@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Mediatek Inc.
  * 5F., No.5, Taiyuan 1st St., Zhubei City,
@@ -25,7 +26,7 @@
     UnifyLOGTF   2014.07.11     Initial version
 
 ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 #ifndef __DEBUG_H__
 #define __DEBUG_H__
 
@@ -65,6 +66,7 @@
 #define DBG_CAT_COEX    0x00020000u /* BT, BT WiFi Coex, LTE, TVWS*/
 #define DBG_CAT_P2P     0x00040000u /* P2P, Miracast */
 #define DBG_CAT_TOKEN	0x00080000u
+#define DBG_CAT_CMW     0x00100000u /* CMW Link Test */
 #define DBG_CAT_RSV1    0x40000000u /* reserved index for code development */
 #define DBG_CAT_RSV2    0x80000000u /* reserved index for code development */
 #define DBG_CAT_ALL     0xFFFFFFFFu
@@ -175,9 +177,7 @@ static inline ULONG GET_BIT(ULONG pwr_of_2)
 #define MTWF_LOG(Category, SubCategory, Level, Fmt)	\
 do{	\
 	if ((Category) & DBG_CAT_EN_BITMAP) {	\
-		if ((Level) <= DBG_LVL_WARN) {	\
-			MTWF_PRINT Fmt;	\
-		} else if ((Category) & (DebugCategory)) {	\
+		if ((Category) & (DebugCategory)) {	\
 			if (Level <= DebugLevel) { \
 				if ((SubCategory) == DBG_SUBCAT_ALL)	\
 					MTWF_PRINT Fmt;	\

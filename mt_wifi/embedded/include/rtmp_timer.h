@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -28,7 +29,7 @@
 	Shiang Tu    Aug-28-2008	init version
 
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __RTMP_TIMER_H__
 #define  __RTMP_TIMER_H__
 
@@ -185,6 +186,9 @@ DECLARE_TIMER_FUNCTION(Wsc2MinsTimeOutAction);
 DECLARE_TIMER_FUNCTION(WscUPnPMsgTimeOutAction);
 DECLARE_TIMER_FUNCTION(WscM2DTimeOutAction);
 DECLARE_TIMER_FUNCTION(WscPBCTimeOutAction);
+#ifdef CON_WPS
+DECLARE_TIMER_FUNCTION(WscScanDoneCheckTimeOutAction);
+#endif /*CON_WPS*/
 #ifdef WSC_STA_SUPPORT
 DECLARE_TIMER_FUNCTION(WscPINTimeOutAction);
 #endif
@@ -215,10 +219,6 @@ DECLARE_TIMER_FUNCTION(PostReplyTimeout);
 #ifdef CONFIG_ATE
 DECLARE_TIMER_FUNCTION(ATEPeriodicExec);
 #endif /* CONFIG_ATE */
-#ifdef FTM_SUPPORT
-DECLARE_TIMER_FUNCTION(FtmTxTimerCallback);
-DECLARE_TIMER_FUNCTION(FtmReqTxTimerCallback);
-#endif /* FTM_SUPPORT */
 
 #ifdef BACKGROUND_SCAN_SUPPORT
 DECLARE_TIMER_FUNCTION(BackgroundScanTimeout);

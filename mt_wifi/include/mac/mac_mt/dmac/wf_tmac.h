@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 
 #ifndef __WF_TMAC_H__
 #define __WF_TMAC_H__
@@ -229,6 +231,9 @@
 #define GET_ICR_SLOT_TIME(p) (((p) & ICR_SLOT_TIME_MASK) >> 24)
 
 #define TMAC_PCR (WF_TMAC_BASE + 0xb4)			/* 0x210b4 */
+#define TMAC_PCR1 (WF_TMAC_BASE + 0xbc)			/* 0x210bc */
+#define TMAC_PCR_FIX_OFDM_6M_RATE 0x4b
+#define TMAC_PCR_AUTO_RATE 0x400
 #define PTEC_FIX_RATE_MASK (0x1ff)
 #define PTEC_FIX_RATE(p) (((p) & 0x1ff))
 #define GET_PTEC_FIX_RATE(p) (((p) & PTEC_FIX_RATE_MASK))

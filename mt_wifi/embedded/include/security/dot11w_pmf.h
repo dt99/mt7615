@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -24,7 +25,7 @@
     ---------  	 ----------    ----------------------------------------------
     Albert Yang  4-02-2009     created for IEEE802.11W PMF
  */
-
+#endif /* MTK_LICENSE */
 #ifndef __DOT11W_PMF_H
 #define __DOT11W_PMF_H
 

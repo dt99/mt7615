@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
 	Who			When			What
 	--------	----------		----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #ifdef COMPOS_WIN
 #include "MtConfig.h"
 #elif defined (COMPOS_TESTMODE_WIN)
@@ -165,6 +167,29 @@ UINT32 MtAsicGetPhyErrCnt(RTMP_ADAPTER *pAd)
 
 UINT32 MtAsicGetCCACnt(RTMP_ADAPTER *pAd)
 {
+#ifdef CUSTOMER_DCC_FEATURE
+	UINT32 	PD_CNT, MDRDY_CNT, CCKFalseCCACount, OFDMFalseCCACount;	
+	UINT32	False_cca_count, CrValue;
+
+	//FALSE CCA Count	
+	HW_IO_READ32(pAd, RO_BAND0_PHYCTRL_STS0, &CrValue); //PD count
+	PD_CNT = CrValue;
+	HW_IO_READ32(pAd, RO_BAND0_PHYCTRL_STS5, &CrValue); // MDRDY count
+	MDRDY_CNT = CrValue;
+
+	CCKFalseCCACount = ( PD_CNT & 0xffff) - (MDRDY_CNT & 0xffff);
+	OFDMFalseCCACount = ((PD_CNT & 0xffff0000 ) >> 16) - ((MDRDY_CNT & 0xffff0000 ) >> 16) ;
+	False_cca_count = CCKFalseCCACount + OFDMFalseCCACount;
+
+	//reset PD and MDRDY count
+	HW_IO_READ32(pAd, PHY_BAND0_PHYMUX_5, &CrValue);
+	CrValue &= 0xff8fffff;
+	HW_IO_WRITE32(pAd, PHY_BAND0_PHYMUX_5, CrValue); //Reset
+	CrValue |= 0x500000; 
+	HW_IO_WRITE32(pAd, PHY_BAND0_PHYMUX_5, CrValue); //Enable
+	
+	return False_cca_count;
+#endif
 	return 0;
 }
 
@@ -1561,6 +1586,7 @@ VOID MtRssiGet(RTMP_ADAPTER *pAd, UCHAR Wcid, CHAR *RssiSet )
 {
 	struct wtbl_entry tb_entry;
 	union WTBL_DW28 wtbl_wd28;
+	UINT i;
 	//UINT32 u4RegVal;
 
 	NdisZeroMemory(&tb_entry, sizeof(tb_entry));
@@ -1582,6 +1608,13 @@ VOID MtRssiGet(RTMP_ADAPTER *pAd, UCHAR Wcid, CHAR *RssiSet )
     //printk("RssiSet[2] = %d\n", RssiSet[2]);
 	//printk("RssiSet[3] = %d\n", RssiSet[3]);
 
+	/* santiy check rssi value */
+	for (i = 0; i < 4; i++)
+	{       
+		if (RssiSet[i] > 0)         
+			RssiSet[i] = -127;
+	}
+    
 /*
 	if(WtblWaitIdle(pAd,100,50)!=TRUE)
 	{
@@ -1612,7 +1645,7 @@ VOID MtAsicRcpiReset(RTMP_ADAPTER *pAd, UCHAR ucWcid)
 }
 
 
-static UINT16 get_tid_ssn(UCHAR tid, UINT16 *content)
+static UINT16 get_tid_ssn(UCHAR tid, UINT32 *content)
 {
     UINT16 ssn = 0;
 
@@ -1663,23 +1696,22 @@ static UINT16 get_tid_ssn(UCHAR tid, UINT16 *content)
 UINT16 MtAsicGetTidSnByDriver(RTMP_ADAPTER *pAd, UCHAR wcid, UCHAR tid)
 {
 	struct wtbl_entry tb_entry;
-    UINT16 ssn = 0xffff; //invalid number
-    UINT16 serial_no[3] = {0x0, 0x0, 0x0};
+	UINT16 ssn = 0xffff; //invalid number
+	UINT32 serial_no[3] = {0x0, 0x0, 0x0};
 
 	NdisZeroMemory(&tb_entry, sizeof(tb_entry));
-	if (mt_wtbl_get_entry234(pAd, wcid, &tb_entry) == FALSE)
-    {
+	if (mt_wtbl_get_entry234(pAd, wcid, &tb_entry) == FALSE) {
 		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
                 ("%s: Cannot found WTBL2/3/4 for WCID(%d)\n",
 					__FUNCTION__, wcid));
-        goto end;
-    }
+		goto end;
+	}
 
 	HW_IO_READ32(pAd, tb_entry.wtbl_addr + (4 * 11), &serial_no[0]);
 	HW_IO_READ32(pAd, tb_entry.wtbl_addr + (4 * 12), &serial_no[1]);
 	HW_IO_READ32(pAd, tb_entry.wtbl_addr + (4 * 13), &serial_no[2]);
 
-    ssn = get_tid_ssn(tid, serial_no);
+	ssn = get_tid_ssn(tid, serial_no);
 
 end:
     return ssn;
@@ -1943,8 +1975,11 @@ INT32 MtAsicSetBssidByDriver(
     UINT8 BssIdx = 0;
 #endif
     UCHAR OwnMacIdx = bss_info_argument.OwnMacIdx;
-    UINT8 Active = bss_info_argument.Active;
+    UINT8 Active = FALSE;
     UCHAR *Bssid = bss_info_argument.Bssid;
+
+	if (bss_info_argument.bss_state >= BSS_ACTIVE)
+		Active = TRUE;
 
     if (OwnMacIdx < HW_BSSID_MAX)
     {
@@ -2846,12 +2881,21 @@ INT MtAsicSetWPDMA(RTMP_ADAPTER *pAd, INT32 TxRx, BOOLEAN enable, UINT8 WPDMABur
 
 				if (MTK_REV_GTE(pAd, MT7615, MT7615E3))
 				{
+					#ifdef CONFIG_RALINK_MT7621
 					/*
 					 * Tx Burst Size: three bits are used to specify
-					 * 32DW, bit0:1, bit21:1
+					 * 256 bytes, bit0:0, bit21:10
+					 */
+					GloCfg.MT7615_E3_field.tx_bt_size_bit0 = 0;
+					GloCfg.MT7615_E3_field.tx_bt_size_bit21 = 2;
+					#else /* CONFIG_RALINK_MT7621 */
+					/*
+					 * Tx Burst Size: three bits are used to specify
+					 * 128 bytes, bit0:1, bit21:1
 					 */
 					GloCfg.MT7615_E3_field.tx_bt_size_bit0 = 1;
 					GloCfg.MT7615_E3_field.tx_bt_size_bit21 = 1;
+					#endif /* CONFIG_RALINK_MT7621 */
 					GloCfg.MT7615_E3_field.first_token_only = 1;
 				}
 #ifndef MT7622
@@ -3058,10 +3102,15 @@ return 0;
 INT MtAsicSetBW(RTMP_ADAPTER *pAd, INT bw, UCHAR BandIdx)
 {
 	UINT32 val, offset;
-	// TODO: shiang-MT7615, not consdier DBDC mode yet!!
+
+#ifndef COMPOS_WIN
+	// TODO: shiang-usw, some CR setting in bbp_set_bw() need to take care!!
+	bbp_set_bw(pAd, bw, BandIdx);
+#endif /* COMPOS_WIN */
+
 	offset = (BandIdx == 0) ? 2 : 18;
 	MAC_IO_READ32(pAd, AGG_BWCR, &val);
-	val &= ((~0x0c) << offset);
+	val &= ~(3 << offset);
 	switch (bw)
 	{
 		case BW_20:
@@ -3083,10 +3132,6 @@ INT MtAsicSetBW(RTMP_ADAPTER *pAd, INT bw, UCHAR BandIdx)
 	}
 	MAC_IO_WRITE32(pAd, AGG_BWCR, val);
 
-#ifndef COMPOS_WIN
-        // TODO: shiang-usw, some CR setting in bbp_set_bw() need to take care!!
-	bbp_set_bw(pAd, bw, BandIdx);
-#endif /* COMPOS_WIN */
 	return TRUE;
 }
 
@@ -3326,7 +3371,7 @@ INT MtAsicSetTSSI(RTMP_ADAPTER *pAd, UINT32 bOnOff, UCHAR WFSelect)
 
 INT MtAsicSetDPD(RTMP_ADAPTER *pAd, UINT32 bOnOff, UCHAR WFSelect)
 {
-	ULONG CRValue = 0x0;
+	UINT32 CRValue = 0x0;
 	ULONG WF0Offset = 0x10A08;
 	ULONG WF1Offset = 0x11A08;
     INT Ret = TRUE;
@@ -4509,3 +4554,34 @@ INT MtAsicSetRtsSignalTA(RTMP_ADAPTER *pAd, UINT8 BandIdx, BOOLEAN Enable)
     return TRUE;
 }
 #endif /* DOT11_VHT_AC */
+
+INT MtAsicRTSOnOff(struct _RTMP_ADAPTER *ad,UCHAR band_idx, UINT32 rts_num, UINT32 rts_len, BOOLEAN rts_en)
+{
+	UINT32 cr;
+	UINT32 value;
+	/*adjust cts/rts rate*/
+	cr = (band_idx == BAND1) ? TMAC_PCR1 : TMAC_PCR;
+	value = (rts_en == TRUE) ? TMAC_PCR_AUTO_RATE : TMAC_PCR_FIX_OFDM_6M_RATE;
+	MAC_IO_WRITE32(ad,cr,value);
+	/*adjust rts rts threshold*/
+	cr = (band_idx == BAND1) ? AGG_PCR2 : AGG_PCR1;
+	value = RTS_THRESHOLD(rts_len) | RTS_PKT_NUM_THRESHOLD(rts_num);
+	MAC_IO_WRITE32(ad,cr,value);
+	return 0;
+}
+
+INT MtAsicAMPDUEfficiencyAdjust(struct _RTMP_ADAPTER *ad,UCHAR	wmm_idx, UCHAR aifs_adjust)
+{
+	UINT32 cr;
+	UINT32 value;
+
+	cr = ARB_WMMAC01+(wmm_idx*16);
+
+	MAC_IO_READ32(ad,cr,&value);
+
+	value = ((value & 0xffffff00) | aifs_adjust);
+
+	MAC_IO_WRITE32(ad,cr,value);
+
+	return 0;
+}

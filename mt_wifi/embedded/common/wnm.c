@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who         When          What
 	--------    ----------    ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 static UCHAR ZERO_IP_ADDR[4] = {0x00, 0x00, 0x00, 0x00};
@@ -954,7 +955,7 @@ UINT32 AddIPv4ProxyARPEntry(IN PRTMP_ADAPTER pAd,
 	NdisMoveMemory(ProxyARPEntry->TargetIPAddr, pTargetIPAddr, 4);
 
 	for (i = 0; i < 4; i++)
-		printk("pTargetIPv4Addr[%i] = %x\n", i, pTargetIPAddr[i]);
+		printk("pTargetIPv4Addr[%i] = %d\n", i, pTargetIPAddr[i]);
 	
 	/* Add ProxyARP Entry to list */
 	if (find_list == 0) 
@@ -1007,7 +1008,7 @@ UINT32 AddIPv6ProxyARPEntry(IN PRTMP_ADAPTER pAd,
 	UINT8 i;
 	BOOLEAN IsDAD = FALSE;
 	PNET_DEV NetDev = pMbss->wdev.if_dev;
-	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_WNM, DBG_LVL_OFF, ("%s\n", __FUNCTION__));
+	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_WNM, DBG_LVL_ERROR, ("%s\n", __FUNCTION__));
 
 	RTMP_SEM_EVENT_WAIT(&pWNMCtrl->ProxyARPIPv6ListLock, Ret);
 	DlListForEach(ProxyARPEntry, &pWNMCtrl->IPv6ProxyARPList, PROXY_ARP_IPV6_ENTRY, List)
@@ -1119,11 +1120,14 @@ BOOLEAN IPv4ProxyARP(IN PRTMP_ADAPTER pAd,
 	BOOLEAN IsDAD = FALSE;
 	PUCHAR TargetMACAddr = pData + 20;
 	UCHAR ALL_ZERO_BROADCAST_ADDR[MAC_ADDR_LEN] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_WNM, DBG_LVL_TRACE, ("%s\n", __FUNCTION__));
+	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_WNM, DBG_LVL_TRACE, ("%s  wdev_idx %d TargetIP %d:%d:%d:%d\n"
+	, __FUNCTION__,pMbss->wdev.wdev_idx,TargetIPAddr[0],TargetIPAddr[1],TargetIPAddr[2],TargetIPAddr[3]));
 
 	RTMP_SEM_EVENT_WAIT(&pWNMCtrl->ProxyARPListLock, Ret);
 	DlListForEach(ProxyARPEntry, &pWNMCtrl->IPv4ProxyARPList, PROXY_ARP_IPV4_ENTRY, List)
 	{
+	//	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_WNM, DBG_LVL_ERROR, ("%s  TargetIP %d:%d:%d:%d\n"
+	//, __FUNCTION__,ProxyARPEntry->TargetIPAddr[0],ProxyARPEntry->TargetIPAddr[1],ProxyARPEntry->TargetIPAddr[2],ProxyARPEntry->TargetIPAddr[3]));
 		if (IPV4_ADDR_EQUAL(ProxyARPEntry->TargetIPAddr, TargetIPAddr))
 		{
 			IsFound = TRUE;
@@ -1151,6 +1155,9 @@ BOOLEAN IPv4ProxyARP(IN PRTMP_ADAPTER pAd,
 		/* ARP Probe and ARP Entry already Build and not DAD */
 		if ((IsDAD == FALSE) && (IPV4_ADDR_EQUAL(SourceIPAddr, ZERO_IP_ADDR) == TRUE))
 			return IsFound;
+
+		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_WNM, DBG_LVL_TRACE, ("%s  TargetIP %d:%d:%d:%d indicate to daemon\n"
+			, __FUNCTION__,TargetIPAddr[0],TargetIPAddr[1],TargetIPAddr[2],TargetIPAddr[3]));
 
 		/* Send proxy arp indication to daemon */
 		SendProxyARPEvent(NetDev,
@@ -1275,7 +1282,7 @@ VOID WNMIPv4ProxyARPCheck(
 	UCHAR wdev_idx = RTMP_GET_PACKET_WDEV(pPacket);
 	BSS_STRUCT *pMbss;
 	MAC_TABLE_ENTRY  *pEntry;	
-
+	
 	ASSERT(wdev_idx < WDEV_NUM_MAX);
 	if (wdev_idx >= WDEV_NUM_MAX) {
 		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_WNM, DBG_LVL_ERROR, ("%s(): Invalid wdev_idx(%d)\n", __FUNCTION__, wdev_idx));
@@ -1293,9 +1300,9 @@ VOID WNMIPv4ProxyARPCheck(
 						
 		if ((pMbss->WNMCtrl.ProxyARPEnable) && (pEntry = MacTableLookup(pAd, pTargetMACAddr)))
 		{
-			printk("entry apidx=%d,%d,%d\n",pEntry->apidx, wdev_idx, pMbss->WNMCtrl.ProxyARPEnable);
+			printk("entry func_tb_idx=%d,%d,%d\n",pEntry->func_tb_idx, wdev_idx, pMbss->WNMCtrl.ProxyARPEnable);
 
-			if ((pEntry->apidx == wdev_idx) && pMbss->WNMCtrl.ProxyARPEnable)
+			if ((pEntry->func_tb_idx == wdev_idx) && pMbss->WNMCtrl.ProxyARPEnable)
 			{
 				/* Proxy MAC address/IP mapping */
 				AddIPv4ProxyARPEntry(pAd, pMbss, pTargetMACAddr, pTargetIPAddr);
@@ -1633,15 +1640,18 @@ static VOID SendBTMQueryIndication(
 
 	BTM_EVENT_DATA *Event = (BTM_EVENT_DATA *)Elem->Msg;
 	PNET_DEV NetDev = pAd->ApCfg.MBSSID[Event->ControlIndex].wdev.if_dev;
+	PHOTSPOT_CTRL pHSCtrl = &pAd->ApCfg.MBSSID[Event->ControlIndex].HotSpotCtrl;
 
 	printk("%s\n", __FUNCTION__);
 
-	/* Send BTM query indication to daemon */
-	SendBTMQueryEvent(NetDev,
-					  Event->PeerMACAddr,
-					  Event->u.PEER_BTM_QUERY_DATA.BTMQuery,
-					  Event->u.PEER_BTM_QUERY_DATA.BTMQueryLen,
-					  RA_WEXT);
+	if (pHSCtrl->HSDaemonReady == 1) {
+		/* Send BTM query indication to daemon */
+		SendBTMQueryEvent(NetDev,
+						  Event->PeerMACAddr,
+						  Event->u.PEER_BTM_QUERY_DATA.BTMQuery,
+						  Event->u.PEER_BTM_QUERY_DATA.BTMQueryLen,
+						  RA_WEXT);
+	}
 	
 	BTMSetPeerCurrentState(pAd, Elem, WAIT_BTM_REQ); 
 }
@@ -2340,14 +2350,19 @@ static VOID SendWNMNotifyReq(
 	{
 		printk("no match event type:%d\n", Event->EventType);
 		os_free_mem(Buf);
+        Buf = NULL;
 	}
-	WNMSetPeerCurrentState(pAd, Elem, WAIT_WNM_NOTIFY_RSP);
+    
+    if(Buf != NULL)
+    {
+        WNMSetPeerCurrentState(pAd, Elem, WAIT_WNM_NOTIFY_RSP);
 	
-	MiniportMMRequest(pAd, 0, Buf, FrameLen);
+	    MiniportMMRequest(pAd, 0, Buf, FrameLen);
 
-	RTMPSetTimer(&WNMNotifyPeerEntry->WaitPeerWNMNotifyRspTimer, WaitPeerWNMNotifyRspTimeoutVale);
+	    RTMPSetTimer(&WNMNotifyPeerEntry->WaitPeerWNMNotifyRspTimer, WaitPeerWNMNotifyRspTimeoutVale);
 
-	os_free_mem(Buf);
+	    os_free_mem(Buf);
+    }
 }
 
 VOID SendWNMNotifyConfirm(

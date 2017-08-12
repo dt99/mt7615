@@ -172,6 +172,11 @@ typedef enum _WpaMixPairCipher {
 typedef enum _Dot1xInternalCmd {
 	DOT1X_DISCONNECT_ENTRY,
 	DOT1X_RELOAD_CONFIG,
+	DOT1X_ACL_ENTRY,
+#ifdef RADIUS_ACCOUNTING_SUPPORT
+	DOT1X_LOCAL_AUTH_ENTRY
+#endif /*RADIUS_ACCOUNTING_SUPPORT*/
+
 } DOT1X_INTERNAL_CMD;
 
 /* 802.1x authentication format */

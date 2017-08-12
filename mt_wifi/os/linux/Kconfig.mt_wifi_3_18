@@ -281,7 +281,7 @@ choice
 		config FIRST_IF_EEPROM_FLASH
 		bool "FLASH"
 
-		config RIRST_IF_EEPROM_EFUSE
+		config FIRST_IF_EEPROM_EFUSE
 		bool "EFUSE"
 endchoice
 
@@ -475,10 +475,10 @@ config IGMP_SNOOP_SUPPORT
 #	help
 #	Support Net interface block while Tx-Sw queue full
 
-config RATE_ADAPTION
-	bool "New Rate Adaptation support"
-	depends on WIFI_DRIVER
-	default y
+#config RATE_ADAPTION
+#	bool "New Rate Adaptation support"
+#	depends on WIFI_DRIVER
+#	default y
 
 #config NEW_RATE_ADAPT_SUPPORT
 #	bool "Intelligent Rate Adaption"
@@ -491,11 +491,11 @@ config RATE_ADAPTION
 #	depends on MT_AP_SUPPORT || MT_STA_SUPPORT
 #	default n
 
-config RATE_ADAPT_AGBS_SUPPORT
-	bool "Adaptive AGBS Mode"
-	depends on WIFI_DRIVER && RATE_ADAPTION
-	depends on MT_AP_SUPPORT || MT_STA_SUPPORT
-	default y
+#config RATE_ADAPT_AGBS_SUPPORT
+#	bool "Adaptive AGBS Mode"
+#	depends on WIFI_DRIVER && RATE_ADAPTION
+#	depends on MT_AP_SUPPORT || MT_STA_SUPPORT
+#	default y
 
 #config IDS_SUPPORT
 #	bool "IDS (Intrusion Detection System) Support"
@@ -519,11 +519,10 @@ config RTMP_FLASH_SUPPORT
 	depends on WIFI_DRIVER
 	default y
 
-config CAL_TO_FLASH_SUPPORT
-    bool "CalibrationToFlash Support"
-    depends on WIFI_DRIVER
-    depends on RTMP_FLASH_SUPPORT
-    default n
+#config PRE_CAL_TRX_SET1_SUPPORT
+#    bool "Calibration To Flash/BinFile Support"
+#    depends on WIFI_DRIVER
+#    default y
 
 #config LED_CONTROL_SUPPORT
 #	bool "LED Support"

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #ifndef __WF_ARB_H__
 #define __WF_ARB_H__
@@ -40,6 +41,8 @@
 
 #define ARB_TQSN		WF_ARB_BASE + 0x0	/* 0x20c00 is NAN's CR*/
 #define ARB_TQFN		WF_ARB_BASE + 0x4	/* 0x20c04 is NAN's CR*/
+
+#define ARB_DCR			WF_ARB_BASE + 0x60	/* 0x20c60 */
 
 #define ARB_TQSW0		WF_ARB_BASE + 0x100	/* 0x20d00 */
 #define ARB_TQSW1		WF_ARB_BASE + 0x104	/* 0x20d04 */

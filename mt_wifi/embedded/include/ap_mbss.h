@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -26,7 +27,7 @@
     --------    ----------      ----------------------------------------------
     Sample Lin  01-02-2007      created
 */
-
+#endif /* MTK_LICENSE */
 
 /*
 	For MBSS, the phy mode is different;

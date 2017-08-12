@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -16,7 +17,7 @@
  ***************************************************************************
 
 */
-
+#endif /* MTK_LICENSE */
 
 #ifndef __CMM_ASIC_MT_FW_H__
 #define __CMM_ASIC_MT_FW_H__
@@ -57,6 +58,13 @@ VOID MtAsicDelWcidTabByFw(
 	IN struct _RTMP_ADAPTER *pAd,
 	IN UCHAR wcid_idx);
 
+#ifdef HTC_DECRYPT_IOT
+VOID MtAsicSetWcidAAD_OMByFw(
+	IN struct _RTMP_ADAPTER * pAd,
+	IN UCHAR wcid_idx,
+	IN UCHAR value);
+#endif /* HTC_DECRYPT_IOT */
+
 VOID MtAsicUpdateRxWCIDTableByFw(
 	IN struct _RTMP_ADAPTER *pAd,
 	IN MT_WCID_TABLE_INFO_T WtblInfo);
@@ -93,13 +101,14 @@ VOID MtSetIgnorePsmByFw(
 
 VOID mt_wtbltlv_debug(struct _RTMP_ADAPTER *pAd, UCHAR ucWcid, UCHAR ucCmdId, UCHAR ucAtion);
 
+VOID update_wtbl_vht_info(struct _RTMP_ADAPTER *pAd, UCHAR wcid, struct _wtbl_vht_info *vht_info);
 
 VOID MtAsicUpdateProtectByFw (
         struct _RTMP_ADAPTER *pAd, MT_PROTECT_CTRL_T *ProtectCtrl);
 
 
 VOID MtAsicUpdateRtsThldByFw (
-        struct _RTMP_ADAPTER *pAd, MT_RTS_THRESHOLD_T *RtsThreshold);
+        struct _RTMP_ADAPTER *pAd, struct wifi_dev *wdev, UCHAR pkt_num, UINT32 length);
 
 VOID MtSetTmrCRByFw(struct _RTMP_ADAPTER *pAd, UCHAR enable, UCHAR BandIdx);
 #define BA_TRIGGER_OFFLOAD_TIMEOUT 1000

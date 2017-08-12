@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,17 +26,19 @@
     Who         When            What
     --------    ----------      ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #define RTMP_MODULE_OS
 
-#ifdef RTMP_UDMA_SUPPORT
 #include "rt_config.h"
-#include<linux/udma_api.h>
-#endif/*RTMP_UDMA_SUPPORT*/
 #include "rtmp_comm.h"
 #include "rt_os_util.h"
 #include "rt_os_net.h"
+
+#ifdef RTMP_UDMA_SUPPORT
+#include "rt_udma.h"
+#endif/*RTMP_UDMA_SUPPORT*/
+
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24)
 #ifndef SA_SHIRQ
@@ -43,11 +46,10 @@
 #endif
 #endif
 
-// TODO: shiang-6590, remove it when MP
 #ifdef RTMP_MAC_PCI
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("Proprietary");
 #endif /* RTMP_MAC_PCI */
-// TODO: End---
+
 
 
 
@@ -82,13 +84,11 @@ RTMP_NET_ABL_OPS RtmpDrvNetOps, *pRtmpDrvNetOps = &RtmpDrvNetOps;
 /* public function prototype */
 int mt_wifi_close(VOID *net_dev);
 int mt_wifi_open(VOID *net_dev);
+int virtual_if_up_handler(VOID *dev);
+int virtual_if_down_handler(VOID *dev);
 
 /* private function prototype */
 INT rt28xx_send_packets(IN struct sk_buff *skb_p, IN struct net_device *net_dev);
-
-#ifdef RTMP_UDMA_SUPPORT
-static void udma_net_rx_callback(struct sk_buff *skb,struct net_device *netdev);
-#endif/*RTMP_UDMA_SUPPORT*/
 
 struct net_device_stats *RT28xx_get_ether_stats(struct net_device *net_dev);
 
@@ -121,6 +121,9 @@ int MainVirtualIF_close(IN struct net_device *net_dev)
 
 	if (pAd == NULL)
 		return 0;
+#ifdef VENDOR1_LED_SUPPORT
+	RTMPSetLED(pAd, LED_RADIO_OFF);
+#endif
 
 	netif_carrier_off(net_dev);
 	netif_stop_queue(net_dev);
@@ -129,7 +132,7 @@ int MainVirtualIF_close(IN struct net_device *net_dev)
 
 #ifdef IFUP_IN_PROBE
 #else
-	VIRTUAL_IF_DOWN(pAd);
+	VIRTUAL_IF_DOWN(pAd, net_dev);
 #endif /* IFUP_IN_PROBE */
 
     RT_MOD_HNAT_DEREG(net_dev);
@@ -179,11 +182,15 @@ int MainVirtualIF_open(struct net_device *net_dev)
 #ifdef CONFIG_AP_SUPPORT
 	RTMP_DRIVER_AP_MAIN_OPEN(pAd);	   
 #endif /*CONFIG_AP_SUPPORT*/
-
-	if (VIRTUAL_IF_UP(pAd) != 0)
+	if (VIRTUAL_IF_UP(pAd, net_dev) != 0)
 		return -1;
 #endif /* IFUP_IN_PROBE */
 
+#ifdef CONFIG_AP_SUPPORT
+#ifdef VENDOR1_LED_SUPPORT
+	RTMPSetLED(pAd, LED_LINK_DOWN);		// Set solid led on
+#endif /* VENDOR1_LED_SUPPORT */
+#endif /* CONFIG_AP_SUPPORT */
 	RT_MOD_INC_USE_COUNT();
     RT_MOD_HNAT_REG(net_dev);
 
@@ -194,21 +201,6 @@ int MainVirtualIF_open(struct net_device *net_dev)
 	return 0;
 }
 
-#ifdef RTMP_UDMA_SUPPORT
-int udma_register(UCHAR port , struct net_device *netdev,rx_callback_t udma_rx_handler)
-{
-	int ret=0;
-	ret = udma_register_handler(port,netdev,udma_rx_handler);
-	if (ret)
-		return ret;
-	return 0;
-}
-static void udma_net_rx_callback(struct sk_buff *skb,struct net_device *netdev)
-{
-	//MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE,("Udma Net Rx Callback--->\n"));
-	rt28xx_send_packets(skb,netdev);
-}
-#endif /*RTMP_UDMA_SUPPORT*/
 
 /*
 ========================================================================
@@ -240,14 +232,15 @@ int mt_wifi_close(VOID *dev)
 	GET_PAD_FROM_NET_DEV(pAd, net_dev);
 	if (pAd == NULL)
 		return 0;
+#ifdef CONFIG_INIT_RADIO_ONOFF
+	if(!((PRTMP_ADAPTER)pAd)->ApCfg.bRadioOn)
+		RTMP_CLEAR_FLAG(((PRTMP_ADAPTER)pAd), fRTMP_ADAPTER_DISABLE_DEQUEUEPACKET);
+#endif
 
 	RTMPDrvClose(pAd, net_dev);
 	
 #ifdef RTMP_UDMA_SUPPORT
-	if(((PRTMP_ADAPTER)pAd)->CommonCfg.bUdmaFlag) {
-		UCHAR port = ((PRTMP_ADAPTER)pAd)->CommonCfg.UdmaPortNum;
-		udma_flush(port);
-}
+	mt_udma_unregister(pAd);
 #endif/*RTMP_UDMA_SUPPORT*/
 
 	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("<=== mt_wifi_close\n"));
@@ -329,7 +322,9 @@ int mt_wifi_open(VOID *dev)
 #if defined(P2P_APCLI_SUPPORT) || defined(RT_CFG80211_P2P_SUPPORT) || defined(CFG80211_MULTI_STA)
 
 #else
+#ifndef VENDOR1_INITIALIZE_ALL_INTERFACE_AT_INIT
 	RT28xx_MBSS_Init(pAd, net_dev);
+#endif
 #endif /* P2P_APCLI_SUPPORT || RT_CFG80211_P2P_SUPPORT || CFG80211_MULTI_STA */
 #endif /* MBSS_SUPPORT */
 
@@ -371,16 +366,8 @@ int mt_wifi_open(VOID *dev)
 #endif /* VENDOR_FEATURE2_SUPPORT */
 
 #ifdef RTMP_UDMA_SUPPORT
-	if(((PRTMP_ADAPTER)pAd)->CommonCfg.bUdmaFlag) {
-		UCHAR port = ((PRTMP_ADAPTER)pAd)->CommonCfg.UdmaPortNum;
-		int ret = udma_register(port,net_dev,&udma_net_rx_callback);
-		if(ret){
-			MTWF_LOG(DBG_CAT_INIT,DBG_SUBCAT_ALL,DBG_LVL_ERROR,("Udma Registration failed\n"));
-			return ret;
-		}
-		
-		MTWF_LOG(DBG_CAT_INIT,DBG_SUBCAT_ALL,DBG_LVL_ERROR,("Udma Registration Success\n"));
-}
+	retval = mt_udma_register(pAd, net_dev);
+	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("Udma Registration %s\n", (retval == 0)? "Success": "Failed"));
 #endif/*RTMP_UDMA_SUPPORT*/
 
 	return (retval);
@@ -389,6 +376,78 @@ err:
 	RTMP_DRIVER_IRQ_RELEASE(pAd);
 
 	return (-1);
+}
+
+int virtual_if_up_handler(VOID *dev)
+{
+    struct net_device *net_dev = (struct net_device *)dev;
+    VOID *pAd = NULL;
+    struct _RTMP_ADAPTER *pad = NULL;
+    int retval = 0;
+#ifdef GREENAP_SUPPORT 
+    struct greenap_ctrl *greenap = NULL;
+#endif /* GREENAP_SUPPORT */
+
+    GET_PAD_FROM_NET_DEV(pAd, net_dev);
+
+    if (pAd == NULL) {
+        retval= -1;
+        return retval;
+    }
+
+    pad = (struct _RTMP_ADAPTER  *)pAd;
+
+    wdev_if_up_down(pad, net_dev, TRUE);
+
+#ifdef GREENAP_SUPPORT
+    /* This function will check and update allow status */
+    greenap = &pad->ApCfg.greenap;
+    if (greenap == NULL) {
+        retval= -1;
+        return retval;
+    }
+    if (greenap_get_capability(greenap)) {
+        greenap_check_when_if_down_up(pad, greenap);
+    }    
+#endif /* GREENAP_SUPPORT */    
+
+    return retval;
+}
+
+int virtual_if_down_handler(VOID *dev)
+{
+    struct net_device *net_dev = (struct net_device *)dev;
+    VOID *pAd = NULL;
+    struct _RTMP_ADAPTER *pad = NULL;
+    int retval = 0;
+#ifdef GREENAP_SUPPORT 
+    struct greenap_ctrl *greenap = NULL;
+#endif /* GREENAP_SUPPORT */
+    
+    GET_PAD_FROM_NET_DEV(pAd, net_dev);
+
+    if (pAd == NULL) {
+        retval= -1;
+        return retval;
+    }
+
+    pad = (struct _RTMP_ADAPTER  *)pAd;
+
+    wdev_if_up_down(pAd, net_dev, FALSE);
+
+#ifdef GREENAP_SUPPORT
+    /* This function will check and update allow status */
+    greenap = &pad->ApCfg.greenap;
+    if (greenap == NULL) {
+        retval= -1;
+        return retval;
+    }
+    if (greenap_get_capability(greenap)) {
+        greenap_check_when_if_down_up(pad, greenap);
+    }    
+#endif /* GREENAP_SUPPORT */    
+
+    return retval;
 }
 
 
@@ -540,6 +599,15 @@ Note:
 */
 int rt28xx_send_packets(struct sk_buff *skb, struct net_device *ndev)
 {
+#ifdef VENDOR_FEATURE6_SUPPORT
+    // Add protection against NULL deferencing CLM #7291
+	// XXX: not needed if caller take precaution
+    if(!ndev)
+    {
+        RELEASE_NDIS_PACKET(NULL, (PNDIS_PACKET)skb, NDIS_STATUS_FAILURE);
+        return 0;
+    }
+#endif
 	if (!(RTMP_OS_NETDEV_STATE_RUNNING(ndev)))
 	{
 		RELEASE_NDIS_PACKET(NULL, (PNDIS_PACKET)skb, NDIS_STATUS_FAILURE);
@@ -698,6 +766,9 @@ struct net_device_stats *RT28xx_get_ether_stats(struct net_device *net_dev)
 
 BOOLEAN RtmpPhyNetDevExit(VOID *pAd, PNET_DEV net_dev)
 {
+	/*remove cfg */
+	wpf_exit(pAd);
+
 
 #ifdef CONFIG_AP_SUPPORT
 #ifdef APCLI_SUPPORT

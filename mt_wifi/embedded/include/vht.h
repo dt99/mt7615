@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -23,7 +24,7 @@
 	Who 		When			What
 	--------	----------		----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #include "dot11ac_vht.h"
 
 
@@ -39,18 +40,22 @@ struct vht_ch_layout * get_ch_array(UINT8 bw);
 VOID dump_vht_cap(struct _RTMP_ADAPTER *pAd, VHT_CAP_IE *vht_ie);
 VOID dump_vht_op(struct _RTMP_ADAPTER *pAd, VHT_OP_IE *vht_ie);
 
-INT build_vht_txpwr_envelope(struct _RTMP_ADAPTER *pAd, UCHAR *buf);
+INT build_vht_txpwr_envelope(struct _RTMP_ADAPTER *pAd,struct wifi_dev *wdev,UCHAR *buf);
 INT build_vht_ies(struct _RTMP_ADAPTER *pAd, struct _build_ie_info *info);
-INT build_vht_cap_ie(struct _RTMP_ADAPTER *pAd, UCHAR *buf);
+INT build_vht_cap_ie(struct _RTMP_ADAPTER *pAd, UCHAR *buf, struct wifi_dev *wdev);
 void update_vht_op_info(UINT8 cap_bw, VHT_OP_INFO *vht_op_info, struct _op_info *op_info);
 UCHAR check_vht_op_bw (VHT_OP_INFO *vht_op_info);
 
 UCHAR vht_prim_ch_idx(UCHAR vht_cent_ch, UCHAR prim_ch, UINT8 rf_bw);
 UCHAR vht_cent_ch_freq(UCHAR prim_ch, UCHAR vht_bw);
 INT vht_mode_adjust(struct _RTMP_ADAPTER *pAd, MAC_TABLE_ENTRY *pEntry, VHT_CAP_IE *cap, VHT_OP_IE *op);
-INT dot11_vht_mcs_to_internal_mcs(struct _RTMP_ADAPTER *pAd, VHT_CAP_IE *vht_cap, HTTRANSMIT_SETTING *tx);
+INT dot11_vht_mcs_to_internal_mcs(
+	struct _RTMP_ADAPTER *pAd,
+	struct wifi_dev *wdev,
+	VHT_CAP_IE *vht_cap,
+	HTTRANSMIT_SETTING *tx);
 VOID set_vht_cap(struct _RTMP_ADAPTER *pAd, MAC_TABLE_ENTRY *entry, VHT_CAP_IE *vht_cap_ie);
-INT SetCommonVHT(struct _RTMP_ADAPTER *pAd, UCHAR PhyMode,UCHAR Channel);
+INT SetCommonVHT(struct _RTMP_ADAPTER *pAd, struct wifi_dev *wdev, UCHAR PhyMode,UCHAR Channel);
 VOID rtmp_set_vht(struct _RTMP_ADAPTER *pAd, struct _RT_PHY_INFO *phy_info);
 char *VhtBw2Str(INT VhtBw);
 
@@ -65,6 +70,7 @@ void assoc_vht_info_debugshow(
 	IN VHT_OP_IE *vht_op);
 
 BOOLEAN vht80_channel_group( struct _RTMP_ADAPTER *pAd, UCHAR channel);
+BOOLEAN vht160_channel_group( struct _RTMP_ADAPTER *pAd, UCHAR channel);
 void print_vht_op_info(VHT_OP_INFO *vht_op);
 
 

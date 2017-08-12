@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * Taiwan, R.O.C.
@@ -11,7 +12,7 @@
  * way altering the source code is stricitly prohibited, unless the prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 
 
 #ifdef RTMP_MAC_PCI
@@ -424,6 +425,16 @@ static void rx_done_tasklet(unsigned long data)
 	if (pAd->chipCap.hif_type == HIF_MT)
 		INT_RX = MT_INT_RX_DATA;
 #endif /* MT_MAC */
+
+#ifdef CONFIG_BA_REORDER_MONITOR
+	if (pAd->BATable.ba_timeout_check) {
+		ba_timeout_flush(pAd);	
+
+		if (!((pAd->PciHif.IntPending & INT_RX) || 
+				(pAd->PciHif.intDisableMask & INT_RX)))
+			return;
+	}
+#endif
 
 	/* Do nothing if the driver is starting halt state. */
 	/* This might happen when timer already been fired before cancel timer with mlmehalt */
@@ -1429,8 +1440,8 @@ void dfs_tasklet(unsigned long data)
 			}
 		}
 
-		APStop(pAd);
-		APStartUp(pAd);
+		APStopByRf(pAd, RFIC_5GHZ);
+		APStartUpByRf(pAd, RFIC_5GHZ);
 		pRadarDetect->DFSAPRestart = 0;
 	}
 	else
@@ -1454,6 +1465,109 @@ void dfs_tasklet(unsigned long data)
 #endif /* DFS_SUPPORT */
 #endif /* CONFIG_AP_SUPPORT */
 
+#ifdef ERR_RECOVERY
+void RTMPHandleInterruptSerDump(RTMP_ADAPTER *pAd)
+{
+	UINT32 reg_tmp_val;
+
+	MAC_IO_READ32(pAd, MCU_COM_REG1, &reg_tmp_val);
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, MCU_COM_REG1=0x%08X\n", __FUNCTION__, reg_tmp_val));
+
+	if (reg_tmp_val == MCU_COM_REG1_SER_PSE) {
+		MAC_IO_READ32(pAd, PP_SPARE_DUMMY_CR5, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x8206c064=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, PP_SPARE_DUMMY_CR6, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x8206c068=0x%08X\n", __FUNCTION__, reg_tmp_val));	       
+		MAC_IO_READ32(pAd, PP_SPARE_DUMMY_CR7, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x8206c06C=0x%08X\n", __FUNCTION__, reg_tmp_val));
+
+		MAC_IO_READ32(pAd, 0x8244, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x82060244=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x8248, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x82060248=0x%08X\n", __FUNCTION__, reg_tmp_val));	       
+		MAC_IO_READ32(pAd, 0x8258, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x82060258=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x825C, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x8206025C=0x%08X\n", __FUNCTION__, reg_tmp_val));
+	} else if (reg_tmp_val == MCU_COM_REG1_SER_LMAC_TX) { 
+		MAC_IO_READ32(pAd, PP_SPARE_DUMMY_CR5, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x8206c064=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, PP_SPARE_DUMMY_CR6, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x8206c068=0x%08X\n", __FUNCTION__, reg_tmp_val));	       
+		MAC_IO_READ32(pAd, PP_SPARE_DUMMY_CR7, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x8206c06C=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, PP_SPARE_DUMMY_CR8, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x8206c070=0x%08X\n", __FUNCTION__, reg_tmp_val));
+	} else if (reg_tmp_val == MCU_COM_REG1_SER_SEC_RF_RX) {
+		MAC_IO_READ32(pAd, 0x21620, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F6020=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x21624, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F6024=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x21628, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F6028=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x2162C, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F602C=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x21630, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F6030=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x21634, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F6034=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x21638, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F6038=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x2163C, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F603C=0x%08X\n", __FUNCTION__, reg_tmp_val));
+
+		MAC_IO_READ32(pAd, 0x20824, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1024=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x20924, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1124=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x20a24, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1224=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x20b24, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1324=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x20820, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1020=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x20920, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1120=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x20a20, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1220=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x20b20, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1320=0x%08X\n", __FUNCTION__, reg_tmp_val));
+	
+		MAC_IO_READ32(pAd, 0x20840, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1040=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x20844, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1044=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x20848, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1048=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x2084C, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F104C=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x20940, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1140=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x20944, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1144=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x20948, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F1148=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		MAC_IO_READ32(pAd, 0x2094C, &reg_tmp_val);
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820F114C=0x%08X\n", __FUNCTION__, reg_tmp_val));
+	}   
+	
+	MAC_IO_READ32(pAd, PSE_SPARE_DUMMY_CR1, &reg_tmp_val);
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820681e4=0x%08X\n", __FUNCTION__, reg_tmp_val));
+	
+	MAC_IO_READ32(pAd, PSE_SPARE_DUMMY_CR2, &reg_tmp_val);	
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820681e8=0x%08X\n", __FUNCTION__, reg_tmp_val));
+	
+	MAC_IO_READ32(pAd, PSE_SPARE_DUMMY_CR3, &reg_tmp_val);	
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820682e8=0x%08X\n", __FUNCTION__, reg_tmp_val));
+	
+	MAC_IO_READ32(pAd, PSE_SPARE_DUMMY_CR4, &reg_tmp_val);	
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820682ec=0x%08X\n", __FUNCTION__, reg_tmp_val));
+	
+	MAC_IO_READ32(pAd, (0x20afc), &reg_tmp_val);
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R	, 0x820f20fc=0x%08X\n", __FUNCTION__, reg_tmp_val));
+}
+#endif // ERR_RECOVERY
+
 
 int print_int_count = 0;
 VOID RTMPHandleInterrupt(VOID *pAdSrc)
@@ -1463,7 +1577,7 @@ VOID RTMPHandleInterrupt(VOID *pAdSrc)
 	UINT32 StatusRegister = 0, EnableRegister = 0, stat_reg = 0, en_reg = 0;
 	POS_COOKIE pObj;
 	unsigned long flags=0;
-	UINT32 INT_RX_DATA = 0, INT_RX_CMD=0, TxCoherent = 0, RxCoherent = 0, FifoStaFullInt = 0;
+	UINT32 INT_RX_DATA = 0, INT_RX_CMD=0, TxCoherent = 0, RxCoherent = 0;
 	UINT32 INT_MGMT_DLY = 0, INT_HCCA_DLY = 0, INT_AC3_DLY = 0, INT_AC2_DLY = 0, INT_AC1_DLY = 0, INT_AC0_DLY = 0, INT_BMC_DLY = 0;
 	UINT32 RadarInt = 0;
 #ifdef MT_MAC
@@ -1865,15 +1979,6 @@ redo:
 	}
 
 	RTMP_INT_LOCK(&pAd->LockInterrupt, flags);
-	if (IntSource & FifoStaFullInt)
-	{
-		if ((pAd->PciHif.intDisableMask & FifoStaFullInt) == 0)
-		{
-			rt2860_int_disable(pAd, FifoStaFullInt);
-			RTMP_OS_TASKLET_SCHE(&pObj->fifo_statistic_full_task);
-		}
-		pAd->PciHif.IntPending |= FifoStaFullInt;
-	}
 
 	if (IntSource & INT_MGMT_DLY)
 	{
@@ -2020,7 +2125,6 @@ redo:
 #ifdef ERR_RECOVERY
             if (value & ERROR_DETECT_MASK)
             {
-				UINT32 reg_tmp_val;
                 rt2860_int_disable(pAd, McuCommand);
 
                 /* updated ErrRecovery Status. */
@@ -2029,8 +2133,7 @@ redo:
                 /* Trigger error recovery process with fw reload. */
                 RTMP_OS_TASKLET_SCHE(&pObj->mac_error_recovey_task);
                 MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R  , status=0x%08X\n", __FUNCTION__, value));
-				MAC_IO_READ32(pAd, MCU_COM_REG1, &reg_tmp_val);
-				MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s,::E  R  , MCU_COM_REG1=0x%08X\n", __FUNCTION__, reg_tmp_val));
+		RTMPHandleInterruptSerDump(pAd);
             }
 #endif /* ERR_RECOVERY */
 
@@ -2265,8 +2368,13 @@ VOID rtmp_rlt_pci_chip_cfg(RTMP_ADAPTER *pAd, RT_CMD_PCIE_INIT *pConfig, USHORT 
 
 
 #ifdef MT_MAC
-VOID mt_pci_chip_cfg(RTMP_ADAPTER *pAd, USHORT  id)
+NDIS_STATUS mt_pci_chip_cfg(RTMP_ADAPTER *pAd, USHORT  id)
 {
+    NDIS_STATUS ret = NDIS_STATUS_SUCCESS;
+
+    if (id == 0) 
+	ret = NDIS_STATUS_FAILURE;
+
 #ifdef CONFIG_FWOWN_SUPPORT
     if ((id == NIC7615_PCIe_DEVICE_ID) || (id == NIC7637_PCIe_DEVICE_ID))
     {
@@ -2283,12 +2391,18 @@ VOID mt_pci_chip_cfg(RTMP_ADAPTER *pAd, USHORT  id)
 
         RTMP_IO_READ32(pAd, TOP_HVR, &Value);
         pAd->HWVersion = Value;
+	if (Value == 0) 
+	    ret = NDIS_STATUS_FAILURE;
 
         RTMP_IO_READ32(pAd, TOP_FVR, &Value);
         pAd->FWVersion = Value;
+	if (Value == 0) 
+	    ret = NDIS_STATUS_FAILURE;
 
         RTMP_IO_READ32(pAd, TOP_HCR, &Value);
         pAd->ChipID = Value;
+	if (Value == 0) 
+	    ret = NDIS_STATUS_FAILURE;
 
         if (IS_MT7603(pAd))
         {
@@ -2306,11 +2420,15 @@ VOID mt_pci_chip_cfg(RTMP_ADAPTER *pAd, USHORT  id)
 #ifdef MT7615
         if (IS_MT7615(pAd)) {
             RTMP_IO_READ32(pAd, HIF_SYS_REV, &Value);
+	    if (Value == 0) 
+		ret = NDIS_STATUS_FAILURE;
             MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_OFF, 
                         ("%s(): HIF_SYS_REV=0x%x\n", __FUNCTION__, Value));
         }
 #endif /* MT7615 */
      }
+
+     return ret;
 }
 #endif /* MT_MAC */
 
@@ -2326,6 +2444,7 @@ VOID RTMPInitPCIeDevice(RT_CMD_PCIE_INIT *pConfig, VOID *pAdSrc)
     VOID *pci_dev = pConfig->pPciDev;
     USHORT  device_id = 0;
     POS_COOKIE pObj;
+    NDIS_STATUS ret;
 
     pObj = (POS_COOKIE) pAd->OS_Cookie;
     pci_read_config_word(pci_dev, pConfig->ConfigDeviceID, &device_id);
@@ -2344,9 +2463,22 @@ VOID RTMPInitPCIeDevice(RT_CMD_PCIE_INIT *pConfig, VOID *pAdSrc)
 #endif /* defined(RTMP_MAC) || defined(RLT_MAC) */
 
 #ifdef MT_MAC
-    mt_pci_chip_cfg(pAd, device_id);
+    ret = mt_pci_chip_cfg(pAd, device_id);
+    /* check pci configuration CR can be read successfully */
+    if (ret != NDIS_STATUS_SUCCESS) {
+	pConfig->pci_init_succeed = FALSE;
+	MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_OFF, ("%s():pci configuration space can't be read\n", 
+                        __FUNCTION__));
+	return;
+    } else {
+	pConfig->pci_init_succeed = TRUE;
+    }
 #endif /* */
-
+#ifdef INTELP6_SUPPORT
+#ifdef MULTI_INF_SUPPORT
+	multi_inf_adapt_reg((VOID *) pAd);
+#endif /* MULTI_INF_SUPPORT */
+#endif
     if (pAd->infType != RTMP_DEV_INF_UNKNOWN)
         RtmpRaDevCtrlInit(pAd, pAd->infType);
 }
@@ -2355,6 +2487,20 @@ VOID RTMPInitPCIeDevice(RT_CMD_PCIE_INIT *pConfig, VOID *pAdSrc)
 
 #endif /* RTMP_MAC_PCI */
 
+#ifdef INTELP6_SUPPORT
+#ifdef MULTI_INF_SUPPORT
+struct pci_dev* rtmp_get_pci_dev(void *ad)
+{
+	struct pci_dev *pdev = NULL;
+#ifdef RTMP_PCI_SUPPORT
+	RTMP_ADAPTER *pAd = (RTMP_ADAPTER*)ad;
+	POS_COOKIE obj = (POS_COOKIE)pAd->OS_Cookie;
+	pdev = obj->pci_dev;
+#endif
+	return pdev;
+}
+#endif
+#endif
 
 struct device* rtmp_get_dev(void *ad)
 {

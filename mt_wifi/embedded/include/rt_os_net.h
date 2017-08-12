@@ -131,6 +131,7 @@ VOID RTMPFreeAdapter(VOID *pAd);
 BOOLEAN RtmpRaDevCtrlExit(VOID *pAd);
 INT RtmpRaDevCtrlInit(VOID *pAd, RTMP_INF_TYPE infType);
 VOID RTMPHandleInterrupt(VOID *pAd);
+void RTMPHandleInterruptSerDump(struct _RTMP_ADAPTER *pAd);
 
 INT RTMP_COM_IoctlHandle(
 	IN	VOID					*pAd, 
@@ -175,19 +176,33 @@ PNET_DEV RtmpPhyNetDevMainCreate(VOID *pAd);
 /* ========================================================================== */
 int mt_wifi_close(VOID *dev);
 int mt_wifi_open(VOID *dev);
+int virtual_if_up_handler(VOID *dev);
+int virtual_if_down_handler(VOID *dev);
 
-__inline INT VIRTUAL_IF_UP(VOID *pAd)
+__inline INT VIRTUAL_IF_UP(VOID *pAd, VOID *pDev)
 {
-	RT_CMD_INF_UP_DOWN InfConf = { mt_wifi_open, mt_wifi_close };
+	RT_CMD_INF_UP_DOWN InfConf = { 
+	    mt_wifi_open, 
+	    mt_wifi_close, 
+	    virtual_if_up_handler, 
+	    virtual_if_down_handler, 
+	    pDev };
+	    
 	if (RTMP_COM_IoctlHandle(pAd, NULL, CMD_RTPRIV_IOCTL_VIRTUAL_INF_UP,
 						0, &InfConf, 0) != NDIS_STATUS_SUCCESS)
 		return -1;
 	return 0;
 }
 
-__inline VOID VIRTUAL_IF_DOWN(VOID *pAd)
+__inline VOID VIRTUAL_IF_DOWN(VOID *pAd, VOID *pDev)
 {
-	RT_CMD_INF_UP_DOWN InfConf = { mt_wifi_open, mt_wifi_close };
+	RT_CMD_INF_UP_DOWN InfConf = { 
+	    mt_wifi_open, 
+	    mt_wifi_close, 
+	    virtual_if_up_handler,
+	    virtual_if_down_handler,
+	    pDev };
+	    
 	RTMP_COM_IoctlHandle(pAd, NULL, CMD_RTPRIV_IOCTL_VIRTUAL_INF_DOWN,
 						0, &InfConf, 0);
 	return;
@@ -391,7 +406,6 @@ INT rt_android_private_command_entry(
 	RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_SET_PRECONFIG_VALUE, 0, NULL, 0)
 #endif /* EXT_BUILD_CHANNEL_LIST */
 
-
 #ifdef RT_CFG80211_SUPPORT
 /* General Part */
 #define RTMP_DRIVER_CFG80211_REGISTER(__pNetDev) \
@@ -488,8 +502,8 @@ INT rt_android_private_command_entry(
 	RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_80211_NETDEV_EVENT, 0, __pDev, __state)
 
 /* AP Part */
-#define RTMP_DRIVER_80211_BEACON_DEL(__pAd) \
-	RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_80211_BEACON_DEL, 0, NULL, 0)
+#define RTMP_DRIVER_80211_BEACON_DEL(__pAd,__apidx) \
+	RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_80211_BEACON_DEL, 0, NULL, __apidx)
 
 #define RTMP_DRIVER_80211_BEACON_ADD(__pAd, __pBeacon) \
    	RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_80211_BEACON_ADD, 0, __pBeacon, 0)
@@ -507,14 +521,14 @@ INT rt_android_private_command_entry(
     RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_80211_AP_KEY_ADD, 0, __pKeyInfo, 0)
 
 #define RTMP_DRIVER_80211_RTS_THRESHOLD_ADD(__pAd, __Rts_thresold) \
-    RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_80211_RTS_THRESHOLD_ADD, 0, __Rts_thresold, 0)
+    RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_80211_RTS_THRESHOLD_ADD, 0, NULL, __Rts_thresold)
 
 #define RTMP_DRIVER_80211_FRAG_THRESHOLD_ADD(__pAd, __Frag_thresold) \
-    RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_80211_FRAG_THRESHOLD_ADD, 0, __Frag_thresold, 0)
+    RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_80211_FRAG_THRESHOLD_ADD, 0, NULL, __Frag_thresold)
 
 
-#define RTMP_DRIVER_80211_AP_KEY_DEFAULT_SET(__pAd, __KeyId)				\
-	RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_80211_AP_KEY_DEFAULT_SET, 0, NULL, __KeyId)
+#define RTMP_DRIVER_80211_AP_KEY_DEFAULT_SET(__pAd, __pNdev, __KeyId)				\
+	RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_80211_AP_KEY_DEFAULT_SET, 0, __pNdev, __KeyId)
     
 #define RTMP_DRIVER_80211_AP_PROBE_RSP(__pAd, __pFrame, __Len) \
 	RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_80211_AP_PROBE_RSP_EXTRA_IE, 0, __pFrame, __Len)
@@ -616,13 +630,14 @@ INT rt_android_private_command_entry(
 #define RTMP_DRIVER_PCI_CSR_SET(__pAd, __Address)							\
 	RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_PCI_CSR_SET, 0, NULL, __Address)
 
-#define RTMP_DRIVER_PCIE_INIT(__pAd, __pPciDev)								\
+#define RTMP_DRIVER_PCIE_INIT(__pAd, __pConfig, __pPciDev)								\
 {																			\
-	RT_CMD_PCIE_INIT __Config, *__pConfig = &__Config;						\
-	__pConfig->pPciDev = __pPciDev;											\
-	__pConfig->ConfigDeviceID = PCI_DEVICE_ID;								\
-	__pConfig->ConfigSubsystemVendorID = PCI_SUBSYSTEM_VENDOR_ID;			\
-	__pConfig->ConfigSubsystemID = PCI_SUBSYSTEM_ID;						\
+	RT_CMD_PCIE_INIT *pConfig = __pConfig;						\
+	pConfig->pPciDev = __pPciDev;											\
+	pConfig->ConfigDeviceID = PCI_DEVICE_ID;								\
+	pConfig->ConfigSubsystemVendorID = PCI_SUBSYSTEM_VENDOR_ID;			\
+	pConfig->ConfigSubsystemID = PCI_SUBSYSTEM_ID;						\
+	pConfig->pci_init_succeed = FALSE;						\
 	RTMP_COM_IoctlHandle(__pAd, NULL, CMD_RTPRIV_IOCTL_PCIE_INIT, 0, __pConfig, 0);\
 }
 

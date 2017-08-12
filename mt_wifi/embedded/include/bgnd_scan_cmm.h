@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -17,7 +18,7 @@
 
 
  */
-
+#endif /* MTK_LICENSE */
  #ifndef __BGND_SCAN_CMM_H__
 #define __BGND_SCAN_CMM_H__
 #define BGND_SCAN_MACHINE_BASE	0
@@ -25,7 +26,8 @@
 #define BGND_SCAN_LISTEN			1
 #define BGND_RDD_DETEC			2
 #define BGND_CS_ANN			3
-#define BGND_SCAN_MAX_STATE      	4
+#define BGND_SCAN_WAIT			4
+#define BGND_SCAN_MAX_STATE      	5
 
 #define BGND_SCAN_REQ				0
 #define BGND_SCAN_TIMEOUT			1
@@ -35,11 +37,30 @@
 #define BGND_RDD_CNCL				5
 #define BGND_RDD_TIMEOUT               		6
 #define BGND_CH_SW_ANN				7
-#define BGND_SCAN_MAX_MSG			8
+#define BGND_PARTIAL_SCAN			8
+#define BGND_SCAN_DONE				9
+#define BGND_SCAN_MAX_MSG			10
 
 #define BGND_SCAN_FUNC_SIZE    (BGND_SCAN_MAX_STATE * BGND_SCAN_MAX_MSG)
 
 #define DefaultBgndScanInterval		1800 /* 30min.  The auto trigger interval shoulde more than this value */
+#define DefaultBgndScanPerChInterval	10 /* 10 seconds. Partial Scan interval */
+#define DefaultNoisyThreshold		85 /* % */
+#define DefaultChBusyTimeThreshold	600000
+#define DefaultMyAirtimeUsageThreshold	100000
+#define DefaultScanDuration		200 /*ms*/
+#define B0IrpiSwCtrlOnlyOffset		29
+#define B0IrpiSwCtrlResetOffset		18
+#define B0IpiEnableCtrlOffset		12
+#define B0IpiEnableCtrlValue		0x5
+#define DefaultIdleTimeThreshold		80000 /*  *8us */
+
+enum {
+	TYPE_BGND_DISABLE_SCAN,
+	TYPE_BGND_PARTIAL_SCAN,
+	TYPE_BGND_CONTINUOUS_SCAN,
+	TYPE_BGND_CONTINUOUS_SCAN_SWITCH_CH
+};
 
 typedef struct _BGND_SCAN_SUPP_CH_LIST {
 	UCHAR GroupType; /*0:BW20, 1:BW40, 2:BW80 */
@@ -47,7 +68,7 @@ typedef struct _BGND_SCAN_SUPP_CH_LIST {
 	UCHAR CenChannel;
 	UCHAR DfsReq;
 	UCHAR RegulatoryDomain;
-	BOOLEAN SkipList;
+	BOOLEAN SkipChannel;
 	UINT32 PccaTime;
 	UINT32 SccaTime;
 	UINT32 EDCCATime;
@@ -88,6 +109,7 @@ typedef struct _BGND_SCAN_CH_GROUP_LIST {
 	UINT32 Max_PCCA_Time; /* Max in group */
 	UINT32 Min_PCCA_Time; /* Min in group */
 	UINT32 Band0_Tx_Time;
+	BOOLEAN SkipGroup;
 } BGND_SCAN_CH_GROUP_LIST, *PBGND_SCAN_CH_GROUP_LIST;
 
 typedef struct _MT_BGND_SCAN_NOTIFY{
@@ -135,15 +157,25 @@ typedef struct _BACKGROUND_SCAN_CTRL{
 	UCHAR					GroupChListNum;
 	UCHAR					BestChannel;
 	MT_SWITCH_CHANNEL_CFG	CurrentSwChCfg[1];
-	BOOL				BgndScanAllow;
-	UINT32				BgndScanInterval;
+	UINT32				PartialScanInterval;
+	UINT32				PartialScanIntervalCount;
 	UINT32				BgndScanIntervalCount;
 	UCHAR				Noisy;
+	UCHAR				NoisyTH;
+	UINT32				ChBusyTimeTH;
 	UCHAR				DfsZeroWaitChannel;
 	ULONG				DfsZeroWaitDuration;
 	BOOL				SkipDfsChannel;
 	BOOL				DfsZeroWaitSupport;
 	BOOL				RadarDetected;
+	UCHAR				BFSTARecord[MAX_LEN_OF_MAC_TABLE];
+	BOOL				DriverTrigger;
+	UINT8				ScanType; /* 0:Disable 1:partial scan 2:continuous scan */
+	UINT8				SkipChannelNum;
+	UCHAR 				SkipChannelList[MAX_NUM_OF_CHANNELS];
+	BOOL				IsSwitchChannel;
+	UINT32				IPIIdleTime;
+	UINT32				IPIIdleTimeTH;
 	
 }BACKGROUND_SCAN_CTRL, *PBACKGROUND_SCAN_CTRL;
 

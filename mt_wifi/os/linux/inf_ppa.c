@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -27,7 +28,7 @@
     carella	06-01-2010    Created
 
  */
-
+#endif /* MTK_LICENSE */
 #ifdef INF_PPA_SUPPORT
 
 #include "rt_config.h"

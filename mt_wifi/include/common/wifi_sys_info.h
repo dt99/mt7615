@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	--------	----------  ----------------------------------------------
 	Name		Date	    Modification logs
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __WIFI_SYS_INFO_H__
 #define __WIFI_SYS_INFO_H__
 
@@ -62,6 +63,10 @@ typedef struct _STA_REC_CTRL_T {
 	DL_LIST list;
 }STA_REC_CTRL_T;
 
+
+#define WDEV_BSS_STATE(__wdev) \
+	(__wdev->bss_info_argument.bss_state)
+	
 typedef enum _BSSINFO_LINK_TO_OMAC_T
 {
     HW_BSSID = 0,
@@ -70,10 +75,18 @@ typedef enum _BSSINFO_LINK_TO_OMAC_T
     REPT
 } BSSINFO_TYPE_T;
 
+typedef enum _BSSINFO_STATE_T
+{
+	BSS_INIT	= 0,	// INIT state
+	BSS_INITED 	= 1,	// BSS Argument Link done
+	BSS_ACTIVE 	= 2,	// The original flag - Active
+	BSS_READY 	= 3		// BssInfo updated to FW done and ready for beaconing
+} BSSINFO_STATE_T;
+
 typedef struct _BSS_INFO_ARGUMENT_T
 {
     BSSINFO_TYPE_T bssinfo_type;
-	BOOLEAN fgInitialized;
+	BSSINFO_STATE_T bss_state;
 	UCHAR OwnMacIdx;
 	UINT8 ucBssIndex;
 	UINT8 Bssid[MAC_ADDR_LEN];
@@ -82,7 +95,6 @@ typedef struct _BSS_INFO_ARGUMENT_T
 	UINT32 NetworkType;
 	UINT32 u4ConnectionType;
 	UINT8 CipherSuit;
-	UINT8 Active;
 	UINT8 WmmIdx;
     UINT32 prio_bitmap;
     UINT16 txop_level[MAX_PRIO_NUM];
@@ -101,6 +113,7 @@ typedef struct _WIFI_SYS_CTRL{
 	STA_REC_CTRL_T StaRecCtrl;
 	BSS_INFO_ARGUMENT_T BssInfoCtrl;
 	VOID *priv;
+	BOOLEAN skip_set_txop;
 }WIFI_SYS_CTRL;
 
 
@@ -141,8 +154,12 @@ typedef struct _LINKUP_HWCTRL{
 }LINKUP_HWCTRL;
 
 /*Export function*/
+VOID WifiSysInfoReset(struct _WIFI_SYS_INFO *pWifiSysInfo);
 VOID WifiSysInfoInit(struct _RTMP_ADAPTER *pAd);
 VOID WifiSysInfoDump(struct _RTMP_ADAPTER *pAd);
+VOID WifiSysInfoBssInfoDump(RTMP_ADAPTER *pAd);
+
+
 
 
 VOID WifiSysOpen(struct _RTMP_ADAPTER *pAd,struct wifi_dev *wdev);
@@ -184,6 +201,8 @@ VOID WifiSysUpdateRa(struct _RTMP_ADAPTER *pAd,struct _MAC_TABLE_ENTRY *pEntry, 
 #endif /*RACTRL_FW_OFFLOAD_SUPPORT*/
 
 VOID WifiSysUpdatePortSecur(struct _RTMP_ADAPTER *pAd,struct _MAC_TABLE_ENTRY *pEntry);
+BSSINFO_STATE_T WifiSysGetBssInfoState(struct _RTMP_ADAPTER *pAd, UINT8 ucBssInfoIdx);
+VOID WifiSysUpdateBssInfoState(struct _RTMP_ADAPTER *pAd, UINT8	ucBssInfoIdx, BSSINFO_STATE_T bss_state);
 VOID WifiSysPeerLinkDown(struct _RTMP_ADAPTER *pAd,struct _MAC_TABLE_ENTRY *pEntry);
 
 

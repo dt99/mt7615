@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -24,7 +25,7 @@
     ---------    ----------    ----------------------------------------------
 	Fonchi Wu    2008	  	   created for 802.11h
  */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 #include "action.h"
 
@@ -221,15 +222,15 @@ CHAR RTMP_GetTxPwr(RTMP_ADAPTER *pAd, HTTRANSMIT_SETTING HTTxMode, UCHAR Channel
 #endif /* SINGLE_SKU */
 
 	/* check Tx Power setting from UI. */
-	if (pAd->CommonCfg.TxPowerPercentage > 90)
+	if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 90)
 		;
-	else if (pAd->CommonCfg.TxPowerPercentage > 60)  /* reduce Pwr for 1 dB. */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 60)  /* reduce Pwr for 1 dB. */
 		CurTxPwr -= 1;
-	else if (pAd->CommonCfg.TxPowerPercentage > 30)  /* reduce Pwr for 3 dB. */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 30)  /* reduce Pwr for 3 dB. */
 		CurTxPwr -= 3;
-	else if (pAd->CommonCfg.TxPowerPercentage > 15)  /* reduce Pwr for 6 dB. */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 15)  /* reduce Pwr for 6 dB. */
 		CurTxPwr -= 6;
-	else if (pAd->CommonCfg.TxPowerPercentage > 9)   /* reduce Pwr for 9 dB. */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 9)   /* reduce Pwr for 9 dB. */
 		CurTxPwr -= 9;
 	else                                           /* reduce Pwr for 12 dB. */
 		CurTxPwr -= 12;
@@ -286,12 +287,12 @@ CHAR RTMP_GetTxPwr(RTMP_ADAPTER *pAd, HTTRANSMIT_SETTING HTTxMode, UCHAR Channel
 #ifdef DOT11_N_SUPPORT
 		case MODE_HTMIX:
 		case MODE_HTGREENFIELD:
-			if (pAd->CommonCfg.TxStream == 1)
+			if (pAd->Antenna.field.TxPath == 1)
 			{
 				Value = TxPwr[2];
 				TxPwrRef = (Value & 0x00000f00) >> 8;
 			}
-			else if (pAd->CommonCfg.TxStream == 2)
+			else if (pAd->Antenna.field.TxPath == 2)
 			{
 				Value = TxPwr[3];
 				TxPwrRef = (Value & 0x00000f00) >> 8;
@@ -710,7 +711,7 @@ static PTPC_REQ_ENTRY TpcReqInsert(RTMP_ADAPTER *pAd, UINT8 DialogToken)
 	return pEntry;
 }
 
-
+#ifdef TPC_SUPPORT
 static VOID TpcReqDelete(RTMP_ADAPTER *pAd, UINT8 DialogToken)
 {
 	PTPC_REQ_TAB pTab = pAd->CommonCfg.pTpcReqTab;
@@ -765,6 +766,7 @@ static VOID TpcReqDelete(RTMP_ADAPTER *pAd, UINT8 DialogToken)
 
 	return;
 }
+#endif /* TPC_SUPPORT */
 
 
 /*
@@ -787,16 +789,28 @@ static UINT64 GetCurrentTimeStamp(RTMP_ADAPTER *pAd)
 /*
 	==========================================================================
 	Description:
-		Get Current Transmit Power.
+		Get Maximum Transmit Power.
 
 	Parametrs:
 
-	Return	: Current Time Stamp.
+	Return	: Current Transmit Power.
 	==========================================================================
  */
-static UINT8 GetCurTxPwr(RTMP_ADAPTER *pAd, UINT8 Wcid)
+UINT8 GetMaxTxPwr(RTMP_ADAPTER *pAd)
 {
-	return 16; /* 16 dBm */
+#ifdef SINGLE_SKU_V2
+	UINT8 max = 0;
+	UINT8 i;
+
+	for (i = 0; i < SKU_SIZE; i ++) {
+		if (pAd->TxPowerSKU[i] > max)
+			max = pAd->TxPowerSKU[i];
+	}
+
+	return max;
+#else
+	return 0x3f;	/* dBm */
+#endif
 }
 
 
@@ -815,13 +829,19 @@ VOID InsertChannelRepIE(
 	OUT PUCHAR pFrameBuf,
 	OUT PULONG pFrameLen,
 	IN RTMP_STRING *pCountry,
-	IN UINT8 RegulatoryClass)
+	IN UINT8 RegulatoryClass,
+	IN UINT8 *ChReptList
+	)
 {
 	ULONG TempLen;
 	UINT8 Len;
 	UINT8 IEId = IE_AP_CHANNEL_REPORT;
 	PUCHAR pChListPtr = NULL;
 	DOT11_CHANNEL_SET *pChannelSet = NULL;
+	UINT8 i,j;
+	UCHAR ChannelList[16] ={0};
+	UINT8 NumberOfChannels = 0;
+	UINT8 *pChannelList = NULL;
 
 	Len = 1;
 	if (strncmp(pCountry, "US", 2) == 0)
@@ -860,8 +880,33 @@ VOID InsertChannelRepIE(
 	if (pChannelSet->NumberOfChannels == 0)
 		return;
 
-	Len += pChannelSet->NumberOfChannels;
-	pChListPtr = pChannelSet->ChannelList;
+	if (ChReptList) // assign partial channel list
+	{
+		for (i=0; i <pChannelSet->NumberOfChannels; i++)
+		{
+			for (j=0; j <16; j++)
+			{
+				if (ChReptList[j] == pChannelSet->ChannelList[i])
+				{
+					ChannelList[NumberOfChannels++] = pChannelSet->ChannelList[i];
+				}
+			}
+		}
+
+		pChannelList = &ChannelList[0];
+	}
+	else
+	{
+		NumberOfChannels = pChannelSet->NumberOfChannels;	
+		pChannelList = pChannelSet->ChannelList;
+	}
+
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s: Requlatory class (%d), NumberOfChannels=%d, pChannelSet->NumberOfChannels=%d\n",
+						__FUNCTION__, RegulatoryClass,NumberOfChannels,pChannelSet->NumberOfChannels));
+
+	Len += NumberOfChannels;
+	pChListPtr = pChannelList;
+
 
 	if (Len > 1)
 	{
@@ -1717,6 +1762,7 @@ static BOOLEAN PeerMeasureReportSanity(
 }
 
 
+#ifdef TPC_SUPPORT
 /*
 	==========================================================================
 	Description:
@@ -1831,6 +1877,7 @@ static BOOLEAN PeerTpcRepSanity(
 
 	return result;
 }
+#endif /* TPC_SUPPORT */
 
 
 /*
@@ -1963,6 +2010,7 @@ static VOID PeerMeasureReportAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 }
 
 
+#ifdef TPC_SUPPORT
 /*
 	==========================================================================
 	Description:
@@ -1979,9 +2027,17 @@ static VOID PeerTpcReqAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 	PFRAME_802_11 pFr = (PFRAME_802_11)Elem->Msg;
 	PUCHAR pFramePtr = pFr->Octet;
 	UINT8 DialogToken;
-	UINT8 TxPwr = GetCurTxPwr(pAd, Elem->Wcid);
+	UINT8 TxPwr = GetMaxTxPwr(pAd);
 	UINT8 LinkMargin = 0;
 	CHAR RealRssi;
+
+	if (!pAd->CommonCfg.b80211TPC)
+	{
+		MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s(): (X) b80211TPC=%d\n",
+				__FUNCTION__, pAd->CommonCfg.b80211TPC));
+
+		return;
+	}
 
 	/* link margin: Ratio of the received signal power to the minimum desired by the station (STA). The*/
 	/*				STA may incorporate rate information and channel conditions, including interference, into its computation*/
@@ -1989,7 +2045,11 @@ static VOID PeerTpcReqAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 
 	RealRssi = RTMPMaxRssi(pAd, ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_0),
 				ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_1),
-				ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_2));
+				ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_2)
+#ifdef CUSTOMER_DCC_FEATURE
+				,ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_3)
+#endif
+);
 
 	/* skip Category and action code.*/
 	pFramePtr += 2;
@@ -2018,9 +2078,23 @@ static VOID PeerTpcReqAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
  */
 static VOID PeerTpcRepAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 {
+	const UINT8 MAX_PWR_LIMIT_DBM = (0x3F >> 1);
+	/* Register: signed, only 7 bits for positive integer. Change the unit from 0.5 dBm to 1 dBm */
+
 	UINT8 DialogToken;
 	TPC_REPORT_INFO TpcRepInfo;
 	PTPC_REQ_ENTRY pEntry = NULL;
+	BOOLEAN bUpdated = TRUE;
+	PFRAME_802_11 pFr = (PFRAME_802_11)Elem->Msg;
+	INT MaxTxPower = 0;
+
+	if (!pAd->CommonCfg.b80211TPC)
+	{
+		MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s(): (X) b80211TPC=%d\n",
+				__FUNCTION__, pAd->CommonCfg.b80211TPC));
+
+		return;
+	}
 
 	NdisZeroMemory(&TpcRepInfo, sizeof(TPC_REPORT_INFO));
 	if (PeerTpcRepSanity(pAd, Elem->Msg, Elem->MsgLen, &DialogToken, &TpcRepInfo))
@@ -2033,8 +2107,33 @@ static VOID PeerTpcRepAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 		}
 	}
 
+	MaxTxPower = TpcRepInfo.TxPwr - TpcRepInfo.LinkMargin;
+
+	if (MaxTxPower > MAX_PWR_LIMIT_DBM)
+		MaxTxPower = MAX_PWR_LIMIT_DBM;
+
+	MaxTxPower <<= 1;
+	/* unit: 0.5 dBm in hardware register */
+ 
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s: MaxTxPower = %d (unit: 0.5 dBm)\n",
+		__FUNCTION__, MaxTxPower));
+
+	if (bUpdated) 
+	{
+		struct wifi_dev *wdev = NULL;
+		MAC_TABLE_ENTRY *mac_entry = MacTableLookup(pAd, pFr->Hdr.Addr2);
+
+		if (mac_entry)
+			wdev = mac_entry->wdev;
+		else
+			wdev = &pAd->ApCfg.MBSSID[0].wdev;
+
+		TxPowerTpcFeatureCtrl(pAd, wdev, (INT8)MaxTxPower);
+	}
+
 	return;
 }
+#endif /* TPC_SUPPORT */
 
 
 /*
@@ -2069,6 +2168,7 @@ VOID PeerSpectrumAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 			PeerMeasureReportAction(pAd, Elem);
 			break;
 
+#ifdef TPC_SUPPORT
 		case SPEC_TPCRQ:
 			PeerTpcReqAction(pAd, Elem);
 			break;
@@ -2076,6 +2176,7 @@ VOID PeerSpectrumAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 		case SPEC_TPCRP:
 			PeerTpcRepAction(pAd, Elem);
 			break;
+#endif /* TPC_SUPPORT */
 
 		case SPEC_CHANNEL_SWITCH:
 
@@ -2241,6 +2342,233 @@ INT Set_TpcReq_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 	return TRUE;
 }
 
+INT Set_TpcReqByAddr_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
+{
+	char *value;
+	UINT8 macAddr[MAC_ADDR_LEN] = {0};
+	INT i;
+
+	UINT8 TpcReqToken = RandomByte(pAd);
+
+	if(strlen(arg) != 17)  /*Mac address acceptable format 01:02:03:04:05:06 length 17 */
+		return FALSE;
+
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, 
+		("%s: TpcReqToken = %d (0x%02X)\n", 
+		__FUNCTION__, TpcReqToken, TpcReqToken));
+
+	for (i=0, value = rstrtok(arg,":"); value; value = rstrtok(NULL,":"))
+	{
+		if((strlen(value) != 2) || (!isxdigit(*value)) || (!isxdigit(*(value+1))) )
+			return FALSE;  /*Invalid */
+
+		AtoH(value, (UINT8 *)&macAddr[i++], 1);
+	}
+
+	TpcReqInsert(pAd, TpcReqToken);
+	EnqueueTPCReq(pAd, macAddr, TpcReqToken);
+
+	return TRUE;
+}
+
+#ifdef TPC_SUPPORT
+INT Set_TpcCtrl_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
+{
+	const UINT CMD_NUM = 3;
+	UINT arg_len, i, j, cmd_pos[CMD_NUM];
+	UINT BandIdx, Power, CentCh;
+
+	arg_len = strlen(arg);
+
+	cmd_pos[0] = 0;
+	j = 1;
+	for (i = 0; i < arg_len; i ++)
+	{
+		if (arg[i] == ':') {
+			cmd_pos[j++] = i + 1;
+			arg[i] = 0;
+		}
+	}
+
+	if (j != CMD_NUM) {
+		MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("usage format is [band:power:channel], power unit is 0.5 dBm\n\n"));
+		MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("e.g.\n\n"));
+		MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("iwpriv ra0 set TpcCtrl=0:62:6\n"));
+		MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("means (band 0), (31 dBm), (channel 6)\n\n"));
+		MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("iwpriv ra0 set TpcCtrl=1:10:100\n"));
+		MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("means (band 1), (5 dBm), (channel 100)\n\n"));
+		return TRUE;
+	}
+
+	BandIdx = simple_strtol(arg + cmd_pos[0], 0, 10);
+	Power = simple_strtol(arg + cmd_pos[1], 0, 10);
+	CentCh = simple_strtol(arg + cmd_pos[2], 0, 10);
+
+	if (Power > 63)
+		Power = 63;
+
+	MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("BandIdx=%d, Power=%d, CentCh=%d\n", BandIdx, Power, CentCh));
+	TxPowerTpcFeatureForceCtrl(pAd, Power, BandIdx, CentCh);
+
+	return TRUE;
+}
+
+INT Set_TpcEnable_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
+{
+	UINT8 enable;
+
+	enable = simple_strtol(arg, 0, 10);
+
+	if (enable != FALSE)
+		enable = TRUE;
+
+	MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_OFF, 
+		("%s(): %d -> %d\n", __FUNCTION__, pAd->CommonCfg.b80211TPC, enable));
+
+	pAd->CommonCfg.b80211TPC = enable;
+
+	return TRUE;
+}
+
+#endif /* TPC_SUPPORT */
+#ifdef CUSTOMER_DCC_FEATURE
+#ifdef DOT11_N_SUPPORT
+static VOID InsertSecondaryChOffsetIE(
+        IN PRTMP_ADAPTER pAd,
+        OUT PUCHAR pFrameBuf,
+        OUT PULONG pFrameLen,
+        IN UINT8 Offset)
+{
+        ULONG TempLen;
+        ULONG Len = sizeof(SEC_CHA_OFFSET_IE);
+        UINT8 ElementID = IE_SECONDARY_CH_OFFSET;
+        SEC_CHA_OFFSET_IE SChOffIE;
+
+        SChOffIE.SecondaryChannelOffset = Offset;
+
+        MakeOutgoingFrame(pFrameBuf,      &TempLen,
+                        		  1,      &ElementID,
+                                  1,      &Len,
+                                  Len,    &SChOffIE,
+                                          END_OF_ARGS);
+
+        *pFrameLen = *pFrameLen + TempLen;
+
+
+        return;
+}
+
+#endif
+
+VOID InsertChSwAnnIENew(
+	IN PRTMP_ADAPTER pAd,
+	OUT PUCHAR pFrameBuf,
+	OUT PULONG pFrameLen,
+	IN UINT8 ChSwMode,
+	IN UINT8 NewChannel,
+	IN UINT8 ChSwCnt)
+{
+	ULONG TempLen;
+	ULONG Len = sizeof(CH_SW_ANN_INFO);
+	UINT8 ElementID = IE_CHANNEL_SWITCH_ANNOUNCEMENT;
+	CH_SW_ANN_INFO ChSwAnnIE;
+
+	ChSwAnnIE.ChSwMode = ChSwMode;
+	ChSwAnnIE.Channel = NewChannel;
+	ChSwAnnIE.ChSwCnt = ChSwCnt;
+
+	MakeOutgoingFrame(pFrameBuf,	&TempLen,
+			  	1,	&ElementID,
+				1,	&Len,
+				Len,	&ChSwAnnIE,
+				END_OF_ARGS);
+
+	*pFrameLen = *pFrameLen + TempLen;
+
+	printk("%s \n",__func__);
+	return;
+}
+
+
+INT NotifyChSwAnnToConnectedSTAs(
+	IN PRTMP_ADAPTER pAd,
+	IN UINT8 		ChSwMode,
+	IN UINT8 		Channel)
+{
+	UINT32 i;
+	MAC_TABLE_ENTRY *pEntry;
+
+	if(pAd->Dot11_H.RDMode != RD_SWITCHING_MODE)
+	{
+		pAd->CommonCfg.channelSwitch.CHSWMode = ChSwMode;
+		pAd->CommonCfg.channelSwitch.CHSWCount = 0;
+	}
+	else
+	{
+		pAd->Dot11_H.CSPeriod = pAd->CommonCfg.channelSwitch.CHSWPeriod;
+	}
+	for (i=0; i<MAX_LEN_OF_MAC_TABLE; i++)
+	{
+		pEntry = &pAd->MacTab.Content[i];
+		if (pEntry && IS_ENTRY_CLIENT(pEntry) && (pEntry->Sst == SST_ASSOC))
+		{
+					
+			EnqueueChSwAnnNew(pAd, pEntry->Addr, ChSwMode, Channel, pEntry->bssid);
+		
+		}
+	}
+	if(HcUpdateChannel(pAd,Channel) != 0)
+	{
+		return FALSE;
+	}
+
+	if(HcUpdateCsaCntByChannel(pAd, Channel) != 0)
+	{
+	      return FALSE;
+	}
+	return TRUE;
+}
+
+VOID EnqueueChSwAnnNew(
+	IN PRTMP_ADAPTER pAd,
+	IN PUCHAR pDA, 
+	IN UINT8 ChSwMode,
+	IN UINT8 NewCh,
+	IN PUCHAR pSA)
+{
+	PUCHAR pOutBuffer = NULL;
+	NDIS_STATUS NStatus;
+	ULONG FrameLen;
+
+	HEADER_802_11 ActHdr;
+
+	/* build action frame header.*/
+	MgtMacHeaderInit(pAd, &ActHdr, SUBTYPE_ACTION, 0, pDA, pAd->CurrentAddress, pSA);
+
+	NStatus = MlmeAllocateMemory(pAd, (PVOID)&pOutBuffer);  /*Get an unused nonpaged memory*/
+	if(NStatus != NDIS_STATUS_SUCCESS)
+	{
+		MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s() allocate memory failed \n", __FUNCTION__));
+		return;
+	}
+	NdisMoveMemory(pOutBuffer, (PCHAR)&ActHdr, sizeof(HEADER_802_11));
+	FrameLen = sizeof(HEADER_802_11);
+
+	InsertActField(pAd, (pOutBuffer + FrameLen), &FrameLen, CATEGORY_SPECTRUM, SPEC_CHANNEL_SWITCH);
+
+	InsertChSwAnnIENew(pAd, (pOutBuffer + FrameLen), &FrameLen, ChSwMode, NewCh, pAd->CommonCfg.channelSwitch.CHSWPeriod);
+
+#ifdef DOT11_N_SUPPORT
+	InsertSecondaryChOffsetIE(pAd, (pOutBuffer + FrameLen), &FrameLen, HcGetExtCha(pAd,pAd->CommonCfg.Channel));
+#endif
+
+	MiniportMMRequest(pAd, QID_AC_BE, pOutBuffer, FrameLen);
+	MlmeFreeMemory(pOutBuffer);
+	return;
+}
+
+#endif
+
 #ifdef CONFIG_AP_SUPPORT
 INT Set_PwrConstraint(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 {
@@ -2275,15 +2603,15 @@ typedef struct __PWR_CONSTRAIN_CFG
 	CurTxPwr = RTMP_GetTxPwr(pAd, pEntry->HTPhyMode,pEntry->wdev->channel);
 	DaltaPwr = CurTxPwr - MaxTxPwr;
 
-	if (pAd->CommonCfg.TxPowerPercentage > 90)
+	if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 90)
 		;
-	else if (pAd->CommonCfg.TxPowerPercentage > 60)	/* reduce Pwr for 1 dB. */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 60)	/* reduce Pwr for 1 dB. */
 		DaltaPwr += 1;
-	else if (pAd->CommonCfg.TxPowerPercentage > 30)	/* reduce Pwr for 3 dB. */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 30)	/* reduce Pwr for 3 dB. */
 		DaltaPwr += 3;
-	else if (pAd->CommonCfg.TxPowerPercentage > 15)	/* reduce Pwr for 6 dB. */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 15)	/* reduce Pwr for 6 dB. */
 		DaltaPwr += 6;
-	else if (pAd->CommonCfg.TxPowerPercentage > 9)	/* reduce Pwr for 9 dB. */
+	else if (pAd->CommonCfg.TxPowerPercentage[BAND0] > 9)	/* reduce Pwr for 9 dB. */
 		DaltaPwr += 9;
 	else											/* reduce Pwr for 12 dB. */
 		DaltaPwr += 12;
@@ -2296,8 +2624,7 @@ typedef struct __PWR_CONSTRAIN_CFG
 		if (DaltaPwr < PwrConstrainTab[Idx].Attenuation)
 		{
 			pAd->CommonCfg.PwrConstraint = Value;
-			pAd->CommonCfg.TxPowerPercentage =
-					PwrConstrainTab[Idx].TxPowerPercentage;
+			pAd->CommonCfg.TxPowerPercentage[BAND0] = PwrConstrainTab[Idx].TxPowerPercentage;
 
 			break;
 		}

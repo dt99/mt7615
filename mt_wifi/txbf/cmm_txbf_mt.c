@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc. 
@@ -13,7 +14,7 @@
 	Module Name:
 	cmm_txbf_mt.c
 */
-
+#endif /* MTK_LICENSE */
 #ifdef COMPOS_WIN
 #include "MtConfig.h"
 #if defined(EVENT_TRACING)
@@ -157,6 +158,7 @@ INT mt_Trigger_Sounding_Packet(
 	                                           ucMuNum,
 	                                           pWlanId);
 }
+
 #endif /* MT_MAC && !MT7636 */
 
 
@@ -359,10 +361,22 @@ INT32 mt_AsicBfStaRecUpdate(
     UCHAR   ucPeerRxNumSupport;
     UCHAR   ucTxMCSSetdefined, ucTxRxMCSSetNotEqual, ucTxMaxNumSpatilStream;
     BOOLEAN fgETxBfCap = FALSE;
-
+    UCHAR   ucTxStream;
 
 	pEntry                                   = &pAd->MacTab.Content[ucWlanIdx];
-	
+
+	if (pAd->CommonCfg.dbdc_mode)
+	{
+		UCHAR band_idx = HcGetBandByWdev(pEntry->wdev);
+
+		if (band_idx == DBDC_BAND0)
+			ucTxStream = pAd->dbdc_2G_tx_stream;
+		else
+			ucTxStream = pAd->dbdc_5G_tx_stream;
+	} else {
+		ucTxStream = pAd->Antenna.field.TxPath;
+	}
+
 	switch (pEntry->MaxHTPhyMode.field.MODE)
 	{
 #ifdef DOT11_VHT_AC	
@@ -395,29 +409,42 @@ INT32 mt_AsicBfStaRecUpdate(
 
 	        ucBFerMaxNr                      = pAd->CommonCfg.vht_cap_ie.vht_cap.num_snd_dimension;
 	        ucBFeeMaxNr                      = pEntry->vht_cap_ie.vht_cap.bfee_sts_cap;
-	        ucBFerCurrNr                     = pAd->CommonCfg.TxStream - 1;
+	        ucBFerCurrNr                     = ucTxStream - 1;
 	        pEntry->rStaRecBf.ucNr           = (ucBFerMaxNr < ucBFeeMaxNr) ? ucBFerMaxNr : ucBFeeMaxNr;
 	        pEntry->rStaRecBf.ucNr           = (pEntry->rStaRecBf.ucNr < ucBFerCurrNr) ? pEntry->rStaRecBf.ucNr : ucBFerCurrNr;
 
 	        ucPeerRxNumSupport               = (pEntry->vht_cap_ie.mcs_set.rx_mcs_map.mcs_ss2 != 3) ? 1 : 0;
             ucPeerRxNumSupport               = (pEntry->vht_cap_ie.mcs_set.rx_mcs_map.mcs_ss3 != 3) ? 2 : ucPeerRxNumSupport;
+            ucPeerRxNumSupport               = (pEntry->vht_cap_ie.mcs_set.rx_mcs_map.mcs_ss4 != 3) ? 3 : ucPeerRxNumSupport;
 	        pEntry->rStaRecBf.ucNc           = ucPeerRxNumSupport;
+	        pEntry->rStaRecBf.ucNc           = (pEntry->rStaRecBf.ucNc > pEntry->rStaRecBf.ucNr) ? pEntry->rStaRecBf.ucNr : ucPeerRxNumSupport;
+	        pEntry->rStaRecBf.uciBfDBW       = pEntry->MaxHTPhyMode.field.BW;
 	        pEntry->rStaRecBf.uciBfNcol      = pEntry->rStaRecBf.ucNc;
-	        pEntry->rStaRecBf.uciBfNrow      = pEntry->rStaRecBf.ucNr;
-	        pEntry->rStaRecBf.uciBfTimeOut   = 0xFE;
+	        pEntry->rStaRecBf.uciBfNrow      = ucTxStream - 1;
+	        pEntry->rStaRecBf.uciBfTimeOut   = 0x18;
 	    }
 	    else
 	    {
-	        pEntry->rStaRecBf.ucNr           = pAd->CommonCfg.TxStream - 1;
+	        pEntry->rStaRecBf.ucNr           = ucTxStream - 1;
 	        
-	        pEntry->rStaRecBf.uciBfTimeOut   = 0xFE;
             pEntry->rStaRecBf.uciBfDBW       = pEntry->MaxHTPhyMode.field.BW;
-            pEntry->rStaRecBf.uciBfNrow      = pAd->CommonCfg.TxStream - 1;
+            pEntry->rStaRecBf.uciBfNrow      = ucTxStream - 1;
 
             ucPeerRxNumSupport               = (pEntry->vht_cap_ie.mcs_set.tx_mcs_map.mcs_ss2 != 3) ? 1 : 0;
             ucPeerRxNumSupport               = (pEntry->vht_cap_ie.mcs_set.tx_mcs_map.mcs_ss3 != 3) ? 2 : ucPeerRxNumSupport;
+            ucPeerRxNumSupport               = (pEntry->vht_cap_ie.mcs_set.tx_mcs_map.mcs_ss4 != 3) ? 3 : ucPeerRxNumSupport;
 	        pEntry->rStaRecBf.ucNc           = ucPeerRxNumSupport;
+	        pEntry->rStaRecBf.ucNc           = (pEntry->rStaRecBf.ucNc > pEntry->rStaRecBf.ucNr) ? pEntry->rStaRecBf.ucNr : ucPeerRxNumSupport;
 	        pEntry->rStaRecBf.uciBfNcol      = ucPeerRxNumSupport;
+
+            if ((pEntry->MaxHTPhyMode.field.BW <= BW_40) && (pEntry->rStaRecBf.ucNc == 0))
+            {
+	            pEntry->rStaRecBf.uciBfTimeOut   = 0x48;
+            }
+            else
+            {
+	            pEntry->rStaRecBf.uciBfTimeOut   = 0x18;
+            }
 	    }
 
 	    break;
@@ -435,7 +462,7 @@ INT32 mt_AsicBfStaRecUpdate(
 	        pEntry->rStaRecBf.fgSU_MU        = 0;
 	        ucBFerMaxNr                      = pAd->CommonCfg.HtCapability.TxBFCap.ChanEstimation;
 	        ucBFeeMaxNr                      = pEntry->HTCapability.TxBFCap.ComSteerBFAntSup;
-	        ucBFerCurrNr                     = pAd->CommonCfg.TxStream - 1;
+	        ucBFerCurrNr                     = ucTxStream - 1;
 	        pEntry->rStaRecBf.ucNr           = (ucBFerMaxNr < ucBFeeMaxNr) ? ucBFerMaxNr : ucBFeeMaxNr;
 	        pEntry->rStaRecBf.ucNr           = (pEntry->rStaRecBf.ucNr < ucBFerCurrNr) ? pEntry->rStaRecBf.ucNr : ucBFerCurrNr;
 	        pEntry->rStaRecBf.ucNdpRate      = pEntry->rStaRecBf.ucNr * 8;    
@@ -443,17 +470,18 @@ INT32 mt_AsicBfStaRecUpdate(
 	        ucPeerRxNumSupport               = (pEntry->HTCapability.MCSSet[1] > 0)? 1 : 0;
 	        ucPeerRxNumSupport               = (pEntry->HTCapability.MCSSet[2] > 0)? 2 : ucPeerRxNumSupport;
 	        pEntry->rStaRecBf.ucNc           = ucPeerRxNumSupport;
+	        pEntry->rStaRecBf.ucNc           = (pEntry->rStaRecBf.ucNc > pEntry->rStaRecBf.ucNr) ? pEntry->rStaRecBf.ucNr : ucPeerRxNumSupport;
+	        pEntry->rStaRecBf.uciBfDBW       = pEntry->MaxHTPhyMode.field.BW;
 	        pEntry->rStaRecBf.uciBfNcol      = pEntry->rStaRecBf.ucNc;
-	        pEntry->rStaRecBf.uciBfNrow      = pEntry->rStaRecBf.ucNr;
-	        pEntry->rStaRecBf.uciBfTimeOut   = 0xFE;
+	        pEntry->rStaRecBf.uciBfNrow      = ucTxStream - 1;
+	        pEntry->rStaRecBf.uciBfTimeOut   = 0x18;
 	    }
 	    else
 	    {
-	        pEntry->rStaRecBf.ucNr           = pAd->CommonCfg.TxStream - 1;
+	        pEntry->rStaRecBf.ucNr           = ucTxStream - 1;
 	        
-	        pEntry->rStaRecBf.uciBfTimeOut   = 0xFE;
             pEntry->rStaRecBf.uciBfDBW       = pEntry->MaxHTPhyMode.field.BW;
-            pEntry->rStaRecBf.uciBfNrow      = pAd->CommonCfg.TxStream - 1;
+            pEntry->rStaRecBf.uciBfNrow      = ucTxStream - 1;
 
             // __________________________________________________________
             // |                |Tx MCS Set |Tx Rx MCS|Tx Max Num Spatial| 
@@ -491,7 +519,18 @@ INT32 mt_AsicBfStaRecUpdate(
             }
             
 	        pEntry->rStaRecBf.ucNc           = ucPeerRxNumSupport;
+	        pEntry->rStaRecBf.ucNc           = (pEntry->rStaRecBf.ucNc > pEntry->rStaRecBf.ucNr) ? pEntry->rStaRecBf.ucNr : ucPeerRxNumSupport;
 	        pEntry->rStaRecBf.uciBfNcol      = ucPeerRxNumSupport;
+
+            if ((pEntry->MaxHTPhyMode.field.BW <= BW_40) && (pEntry->rStaRecBf.ucNc == 0))
+            {
+	            pEntry->rStaRecBf.uciBfTimeOut   = 0x48;
+            }
+            else
+            {
+	            pEntry->rStaRecBf.uciBfTimeOut   = 0x18;
+            }
+
 	    }
 
 	    break;
@@ -501,13 +540,13 @@ INT32 mt_AsicBfStaRecUpdate(
 	    pEntry->rStaRecBf.fgETxBfCap         = FALSE;
 	    pEntry->rStaRecBf.ucTxMode           = 1; // legacy mode
 	    pEntry->rStaRecBf.ucNc               = 0;
-	    pEntry->rStaRecBf.ucNr               = pAd->CommonCfg.TxStream - 1;
+	    pEntry->rStaRecBf.ucNr               = ucTxStream - 1;
 	    pEntry->rStaRecBf.ucCBW              = pEntry->MaxHTPhyMode.field.BW;	
 	    
-	    pEntry->rStaRecBf.uciBfTimeOut       = 0xFE;
+	    pEntry->rStaRecBf.uciBfTimeOut       = 0x18;
         pEntry->rStaRecBf.uciBfDBW           = pEntry->MaxHTPhyMode.field.BW;
         pEntry->rStaRecBf.uciBfNcol          = 0;
-        pEntry->rStaRecBf.uciBfNrow          = pAd->CommonCfg.TxStream - 1;
+        pEntry->rStaRecBf.uciBfNrow          = ucTxStream - 1;
 
         break;
 
@@ -524,13 +563,13 @@ INT32 mt_AsicBfStaRecUpdate(
 
 	if (pEntry->rStaRecBf.fgETxBfCap == TRUE)
 	{
-	    if (pEntry->rStaRecBf.ucNr == (pAd->CommonCfg.TxStream - 1))
+	    if (pEntry->rStaRecBf.ucNr == (ucTxStream - 1))
 	    {
 	        pEntry->rStaRecBf.ucMemRequire20M= g_ru2PfmuMemReq[pEntry->rStaRecBf.ucNr][pEntry->rStaRecBf.ucNc];
 	    }
 	    else
 	    {
-	        pEntry->rStaRecBf.ucMemRequire20M= g_ru2PfmuMemReq[pAd->CommonCfg.TxStream - 1][pEntry->rStaRecBf.ucNc];
+	        pEntry->rStaRecBf.ucMemRequire20M= g_ru2PfmuMemReq[ucTxStream - 1][pEntry->rStaRecBf.ucNc];
 	    }
 	}
 	else
@@ -580,29 +619,6 @@ INT32 mt_AsicBfStaRecUpdate(
         MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("uciBfNrow      =%d\n",   pEntry->rStaRecBf.uciBfNrow));
     }
 	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("===========================================================\n"));
-	{
-		STA_REC_CFG_T StaCfg;
-		os_zero_mem(&StaCfg,sizeof(STA_REC_CFG_T));
-		if (!pEntry->wdev)
-		{
-			ASSERT(pEntry->wdev);
-			return -1;
-		}
-			
-		StaCfg.MuarIdx = pEntry->wdev->OmacIdx;
-		StaCfg.ConnectionState = TRUE;
-		StaCfg.ConnectionType = 0;
-		StaCfg.u4EnableFeature = (1 << STA_REC_BF);
-		StaCfg.ucBssIndex = ucBssIdx;
-		StaCfg.ucWlanIdx = ucWlanIdx;
-		StaCfg.pEntry = pEntry;
-
-	    if(CmdExtStaRecUpdate(pAd,StaCfg) != STATUS_TRUE)
-	    {
-	        ucStatus = FALSE;
-	        MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("Something wrong in the BF STA Rec update!!\n"));
-	    }
-	}
 
     return ucStatus;
 }
@@ -656,55 +672,14 @@ VOID mt_AsicClientBfCap(
     RTMP_ADAPTER *pAd, 
     PMAC_TABLE_ENTRY pEntry)
 {
-    if (pAd->fgBfProfAlloc == FALSE)
-    {
 #ifdef APCLI_SUPPORT        
-        if (pAd->fgApClientMode == TRUE)
-        {                
-            pAd->rStaRecBf.u2PfmuId    = 0xFFFF;
-            pEntry->rStaRecBf.u2PfmuId = 0xFFFF;
+    if (pAd->fgApClientMode == TRUE)
+    {                
+        /* Force the Pfmu ID of the other repeater cli to be the same with ApCli */
+        AsicTxBfApClientCluster(pAd, pEntry->wcid, pAd->ApCli_CmmWlanId);
 
-            {
-		        STA_REC_CFG_T StaCfg;
-		        os_zero_mem(&StaCfg,sizeof(STA_REC_CFG_T));
-			
-		        StaCfg.MuarIdx = pEntry->wdev->OmacIdx;
-		        StaCfg.ConnectionState = TRUE;
-		        StaCfg.ConnectionType = 0;
-		        StaCfg.u4EnableFeature = (1 << STA_REC_BF);
-		        StaCfg.ucBssIndex = pEntry->wdev->BssIdx;
-		        StaCfg.ucWlanIdx = pEntry->wcid;
-		        StaCfg.pEntry = pEntry;
-
-	            CmdExtStaRecUpdate(pAd,StaCfg);
-	        }
-                
-            /* Force the Pfmu ID of the other repeater cli to be the same with ApCli */
-            AsicTxBfApClientCluster(pAd, pEntry->wcid, pAd->ApCli_CmmPfmuId);
-
-            //mdelay(1000);
-            //dump_wtbl_info(pAd, pMacEntry->wcid);
-
-            /* Force the Bf capability to be the same with ApCli */
-            AsicTxBfTxApplyCtrl(pAd,
-			        		    pEntry->wcid,
-				        		pAd->fgApCli_eBF,
-					        	pAd->fgApCli_iBF,
-						    	pAd->fgApCli_MuBF,
-							    FALSE);
-
-            //mdelay(1000);
-            //dump_wtbl_info(pAd, pMacEntry->wcid);
-
-            MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s: wcid = %d, fgApCli_eBF = %d, fgApCli_iBF = %d, fgApCli_MuBF = %d\n", 
-                                                                 __FUNCTION__, 
-                                                                 pEntry->wcid,
-                                                                 pAd->fgApCli_eBF, 
-                                                                 pAd->fgApCli_iBF,
-                                                                 pAd->fgApCli_MuBF));
-        }
-#endif /* APCLI_SUPPORT */     
     }
+#endif /* APCLI_SUPPORT */     
 	
     return;
 }
@@ -1016,6 +991,10 @@ VOID TxBfProfileTagPrint(
 	
     prPfmuTag1 = (P_PFMU_PROFILE_TAG1) pBuf;
     prPfmuTag2 = (P_PFMU_PROFILE_TAG2) (pBuf + sizeof(PFMU_PROFILE_TAG1));
+#ifdef RT_BIG_ENDIAN
+	RTMPEndianChange((char *)prPfmuTag1,sizeof(PFMU_PROFILE_TAG1));
+	RTMPEndianChange((char *)prPfmuTag2,sizeof(PFMU_PROFILE_TAG2));
+#endif
 
     NdisCopyMemory(&pAd->rPfmuTag1, prPfmuTag1, sizeof(PFMU_PROFILE_TAG1));
     NdisCopyMemory(&pAd->rPfmuTag2, prPfmuTag2, sizeof(PFMU_PROFILE_TAG2));
@@ -1118,6 +1097,9 @@ VOID TxBfProfilePnPrint(
 	{
 	case P_DBW20M:
 	    prPfmuPn20M = (P_PFMU_PN_DBW20M) pBuf;
+#ifdef RT_BIG_ENDIAN
+		RTMPEndianChange((UCHAR *)prPfmuPn20M, sizeof(P_PFMU_PN_DBW20M));
+#endif
 	    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, (
 		   "============================= TxBf profile PN Info 20M ========================================\n"
 		   "1STS_TX0 = 0x%x, 1STS_TX1 = 0x%x, 1STS_TX2 = 0x%x, 1STS_TX3 = 0x%x\n"
@@ -1137,6 +1119,9 @@ VOID TxBfProfilePnPrint(
 	    break;
 	case P_DBW40M:
 	    prPfmuPn40M = (P_PFMU_PN_DBW40M) pBuf;
+#ifdef RT_BIG_ENDIAN
+		RTMPEndianChange((UCHAR *)prPfmuPn40M, sizeof(P_PFMU_PN_DBW40M));
+#endif
 	    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, (
 		   "============================= TxBf profile PN Info 40M ========================================\n"
 		   "1STS_TX0 = 0x%x, 1STS_TX1 = 0x%x, 1STS_TX2 = 0x%x, 1STS_TX3 = 0x%x\n"
@@ -1156,6 +1141,9 @@ VOID TxBfProfilePnPrint(
 	    break;
 	case P_DBW80M:
 	    prPfmuPn80M = (P_PFMU_PN_DBW80M) pBuf;
+#ifdef RT_BIG_ENDIAN
+		RTMPEndianChange((UCHAR *)prPfmuPn80M, sizeof(P_PFMU_PN_DBW80M));
+#endif
 	    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, (
 		   "============================= TxBf profile PN Info 80M ========================================\n"
 		   "1STS_TX0 = 0x%x, 1STS_TX1 = 0x%x, 1STS_TX2 = 0x%x, 1STS_TX3 = 0x%x\n"
@@ -1175,6 +1163,9 @@ VOID TxBfProfilePnPrint(
 	    break;
 	case P_DBW160M:
 	    prPfmuPn160M = (P_PFMU_PN_DBW80_80M) pBuf;
+#ifdef RT_BIG_ENDIAN
+		RTMPEndianChange((UCHAR *)prPfmuPn160M, sizeof(P_PFMU_PN_DBW80_80M));
+#endif
 	    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, (
 		   "============================= TxBf profile PN Info 80M ========================================\n"
 		   "1STS_TX0 = 0x%x, 1STS_TX1 = 0x%x\n"
@@ -1241,6 +1232,7 @@ BOOLEAN TxBfProfileDataFormatTranslate(
     INT16   i2Phi11,     i2Phi21,     i2Phi31;
     UINT16  u2InIdx;
     UCHAR   BandIdx,     ucLoop;
+    UCHAR   TxStream;
 
 
     BandIdx = MT_ATEGetBandIdxByIf(pAd);
@@ -1287,23 +1279,48 @@ BOOLEAN TxBfProfileDataFormatTranslate(
 		//	    ("u4AnglePh11 : 0x%x, u4AnglePh21 : 0x%x, u4AnglePh31 : 0x%x, u4AnglePh41 : 0x%x\n", 
 		//	    u4AnglePh11, u4AnglePh21, u4AnglePh31, u4AnglePh41));
 
-        if (BandIdx == TRUE)
+    	if (pAd->CommonCfg.dbdc_mode)
+    	{
+    		if (BandIdx == DBDC_BAND0)
+    			TxStream = pAd->dbdc_2G_tx_stream;
+    		else
+    			TxStream = pAd->dbdc_5G_tx_stream;
+    	} else {
+    		TxStream = pAd->Antenna.field.TxPath;
+    	}
+
+        switch (TxStream)
         {
-            i2Phi11    = (INT16)(u4AnglePh21 - u4AnglePh11);
-            i2Phi21    = 0;
+        case 3:
+            i2Phi11    = (INT16)(u4AnglePh31 - u4AnglePh11);
+            i2Phi21    = (INT16)(u4AnglePh31 - u4AnglePh21);
             i2Phi31    = 0;
-        }
-        else
-        {
-            i2Phi11    = (INT16)(u4AnglePh41 - u4AnglePh11);
-            i2Phi21    = (INT16)(u4AnglePh41 - u4AnglePh21);
-            i2Phi31    = (INT16)(u4AnglePh41 - u4AnglePh31);
+            
+            break;
+        case 4:
+        default:
+            if (BandIdx == TRUE)
+            {
+                i2Phi11    = (INT16)(u4AnglePh21 - u4AnglePh11);
+                i2Phi21    = 0;
+                i2Phi31    = 0;
+            }
+            else
+            {
+                i2Phi11    = (INT16)(u4AnglePh41 - u4AnglePh11);
+                i2Phi21    = (INT16)(u4AnglePh41 - u4AnglePh21);
+                i2Phi31    = (INT16)(u4AnglePh41 - u4AnglePh31);
+            }
+            break;
         }
 
         pPfmuHalfData[ucLoop].u2SubCarrIdx = (UINT16)u4SubCarrId;
-	    pPfmuHalfData[ucLoop].i2Phi11      = i2Phi11;
-	    pPfmuHalfData[ucLoop].i2Phi21      = i2Phi21;
-	    pPfmuHalfData[ucLoop].i2Phi31      = i2Phi31;
+#ifdef RT_BIG_ENDIAN
+        pPfmuHalfData[ucLoop].u2SubCarrIdx = cpu2le16(pPfmuHalfData[ucLoop].u2SubCarrIdx);
+#endif
+	    pPfmuHalfData[ucLoop].i2Phi11      = cpu2le16(i2Phi11);
+	    pPfmuHalfData[ucLoop].i2Phi21      = cpu2le16(i2Phi21);
+	    pPfmuHalfData[ucLoop].i2Phi31      = cpu2le16(i2Phi31);
     }
 
 	return TRUE;
@@ -1347,6 +1364,9 @@ VOID TxBfProfileDataPrint(
     PFMU_DATA   rPfmuData;
 
     prPfmuDataStart = (P_PFMU_DATA) pBuf;
+#ifdef RT_BIG_ENDIAN
+	RTMPEndianChange((UCHAR *)prPfmuDataStart,sizeof(PFMU_DATA));
+#endif	
 
     NdisCopyMemory(&rPfmuData, prPfmuDataStart, sizeof(PFMU_DATA));
     NdisCopyMemory(&pAd->prof, prPfmuDataStart, sizeof(PFMU_DATA));
@@ -1374,7 +1394,11 @@ VOID StaRecBfUpdate(
 {
     pCmdStaRecBf->u2Tag      = STA_REC_BF;
 	pCmdStaRecBf->u2Length   = sizeof(CMD_STAREC_BF);
-	pCmdStaRecBf->rTxBfPfmuInfo.u2PfmuId      = pEntry->rStaRecBf.u2PfmuId;
+#ifdef RT_BIG_ENDIAN
+    pCmdStaRecBf->u2Tag      = cpu2le16(pCmdStaRecBf->u2Tag);
+	pCmdStaRecBf->u2Length   = cpu2le16(pCmdStaRecBf->u2Length);
+#endif
+	pCmdStaRecBf->rTxBfPfmuInfo.u2PfmuId      = cpu2le16(pEntry->rStaRecBf.u2PfmuId);
 	pCmdStaRecBf->rTxBfPfmuInfo.fgSU_MU       = pEntry->rStaRecBf.fgSU_MU;
 	pCmdStaRecBf->rTxBfPfmuInfo.fgETxBfCap    = pEntry->rStaRecBf.fgETxBfCap;
 	pCmdStaRecBf->rTxBfPfmuInfo.ucSoundingPhy = pEntry->rStaRecBf.ucSoundingPhy;
@@ -1395,7 +1419,7 @@ VOID StaRecBfUpdate(
 	pCmdStaRecBf->rTxBfPfmuInfo.ucMemCol2     = pEntry->rStaRecBf.ucMemCol2;
 	pCmdStaRecBf->rTxBfPfmuInfo.ucMemRow3     = pEntry->rStaRecBf.ucMemRow3;
 	pCmdStaRecBf->rTxBfPfmuInfo.ucMemCol3     = pEntry->rStaRecBf.ucMemCol3;
-	pCmdStaRecBf->rTxBfPfmuInfo.u2SmartAnt    = pEntry->rStaRecBf.u2SmartAnt;
+	pCmdStaRecBf->rTxBfPfmuInfo.u2SmartAnt    = cpu2le16(pEntry->rStaRecBf.u2SmartAnt);
     pCmdStaRecBf->rTxBfPfmuInfo.ucSEIdx       = pEntry->rStaRecBf.ucSEIdx;
     pCmdStaRecBf->rTxBfPfmuInfo.uciBfTimeOut  = pEntry->rStaRecBf.uciBfTimeOut;
     pCmdStaRecBf->rTxBfPfmuInfo.uciBfDBW      = pEntry->rStaRecBf.uciBfDBW;
@@ -1411,6 +1435,10 @@ VOID StaRecBfRead(
     IN PUCHAR pBuf)
 {
     NdisCopyMemory(&pAd->rStaRecBf, pBuf, sizeof(TXBF_PFMU_STA_INFO));
+#ifdef RT_BIG_ENDIAN
+	pAd->rStaRecBf.u2PfmuId = le2cpu16(pAd->rStaRecBf.u2PfmuId);
+	pAd->rStaRecBf.u2SmartAnt = le2cpu16(pAd->rStaRecBf.u2SmartAnt);
+#endif
 
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, (
 		   "====================================== BF StaRec ========================================\n"
@@ -1492,7 +1520,7 @@ VOID TxBfProfileMemAllocMap(
 		{
 			MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, (
 			    "%4d |", 
-			    au2PfmuMemAllocMap[ucLoop][ucBit]));
+			    le2cpu16(au2PfmuMemAllocMap[ucLoop][ucBit])));
 			if (ucBit == 5) 
 			{
 			    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, (

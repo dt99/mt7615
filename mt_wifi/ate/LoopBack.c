@@ -30,8 +30,8 @@ INT32 ATECheckFWROMWiFiSysOn(RTMP_ADAPTER *pAd)
 
 	/* power on WiFi SYS*/
 	MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s: 2. power on WiFi SYS\n", __FUNCTION__));
-	ntStatus = MtCmdPowerOnWiFiSys(pAd);
-	if (ntStatus)
+
+	if (MtCmdPowerOnWiFiSys(pAd))
 		ntStatus = STATUS_UNSUCCESSFUL;
 	/* poll SW_SYN0 == 1*/
 	loop = 0;
@@ -116,7 +116,9 @@ void LoopBack_Start(RTMP_ADAPTER *pAd, LOOPBACK_SETTING *pSetting)
 		return;
 	}
 	
+	OS_SPIN_LOCK(&pAd->LbCtrl.LoopBackLock);	
 	pAd->LbCtrl.LoopBackWaitRx = FALSE;
+	OS_SPIN_UNLOCK(&pAd->LbCtrl.LoopBackLock);
 	pAd->LbCtrl.LoopBackRunning = TRUE;
 	pAd->LbCtrl.LoopBackResult.Status = RUNNING;	
 	

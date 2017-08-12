@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -17,7 +18,7 @@
 
 
  */
-
+#endif /* MTK_LICENSE */
 
 
 #ifndef __SCS_H__
@@ -28,8 +29,10 @@
 #define MinRssiTolerance                         10
 #define ThTolerance                                 10
 #define PdBlkEnabeOffset                         19
+#define PdBlkEnabeOffsetB1                     25
 #define PdBlkOfmdThMask                       0x1ff
 #define PdBlkOfmdThOffset                      20
+#define PdBlkOfmdThOffsetB1                  16 //Band1
 #define PdBlkCckThMask                          0xff
 #define PdBlkCckThOffset                         1
 #define PdBlkCck1RThOffset                     24
@@ -40,14 +43,17 @@
 #define BssOffset			0x10
 //#define BandOffset		0x200
 #define OneStep				2 //dB
-#define FalseCcaUpBondDefault		1000
-#define FalseCcaLowBondDefault		100
+#define FastInitTh				0xa6 //-90dBm
+#define FastInitThOfdm			0x14c //-90dBm
+#define FalseCcaUpBondDefault		500
+#define FalseCcaLowBondDefault		50
 #define CckFixedRssiBondDefault		184 //-72dBm. -72+256
 #define OfdmFixedRssiBondDefault		368 // -72dBm. (-72*2)+512
 
 enum {
 	SCS_DISABLE,
 	SCS_ENABLE,
+	SCS_MANUAL,
 };
 
 enum {

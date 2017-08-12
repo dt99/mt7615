@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,6 +14,7 @@
 	Module Name:
 	hdev.c
 */
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 #include "hdev/hdev.h"
 
@@ -153,7 +155,6 @@ VOID HdevObjAdd(HD_DEV *pHdev,HD_DEV_OBJ *pObj)
 	DlListAddTail(&pHdev->DevObjList,&pObj->list);
 	pObj->pHdev = pHdev;
 	DlListInit(&pObj->RepeaterList);	
-	DlListInit(&pObj->WtblList);
 	pHdev->DevNum++;
 	pHdCfg->HObjList[pObj->Idx] = pObj;
 }
@@ -169,7 +170,6 @@ VOID HdevObjDel(HD_DEV *pHdev,HD_DEV_OBJ *pObj)
 	pHdCfg->HObjList[pObj->Idx] = NULL;
 	DlListDel(&pObj->list);	
 	DlListInit(&pObj->RepeaterList);	
-	DlListInit(&pObj->WtblList);
 	pHdev->DevNum--;
 }
 

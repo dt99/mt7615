@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -26,7 +27,7 @@
 	--------    ----------    ----------------------------------------------
 	Arvin Tai     2012/05/02
 */
-
+#endif /* MTK_LICENSE */
 #define DPD_CAL_PASS_THRES		5
 #define DPD_CAL_MAX_RETRY		5
 

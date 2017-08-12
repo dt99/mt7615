@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * Taiwan, R.O.C.
@@ -11,7 +12,7 @@
  * way altering the source code is stricitly prohibited, unless the prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
 
     Abstract:
@@ -43,6 +44,15 @@
 
 #include "rt_config.h"
 
+#ifdef VENDOR_FEATURE6_SUPPORT
+#ifndef ARRIS_MODULE_PRESENT
+void (*f)(int, int, int, char*, int)  = arris_event_send_hook_fn;
+#endif /* !ARRIS_MODULE_PRESENT */
+#endif
+
+#ifdef MULTI_PROFILE
+INT	multi_profile_devname_req(struct _RTMP_ADAPTER *ad, UCHAR *final_name, UCHAR *ifidx);
+#endif /*MULTI_PROFILE*/
 
 /* --------------------------------- Public -------------------------------- */
 /*
@@ -76,8 +86,17 @@ VOID MBSS_Init(RTMP_ADAPTER *pAd, RTMP_OS_NETDEV_OP_HOOK *pNetDevOps)
 	if (pAd->FlgMbssInit != FALSE)
 		return;
 
-
+#ifdef VENDOR1_INITIALIZE_ALL_INTERFACE_AT_INIT
+	/* Create and initialize all 8 MBSS interfaces duirng driver insmod.
+	as part of customer requirement */
+	MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("Set 8 Max BSS\n"));
+	pAd->ApCfg.BssidNum = MAX_MBSS_NUM;
+#endif
 	MaxNumBss = pAd->ApCfg.BssidNum;
+#ifdef INTELP6_SUPPORT
+	if (MaxNumBss > MAX_MBSS_NUM)
+		MaxNumBss = MAX_MBSS_NUM;
+#endif
 	if (MaxNumBss > HW_BEACON_MAX_NUM)
 		MaxNumBss = HW_BEACON_MAX_NUM;
 
@@ -93,18 +112,37 @@ VOID MBSS_Init(RTMP_ADAPTER *pAd, RTMP_OS_NETDEV_OP_HOOK *pNetDevOps)
 	{
 		struct wifi_dev *wdev;
 		UINT32 MC_RowID = 0, IoctlIF = 0;
-		char *dev_name;
+		char *dev_name = NULL;
 		INT32 Ret;
+		UCHAR ifidx = IdBss;
+		BSS_STRUCT *pMbss = NULL;
+		UCHAR final_name[32]="";
 #ifdef MULTIPLE_CARD_SUPPORT
 		MC_RowID = pAd->MC_RowID;
 #endif /* MULTIPLE_CARD_SUPPORT */
 #ifdef HOSTAPD_SUPPORT
 		IoctlIF = pAd->IoctlIF;
 #endif /* HOSTAPD_SUPPORT */
-        	BSS_STRUCT *pMbss = NULL;
 
 		dev_name = get_dev_name_prefix(pAd, INT_MBSSID);
-		pDevNew = RtmpOSNetDevCreate(MC_RowID, &IoctlIF, INT_MBSSID, IdBss, sizeof(struct mt_dev_priv), dev_name);
+
+		if(dev_name == NULL){
+			MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+				("get_dev_name_prefix error!\n"));
+			break;
+		}
+		snprintf(final_name,sizeof(final_name),"%s",dev_name);
+#ifdef MULTI_PROFILE
+		multi_profile_devname_req(pAd,final_name,&ifidx);
+#endif /*MULTI_PROFILE*/
+#ifdef INTELP6_SUPPORT		
+#ifdef MT_SECOND_CARD
+		if (pAd->dev_idx == 1)
+			pDevNew = RtmpOSNetDevCreate(MC_RowID, &IoctlIF, INT_MBSSID, IdBss + MAX_MBSS_NUM, sizeof(struct mt_dev_priv), dev_name);
+		else
+#endif
+#endif
+		pDevNew = RtmpOSNetDevCreate(MC_RowID, &IoctlIF, INT_MBSSID, ifidx, sizeof(struct mt_dev_priv), final_name);
 #ifdef HOSTAPD_SUPPORT
 		pAd->IoctlIF = IoctlIF;
 #endif /* HOSTAPD_SUPPORT */
@@ -139,14 +177,40 @@ VOID MBSS_Init(RTMP_ADAPTER *pAd, RTMP_OS_NETDEV_OP_HOOK *pNetDevOps)
 		NdisCopyMemory(&netDevHook, pNetDevOps, sizeof(netDevHook));
 
 		netDevHook.priv_flags = INT_MBSSID;
+#ifdef VENDOR1_INITIALIZE_ALL_INTERFACE_AT_INIT
+		netDevHook.needProtcted = FALSE;
+#else
 		netDevHook.needProtcted = TRUE;
+#endif
 		netDevHook.wdev = wdev;
 
 		/* Init MAC address of virtual network interface */
 		NdisMoveMemory(&netDevHook.devAddr[0], &wdev->bssid[0], MAC_ADDR_LEN);
 
+#ifdef RT_CFG80211_SUPPORT
+		{
+			struct wireless_dev *pWdev;
+			CFG80211_CB *p80211CB = pAd->pCfg80211_CB;
+			UINT32 DevType = RT_CMD_80211_IFTYPE_AP;
+			pWdev = kzalloc(sizeof(*pWdev), GFP_KERNEL);
+			
+			pDevNew->ieee80211_ptr = pWdev;
+			pWdev->wiphy = p80211CB->pCfg80211_Wdev->wiphy;
+			SET_NETDEV_DEV(pDevNew, wiphy_dev(pWdev->wiphy));
+			pWdev->netdev = pDevNew;
+			pWdev->iftype = DevType;
+			
+		}
+#endif /* RT_CFG80211_SUPPORT */
+
 		/* register this device to OS */
 		status = RtmpOSNetDevAttach(pAd->OpMode, pDevNew, &netDevHook);
+
+#ifdef LINUX_NET_TXQ_SUPPORT
+		/* reconfigure Linux net txq length for extend BSS*/
+		if (pAd->tx_net_queue_len != 0)
+			pDevNew->tx_queue_len = pAd->tx_net_queue_len;
+#endif /* LINUX_NET_TXQ_SUPPORT */
 	}
 
 	pAd->FlgMbssInit = TRUE;
@@ -309,12 +373,19 @@ INT32 MBSS_Open(PNET_DEV pDev)
 	if (BssId < 0)
 		return -1;
 
+#ifdef MT_DFS_SUPPORT
+    /* Update bInitMbssZeroWait  */
+    UPDATE_MT_INIT_ZEROWAIT_MBSS(pAd, TRUE);
+#endif /* MT_DFS_SUPPORT */
+
 	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("AP interface up for ra_%x\n", BssId));
 	wdev = &pAd->ApCfg.MBSSID[BssId].wdev;
+	wdev->bAllowBeaconing = TRUE;
 
 	WifiSysOpen(pAd, wdev);
 	pAd->ApCfg.MBSSID[BssId].mbss_idx = BssId;
 	APStartUpForMbss(pAd,&pAd->ApCfg.MBSSID[BssId]);
+	APStartRekeyTimer(pAd,wdev);
 #ifdef WSC_INCLUDED
 	WscUUIDInit(pAd, BssId, FALSE);
 #endif /* WSC_INCLUDED */
@@ -353,9 +424,10 @@ INT MBSS_Close(PNET_DEV pDev)
 
 	RTMP_OS_NETDEV_STOP_QUEUE(pDev);
 	wdev = &pAd->ApCfg.MBSSID[BssId].wdev;
+	wdev->bAllowBeaconing = FALSE;
 	WifiSysApLinkDown(pAd,wdev);
 	WifiSysClose(pAd,wdev);
-	
+
 	return 0;
 }
 

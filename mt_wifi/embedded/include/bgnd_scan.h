@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -17,7 +18,7 @@
 
 
  */
-
+#endif /* MTK_LICENSE */
 #include "bgnd_scan_cmm.h"
 
 #ifndef __BGND_SCAN_H__
@@ -28,10 +29,13 @@ VOID BackgroundScanStartAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem);
 VOID BackgroundScanTimeoutAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem);
 VOID BackgroundSwitchChannelAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem);
 VOID BackgroundChannelSwitchAnnouncementAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem);
-VOID BackgroundScanNextChannel (IN PRTMP_ADAPTER pAd);
+VOID BackgroundScanPartialAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem);
+VOID BackgroundScanWaitAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem);
+VOID BackgroundScanNextChannel (IN PRTMP_ADAPTER pAd, IN UINT8 ScanType);
 VOID BackgroundScanInit (IN PRTMP_ADAPTER pAd);
 VOID BackgroundScanDeInit (IN PRTMP_ADAPTER pAd);
-VOID BackgroundScanStart(IN PRTMP_ADAPTER pAd, IN BOOLEAN BgndscnaEnable);
+VOID BackgroundScanStart(IN PRTMP_ADAPTER pAd, IN UINT8 BgndscanType);
+
 void BackgroundScanTimeout(
 	IN PVOID SystemSpecific1, 
 	IN PVOID FunctionContext, 
@@ -48,4 +52,6 @@ VOID ChannelQualityDetection(IN PRTMP_ADAPTER pAd);
 VOID DfsZeroWaitStartAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem);
 VOID DfsZeroWaitStopAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem);
 VOID DfsZeroWaitStart(IN PRTMP_ADAPTER pAd, IN BOOLEAN DfsZeroWaitEnable);
+VOID BfSwitch(IN PRTMP_ADAPTER pAd, IN UCHAR enabled);
+VOID MuSwitch(IN PRTMP_ADAPTER pAd, IN UCHAR enabled);
 #endif /* __BGND_SCAN_H__ */

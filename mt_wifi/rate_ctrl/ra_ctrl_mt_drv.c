@@ -5,6 +5,7 @@
     \brief
 */
 
+#ifdef MTK_LICENSE
 /*******************************************************************************
 * Copyright (c) 2014 MediaTek Inc.
 *
@@ -46,9 +47,91 @@
 * (ICC).
 ********************************************************************************
 */
+#endif /* MTK_LICENSE */
 
 /*
 ** $Log: ra_ctrl_mt_drv.c $
+**
+** 08 18 2016 by.huang
+** [WCNCR00128952] There are some limitation by current SKU algorithm in MT7615 power
+** 	
+** 	1) Purpose:
+** 	
+** 	1. revise SKU mechanism for compatibility with Nss combine gain with spatial extension
+** 	2. add Spatial extension control(on/off) by profile
+** 	
+** 	2) Changed function name:
+** 	
+** 	1. SKUTxPwrOffsetGet
+** 	2. EventTxPowerShowInfo
+** 	3. EventTxPowerCompTable
+** 	4. MtSingleSkuLoadParam
+** 	5. SetMUTxPower
+** 	6. SetBFNDPATxDCtrl
+** 	
+** 	3) Code change description brief:
+** 	
+** 	1. revise SKU compensation look table mechanism for Nss spatial extension combine gain backoff
+** 	2. add compensation info command
+** 	3. add command for config MU Tx Power and NDPA Power
+** 	
+** 	4) Unit Test Result:
+** 	
+** 	1. build pass 
+** 	2. function pass (use IQxel check Power upper bound for all phymode and phy rate and al Tx stream in QA mode and Normal mode)
+**
+** 06 16 2016 chunting.wu
+** [WCNCR00121389] [JEDI][64-bit porting]
+** 	
+** 	1) Purpose:
+** 	Fix 4-byte alignment.
+** 	2) Changed function name:
+** 	RA_PHY_CFG_T, CMD_STAREC_AUTO_RATE_T, 
+** 	CMD_STAREC_AUTO_RATE_CFG_T
+** 	3) Code change description brief:
+** 	Fix 4-byte alignment.
+** 	4) Unit Test Result:
+** 	UT pass.
+**
+** 05 26 2016 chunting.wu
+** [WCNCR00121272] [MT7615] dynamic adjust max phy rate for mt7621 platform
+** 	
+** 	1) Purpose:
+** 	MT7621 can TX 4SS MCS8,9 when initial.
+** 	2) Changed function name:
+** 	MtCmdSetMaxPhyRate()
+** 	MacTableMaintenance()
+** 	3) Code change description brief:
+** 	send MCU command to limit max phy rate when TP > 50mbps.	
+** 	4) Unit Test Result:
+** 	RDUT pass.
+**
+** 05 04 2016 chunting.wu
+** [WCNCR00120115] [MT7615] change text format from dos to Unix avoid compile error
+** 	
+** 	1) Purpose:
+** 	Change text format from dos to unix.
+** 	2) Changed function name:
+** 	
+** 	3) Code change description brief:
+** 	
+** 	4) Unit Test Result:
+** 	Build pass.
+**
+** 03 11 2016 chunting.wu
+** [WCNCR00036330] [MT7615] Auto rate control
+** 	
+** 	1) Purpose:
+** 	Profile support G band 256QAM enable/disable.
+** 	2) Changed function name:
+** 	ExtEventGBand256QamProbeResule()
+** 	raWrapperEntrySet()
+** 	3) Code change description brief:
+** 	driver notify FW RA enable/disable G band 256QAM probing.
+** 	4) Unit Test Result:
+** 	RD UT pass
+** 	
+** 	Review: http://mtksap20:8080/go?page=NewReview&reviewid=242440
 **
 **
 **
@@ -132,7 +215,7 @@ RAInit(
     os_zero_mem(&RaCfg, sizeof(RaCfg));
 
     raWrapperEntrySet(pAd, pEntry, pRaEntry);
-    raWrapperConfigSet(pAd, pRaCfg);
+    raWrapperConfigSet(pAd, pEntry->wdev, pRaCfg);
 
     pRaInternal->ucLastRateIdx = 0xFF;
     pRaInternal->ucLowTrafficCount = 0;
@@ -155,16 +238,6 @@ RAInit(
     {
         UCHAR TableSize = 0;
 
-#ifdef NEW_RATE_ADAPT_SUPPORT
-        if (RaCfg.ucRateAlg == RATE_ALG_GRP)
-        {
-            raSetMcsGroup(pRaEntry, pRaCfg, pRaInternal);
-            raClearTxQuality(pRaInternal);
-
-            raSelectTxRateTable(pRaEntry, pRaCfg, pRaInternal, &pRaInternal->pucTable, &TableSize, &pRaInternal->ucCurrTxRateIndex);
-            NewTxRateMtCore(pAd, pRaEntry, pRaCfg, pRaInternal);
-        }
-#endif /* NEW_RATE_ADAPT_SUPPORT */
 
 #ifdef RATE_ADAPT_AGBS_SUPPORT
         if (RaCfg.ucRateAlg == RATE_ALG_AGBS)
@@ -182,12 +255,6 @@ RAInit(
     {
 #ifdef MCS_LUT_SUPPORT
 
-#ifdef NEW_RATE_ADAPT_SUPPORT
-        if (RaCfg.ucRateAlg == RATE_ALG_GRP)
-        {
-            MtAsicMcsLutUpdateCore(pAd, pRaEntry, pRaCfg, pRaInternal);
-        }
-#endif /* NEW_RATE_ADAPT_SUPPORT */
 
 #ifdef RATE_ADAPT_AGBS_SUPPORT
         if (RaCfg.ucRateAlg == RATE_ALG_AGBS)
@@ -254,7 +321,7 @@ RAParamUpdate(
         os_zero_mem(pRaInternal, sizeof(RA_INTERNAL_INFO_T));
         os_zero_mem(&RaCfg, sizeof(RaCfg));
 
-        raWrapperConfigSet(pAd, pRaCfg);
+        raWrapperConfigSet(pAd, pEntry->wdev, pRaCfg);
 #ifdef MT_MAC
 #ifdef RATE_ADAPT_AGBS_SUPPORT
         if (RaCfg.ucRateAlg == RATE_ALG_AGBS)
@@ -298,6 +365,10 @@ StaRecAutoRateParamSet(
     /* Fill TLV format */
     pCmdStaRecAutoRate->u2Tag = STA_REC_RA;
     pCmdStaRecAutoRate->u2Length = sizeof(CMD_STAREC_AUTO_RATE_T);
+#ifdef RT_BIG_ENDIAN
+    pCmdStaRecAutoRate->u2Tag = cpu2le16(pCmdStaRecAutoRate->u2Tag);
+    pCmdStaRecAutoRate->u2Length = cpu2le16(pCmdStaRecAutoRate->u2Length);
+#endif
     pCmdStaRecAutoRate->fgRaValid = pRaEntry->fgRaValid;
     pCmdStaRecAutoRate->fgAutoTxRateSwitch = pRaEntry->fgAutoTxRateSwitch;
 
@@ -317,19 +388,22 @@ StaRecAutoRateParamSet(
     os_move_mem(pCmdStaRecAutoRate->aucHtCapMCSSet, pRaEntry->aucHtCapMCSSet, sizeof(pCmdStaRecAutoRate->aucHtCapMCSSet));
     pCmdStaRecAutoRate->ucMmpsMode = pRaEntry->ucMmpsMode;
 
-    pCmdStaRecAutoRate->fgGband256QAMSupport = pRaEntry->fgGband256QAMSupport;
+    pCmdStaRecAutoRate->ucGband256QAMSupport = pRaEntry->ucGband256QAMSupport;
     pCmdStaRecAutoRate->ucMaxAmpduFactor = pRaEntry->ucMaxAmpduFactor;
+
+    pCmdStaRecAutoRate->fgAuthWapiMode = pRaEntry->fgAuthWapiMode;
+
     pCmdStaRecAutoRate->RateLen = pRaEntry->RateLen;
     pCmdStaRecAutoRate->ucSupportRateMode = pRaEntry->ucSupportRateMode;
     pCmdStaRecAutoRate->ucSupportCCKMCS = pRaEntry->ucSupportCCKMCS;
     pCmdStaRecAutoRate->ucSupportOFDMMCS = pRaEntry->ucSupportOFDMMCS;
 #ifdef DOT11_N_SUPPORT
-    pCmdStaRecAutoRate->u4SupportHTMCS = pRaEntry->u4SupportHTMCS;
+    pCmdStaRecAutoRate->u4SupportHTMCS = cpu2le32(pRaEntry->u4SupportHTMCS);
 #ifdef DOT11_VHT_AC
-    pCmdStaRecAutoRate->u2SupportVHTMCS1SS = pRaEntry->u2SupportVHTMCS1SS;
-    pCmdStaRecAutoRate->u2SupportVHTMCS2SS = pRaEntry->u2SupportVHTMCS2SS;
-    pCmdStaRecAutoRate->u2SupportVHTMCS3SS = pRaEntry->u2SupportVHTMCS3SS;
-    pCmdStaRecAutoRate->u2SupportVHTMCS4SS = pRaEntry->u2SupportVHTMCS4SS;
+    pCmdStaRecAutoRate->u2SupportVHTMCS1SS = cpu2le16(pRaEntry->u2SupportVHTMCS1SS);
+    pCmdStaRecAutoRate->u2SupportVHTMCS2SS = cpu2le16(pRaEntry->u2SupportVHTMCS2SS);
+    pCmdStaRecAutoRate->u2SupportVHTMCS3SS = cpu2le16(pRaEntry->u2SupportVHTMCS3SS);
+    pCmdStaRecAutoRate->u2SupportVHTMCS4SS = cpu2le16(pRaEntry->u2SupportVHTMCS4SS);
     pCmdStaRecAutoRate->force_op_mode = pRaEntry->force_op_mode;
     pCmdStaRecAutoRate->vhtOpModeChWidth = pRaEntry->vhtOpModeChWidth;
     pCmdStaRecAutoRate->vhtOpModeRxNss = pRaEntry->vhtOpModeRxNss;
@@ -338,8 +412,7 @@ StaRecAutoRateParamSet(
 #endif /* DOT11_N_SUPPORT */
 
 
-    pCmdStaRecAutoRate->fgAuthWapiMode = pRaEntry->fgAuthWapiMode;
-    pCmdStaRecAutoRate->ClientStatusFlags = pRaEntry->ClientStatusFlags;
+    pCmdStaRecAutoRate->ClientStatusFlags = cpu2le32(pRaEntry->ClientStatusFlags);
     os_move_mem(&pCmdStaRecAutoRate->MaxPhyCfg, &pRaEntry->MaxPhyCfg, sizeof(RA_PHY_CFG_T));
  
 
@@ -367,6 +440,10 @@ StaRecAutoRateCommCfgSet(
     /* Fill TLV format */
     pCmdStaRecAutoRateCfg->u2Tag = STA_REC_RA_COMMON_INFO;
     pCmdStaRecAutoRateCfg->u2Length = sizeof(CMD_STAREC_AUTO_RATE_CFG_T);
+#ifdef RT_BIG_ENDIAN
+    pCmdStaRecAutoRateCfg->u2Tag = cpu2le16(pCmdStaRecAutoRateCfg->u2Tag);
+    pCmdStaRecAutoRateCfg->u2Length = cpu2le16(pCmdStaRecAutoRateCfg->u2Length);
+#endif
 
     pCmdStaRecAutoRateCfg->OpMode = pRaCfg->OpMode;
     pCmdStaRecAutoRateCfg->fgAdHocOn = pRaCfg->fgAdHocOn;
@@ -387,19 +464,20 @@ StaRecAutoRateCommCfgSet(
     pCmdStaRecAutoRateCfg->vht_nss_cap = pRaCfg->vht_nss_cap;
 #endif /* DOT11_VHT_AC */
 #endif /* DOT11_N_SUPPORT */
-
+    pCmdStaRecAutoRateCfg->fgSeOff = pRaCfg->fgSeOff;
+    pCmdStaRecAutoRateCfg->ucAntennaIndex = pRaCfg->ucAntennaIndex;
     pCmdStaRecAutoRateCfg->TrainUpRule= pRaCfg->TrainUpRule;
-    pCmdStaRecAutoRateCfg->TrainUpHighThrd = pRaCfg->TrainUpHighThrd;
-    pCmdStaRecAutoRateCfg->TrainUpRuleRSSI = pRaCfg->TrainUpRuleRSSI;
-    pCmdStaRecAutoRateCfg->lowTrafficThrd = pRaCfg->lowTrafficThrd;
+    pCmdStaRecAutoRateCfg->TrainUpHighThrd = cpu2le16(pRaCfg->TrainUpHighThrd);
+    pCmdStaRecAutoRateCfg->TrainUpRuleRSSI = cpu2le16(pRaCfg->TrainUpRuleRSSI);
+    pCmdStaRecAutoRateCfg->lowTrafficThrd = cpu2le16(pRaCfg->lowTrafficThrd);
 
 #if defined(MT7615) || defined(MT7622)
-    pCmdStaRecAutoRateCfg->u2MaxPhyRate = pRaCfg->u2MaxPhyRate;
+    pCmdStaRecAutoRateCfg->u2MaxPhyRate = cpu2le16(pRaCfg->u2MaxPhyRate);
 #endif /* defined(MT7615) || defined(MT7622) */
 
-    pCmdStaRecAutoRateCfg->PhyCaps = pRaCfg->PhyCaps;
-    pCmdStaRecAutoRateCfg->u4RaInterval = pRaCfg->u4RaInterval;
-    pCmdStaRecAutoRateCfg->u4RaFastInterval = pRaCfg->u4RaFastInterval;
+    pCmdStaRecAutoRateCfg->PhyCaps = cpu2le32(pRaCfg->PhyCaps);
+    pCmdStaRecAutoRateCfg->u4RaInterval = cpu2le32(pRaCfg->u4RaInterval);
+    pCmdStaRecAutoRateCfg->u4RaFastInterval = cpu2le32(pRaCfg->u4RaFastInterval);
 
 
     return NDIS_STATUS_SUCCESS;
@@ -483,6 +561,12 @@ StaRecAutoRateUpdate(
         pCmdStaRecAutoRateUpdate->ucSpeEn = pRaParam->ucSpeEn;
         pCmdStaRecAutoRateUpdate->fgIs5G = pRaParam->fgIs5G;
     }
+
+#ifdef RT_BIG_ENDIAN
+    pCmdStaRecAutoRateUpdate->u2Tag = cpu2le16(pCmdStaRecAutoRateUpdate->u2Tag);
+    pCmdStaRecAutoRateUpdate->u2Length = cpu2le16(pCmdStaRecAutoRateUpdate->u2Length);
+    pCmdStaRecAutoRateUpdate->u4Field = cpu2le32(pCmdStaRecAutoRateUpdate->u4Field);
+#endif
 
 	return NDIS_STATUS_SUCCESS;
 }

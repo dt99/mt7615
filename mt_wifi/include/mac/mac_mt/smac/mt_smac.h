@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __MT_SMAC_H__
 #define __MT_SMAC_H__
 
@@ -2024,6 +2025,9 @@ VOID dump_wtbl_info_ByTlv(struct _RTMP_ADAPTER *pAd, UINT wtbl_idx);
 VOID dump_wtbl_base_info(struct _RTMP_ADAPTER *pAd);
 
 INT mt_mac_set_ctrlch(struct _RTMP_ADAPTER *pAd, UINT8 extch);
+#ifdef GREENAP_SUPPORT
+INT rtmp_mac_set_mmps(struct _RTMP_ADAPTER *pAd, INT ReduceCorePower);
+#endif /* GREENAP_SUPPORT */
 
 UINT16 tx_rate_to_tmi_rate(UINT8 mode, UINT8 mcs, UINT8 nss, BOOLEAN stbc, UINT8 preamble);
 UCHAR get_nsts_by_mcs(UCHAR phy_mode, UCHAR mcs, BOOLEAN stbc, UCHAR vht_nss);

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc. 
@@ -13,6 +14,7 @@
 	Module Name:
 	cmm_usb_io.c
 */
+#endif /* MTK_LICENSE */
 #include	"rt_config.h"
 
 NTSTATUS RTUSBReadEEPROM(RTMP_ADAPTER *pAd, USHORT adr, UCHAR *buf, USHORT len)
@@ -409,6 +411,7 @@ NTSTATUS ResetBulkOutHdlr(IN PRTMP_ADAPTER pAd)
 			RTUSB_SET_BULK_FLAG(pAd, (fRTUSB_BULK_OUT_DATA_NORMAL << pAd->bulkResetPipeid));
 		}
 
+		// TODO, move radio off from pAd to wdev
 		if (!(RTMP_TEST_FLAG(pAd, (fRTMP_ADAPTER_RADIO_OFF |
 				fRTMP_ADAPTER_HALT_IN_PROGRESS | fRTMP_ADAPTER_NIC_NOT_EXIST))))
 			RTMPDeQueuePacket(pAd, FALSE, WMM_NUM_OF_AC, WCID_ALL, MAX_TX_PROCESS);
@@ -456,6 +459,7 @@ NTSTATUS ResetBulkInHdlr(IN PRTMP_ADAPTER pAd)
 		ntStatus = RTMP_IO_READ32(pAd, MAC_CSR0, &MACValue);
 
 		/* It must be removed. Or ATE will have no RX success. */ 
+                // TDOD: move radio off from pAd to wdev
 		if ((NT_SUCCESS(ntStatus) == TRUE) &&
 					(!(RTMP_TEST_FLAG(pAd, (fRTMP_ADAPTER_RADIO_OFF |
 													fRTMP_ADAPTER_HALT_IN_PROGRESS | fRTMP_ADAPTER_NIC_NOT_EXIST)))))

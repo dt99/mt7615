@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -24,6 +25,7 @@
     Who         When            What
     --------    ----------      ----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 BUILD_TIMER_FUNCTION(GroupRekeyExec);
 
@@ -49,6 +51,7 @@ VOID APPMFInit (
     pSecConfig->PmfCfg.PMFSHA256 = FALSE;
     if ((IS_AKM_WPA2(pSecConfig->AKMMap) || IS_AKM_WPA2PSK(pSecConfig->AKMMap))
         && IS_CIPHER_CCMP128(pSecConfig->PairwiseCipher)
+        && IS_CIPHER_CCMP128(pSecConfig->GroupCipher)
         && (pSecConfig->PmfCfg.Desired_MFPC))
     {
         pSecConfig->PmfCfg.MFPC = TRUE;
@@ -380,35 +383,81 @@ INSTALL_KEY:
     }
 }		
 
-VOID WPAGroupRekeyAction (
-    IN PRTMP_ADAPTER pAd)
+VOID WPAGroupRekeyByWdev (
+    IN PRTMP_ADAPTER pAd,
+    IN struct wifi_dev *wdev)
+
 {
-    UINT8 apidx = 0;
-
-    for (apidx = 0; apidx < pAd->ApCfg.BssidNum; apidx++)
+    struct _SECURITY_CONFIG *pSecConfig = &wdev->SecConfig;
+    if (IS_CIPHER_TKIP(pSecConfig->GroupCipher)
+        || IS_CIPHER_CCMP128(pSecConfig->GroupCipher)
+        || IS_CIPHER_CCMP256(pSecConfig->GroupCipher)
+        || IS_CIPHER_GCMP128(pSecConfig->GroupCipher)
+        || IS_CIPHER_GCMP256(pSecConfig->GroupCipher))
     {
-        struct wifi_dev *wdev = &pAd->ApCfg.MBSSID[apidx].wdev;
-        struct _SECURITY_CONFIG *pSecConfig = &wdev->SecConfig;
-
-        if (IS_CIPHER_TKIP(pSecConfig->GroupCipher)
-            || IS_CIPHER_CCMP128(pSecConfig->GroupCipher)
-            || IS_CIPHER_CCMP256(pSecConfig->GroupCipher)
-            || IS_CIPHER_GCMP128(pSecConfig->GroupCipher)
-            || IS_CIPHER_GCMP256(pSecConfig->GroupCipher))
-        {
-                /* Group rekey related */
-                if ((pSecConfig->GroupReKeyInterval != 0) 
-                    && ((pSecConfig->GroupReKeyMethod == SEC_GROUP_REKEY_TIME) 
-                        || (pSecConfig->GroupReKeyMethod == SEC_GROUP_REKEY_PACKET))) 
-                {
-                    pSecConfig->GroupPacketCounter = 0;
-                    RTMPSetTimer(&pSecConfig->GroupRekeyTimer, GROUP_KEY_UPDATE_EXEC_INTV);
-                    MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, (" %s : Group rekey method= %d , interval = 0x%lx\n",
-                        __FUNCTION__, pSecConfig->GroupReKeyMethod, pSecConfig->GroupReKeyInterval));
-                }
-        }
+            /* Group rekey related */
+            if ((pSecConfig->GroupReKeyInterval != 0) 
+                && ((pSecConfig->GroupReKeyMethod == SEC_GROUP_REKEY_TIME) 
+                    || (pSecConfig->GroupReKeyMethod == SEC_GROUP_REKEY_PACKET))) 
+            {
+                pSecConfig->GroupPacketCounter = 0;
+                //Ellis note:avoid AP crash due to set timer twice when ra1 up before ra0 up   
+                RTMPModTimer(&pSecConfig->GroupRekeyTimer, GROUP_KEY_UPDATE_EXEC_INTV);
+                MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, (" %s : Group rekey method= %d , interval = 0x%lx\n",
+                    __FUNCTION__, pSecConfig->GroupReKeyMethod, pSecConfig->GroupReKeyInterval));
+            }
     }
 }
+
+/*
+	Set group re-key timer if necessary.
+	It must be processed after clear flag "fRTMP_ADAPTER_HALT_IN_PROGRESS"
+*/
+VOID APStartRekeyTimer (
+    IN PRTMP_ADAPTER pAd,
+    IN struct wifi_dev *wdev)
+{
+	if(HcIsRadioAcq(wdev))  
+	{
+#ifdef WAPI_SUPPORT
+		RTMPStartWapiRekeyTimerByWdev(pAd,wdev);
+#endif /* WAPI_SUPPORT */
+
+		WPAGroupRekeyByWdev(pAd,wdev);
+	}
+}
+
+VOID APStopRekeyTimer (
+    IN PRTMP_ADAPTER pAd,
+    IN struct wifi_dev *wdev)
+{
+	BOOLEAN Cancelled;
+
+#ifdef WAPI_SUPPORT
+	RTMPCancelWapiRekeyTimerByWdev(pAd,wdev);
+#endif /* WAPI_SUPPORT */
+
+	RTMPCancelTimer(&wdev->SecConfig.GroupRekeyTimer, &Cancelled);
+}
+
+VOID APReleaseRekeyTimer (
+    IN PRTMP_ADAPTER pAd,
+    IN struct wifi_dev *wdev)
+{
+	BOOLEAN Cancelled;
+
+#ifdef WAPI_SUPPORT
+	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
+	{
+		struct _SECURITY_CONFIG *pSecConfig = &wdev->SecConfig;
+
+		RTMPCancelTimer(&pSecConfig->WapiMskRekeyTimer, &Cancelled);
+	}
+#endif /* WAPI_SUPPORT */
+
+	RTMPReleaseTimer(&wdev->SecConfig.GroupRekeyTimer, &Cancelled);
+}
+
 
 static PCHAR portsecured[]={"NONE", "PORT_SECURED", "NOT_SECURED"};
 INT Show_APSecurityInfo_Proc (
@@ -744,132 +793,148 @@ VOID WpaSend(RTMP_ADAPTER *pAdapter, UCHAR *pPacket, ULONG Len)
 }    
 
 
-VOID RTMPAddPMKIDCache(
-	IN  PRTMP_ADAPTER   		pAd,
-	IN	INT						apidx,
-	IN	PUCHAR				pAddr,
-	IN	UCHAR					*PMKID,
-	IN	UCHAR					*PMK)
+INT RTMPAddPMKIDCache(
+	IN NDIS_AP_802_11_PMKID *pPMKIDCache,
+	IN INT apidx,
+	IN UCHAR *pAddr,
+	IN UCHAR *PMKID,
+	IN UCHAR *PMK)
 {
-	INT	i, CacheIdx;
+	INT i, CacheIdx;
 
 	/* Update PMKID status */
-	if ((CacheIdx = RTMPSearchPMKIDCache(pAd, apidx, pAddr)) != -1)
+	CacheIdx = RTMPSearchPMKIDCache(pPMKIDCache, apidx, pAddr);
+	if (CacheIdx != INVALID_PMKID_IDX)
 	{
-		NdisGetSystemUpTime(&(pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[CacheIdx].RefreshTime));
-		NdisMoveMemory(&pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[CacheIdx].PMKID, PMKID, LEN_PMKID);
-		NdisMoveMemory(&pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[CacheIdx].PMK, PMK, PMK_LEN);
-		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, 
-					("RTMPAddPMKIDCache update %02x:%02x:%02x:%02x:%02x:%02x cache(%d) from IF(ra%d)\n", 
-					PRINT_MAC(pAddr), CacheIdx, apidx));
-		
-		return;
+		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+			("%s(): cache found and renew it(%d)\n",
+			__FUNCTION__, CacheIdx));
 	}
-
-	/* Add a new PMKID */
-	for (i = 0; i < MAX_PMKID_COUNT; i++)
+	else
 	{
-		if (!pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[i].Valid)
-		{
-			pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[i].Valid = TRUE;
-			NdisGetSystemUpTime(&(pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[i].RefreshTime));
-			COPY_MAC_ADDR(&pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[i].MAC, pAddr);
-			NdisMoveMemory(&pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[i].PMKID, PMKID, LEN_PMKID);
-			NdisMoveMemory(&pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[i].PMK, PMK, PMK_LEN);
-			MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("RTMPAddPMKIDCache add %02x:%02x:%02x:%02x:%02x:%02x cache(%d) from IF(ra%d)\n", 
-            					PRINT_MAC(pAddr), i, apidx));
-			break;
-		}
-	}
- 
-	if (i == MAX_PMKID_COUNT)
-	{
-		ULONG	timestamp = 0, idx = 0;
-
-		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("RTMPAddPMKIDCache(IF(%d) Cache full\n", apidx));
+		ULONG ts = 0;
+		INT old_entry = 0;
+		/* Add a new PMKID */
 		for (i = 0; i < MAX_PMKID_COUNT; i++)
 		{
-			if (pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[i].Valid)
+			if (pPMKIDCache->BSSIDInfo[i].Valid == FALSE)
 			{
-				if (((timestamp == 0) && (idx == 0)) || ((timestamp != 0) && timestamp < pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[i].RefreshTime))
+				CacheIdx = i;
+				break;
+			} else {
+				if ((ts == 0) || (ts > pPMKIDCache->BSSIDInfo[i].RefreshTime))
 				{
-					timestamp = pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[i].RefreshTime;
-					idx = i;
+					ts = pPMKIDCache->BSSIDInfo[i].RefreshTime;
+					old_entry = i;
 				}
 			}
 		}
-		pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[idx].Valid = TRUE;
-		NdisGetSystemUpTime(&(pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[idx].RefreshTime));
-		COPY_MAC_ADDR(&pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[idx].MAC, pAddr);
-		NdisMoveMemory(&pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[idx].PMKID, PMKID, LEN_PMKID);
-		NdisMoveMemory(&pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[idx].PMK, PMK, PMK_LEN);
-		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("RTMPAddPMKIDCache add %02x:%02x:%02x:%02x:%02x:%02x cache(%ld) from IF(ra%d)\n", 
-           						PRINT_MAC(pAddr), idx, apidx));
+	 
+		if (i == MAX_PMKID_COUNT)
+		{
+			CacheIdx = old_entry;
+			MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_WARN,
+				("%s():Cache full, replace oldest(%d)\n",
+				__FUNCTION__, old_entry));
+		}
 	}
+
+	pPMKIDCache->BSSIDInfo[CacheIdx].Valid = TRUE;
+	pPMKIDCache->BSSIDInfo[CacheIdx].Mbssidx = apidx;
+	NdisGetSystemUpTime(&(pPMKIDCache->BSSIDInfo[CacheIdx].RefreshTime));
+	COPY_MAC_ADDR(&pPMKIDCache->BSSIDInfo[CacheIdx].MAC, pAddr);
+	NdisMoveMemory(&pPMKIDCache->BSSIDInfo[CacheIdx].PMKID, PMKID, LEN_PMKID);
+	NdisMoveMemory(&pPMKIDCache->BSSIDInfo[CacheIdx].PMK, PMK, PMK_LEN);
+
+	MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+		("%s(): add %02x:%02x:%02x:%02x:%02x:%02x cache(%d) for ra%d\n", 
+		__FUNCTION__, PRINT_MAC(pAddr), CacheIdx, apidx));
+
+	return CacheIdx;
 }
 
+
 INT RTMPSearchPMKIDCache(
-	IN  PRTMP_ADAPTER   pAd,
-	IN	INT				apidx,
-	IN	PUCHAR		pAddr)
+	IN NDIS_AP_802_11_PMKID *pPMKIDCache,
+	IN INT apidx,
+	IN UCHAR *pAddr)
 {
 	INT	i = 0;
 	
 	for (i = 0; i < MAX_PMKID_COUNT; i++)
 	{
-		if ((pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[i].Valid)
-			&& MAC_ADDR_EQUAL(&pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[i].MAC, pAddr))
+		if ((pPMKIDCache->BSSIDInfo[i].Valid == TRUE)
+			&& (pPMKIDCache->BSSIDInfo[i].Mbssidx == apidx)
+			&& MAC_ADDR_EQUAL(&pPMKIDCache->BSSIDInfo[i].MAC, pAddr))
 		{
-			MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("RTMPSearchPMKIDCache %02x:%02x:%02x:%02x:%02x:%02x cache(%d) from IF(ra%d)\n", 
-            						PRINT_MAC(pAddr), i, apidx));
+			MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, 
+				("%s():%02x:%02x:%02x:%02x:%02x:%02x cache(%d) from IF(ra%d)\n", 
+            						__FUNCTION__, PRINT_MAC(pAddr), i, apidx));
 			break;
 		}
 	}
 
-	if (i == MAX_PMKID_COUNT)
+	if (i >= MAX_PMKID_COUNT)
 	{
-		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("RTMPSearchPMKIDCache - IF(%d) not found\n", apidx));
-		return -1;
+		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, 
+			("%s(): - IF(%d) not found\n", __FUNCTION__, apidx));
+		return INVALID_PMKID_IDX;
 	}
 
 	return i;
 }
 
-VOID RTMPDeletePMKIDCache(
-	IN  PRTMP_ADAPTER   pAd,
-	IN	INT				apidx,
-	IN  INT				idx)
-{
-	PAP_BSSID_INFO pInfo = &pAd->ApCfg.MBSSID[apidx].PMKIDCache.BSSIDInfo[idx];
 
-	if (pInfo->Valid)
+INT RTMPValidatePMKIDCache(
+	IN NDIS_AP_802_11_PMKID *pPMKIDCache,
+	IN INT apidx,
+	IN UCHAR *pAddr,
+	IN UCHAR *pPMKID)
+{
+	INT CacheIdx;
+	if ((CacheIdx = RTMPSearchPMKIDCache(pPMKIDCache, apidx, pAddr)) == INVALID_PMKID_IDX)
+		return INVALID_PMKID_IDX;
+
+	if (RTMPEqualMemory(pPMKID, &pPMKIDCache->BSSIDInfo[CacheIdx].PMKID, LEN_PMKID))
+		return CacheIdx;
+	else
+		return INVALID_PMKID_IDX;
+}
+
+
+VOID RTMPDeletePMKIDCache(
+	IN NDIS_AP_802_11_PMKID *pPMKIDCache,
+	IN INT apidx,
+	IN INT idx)
+{
+	PAP_BSSID_INFO pInfo = &pPMKIDCache->BSSIDInfo[idx];
+
+	if (pInfo->Valid && (pInfo->Mbssidx == apidx))
 	{
 		pInfo->Valid = FALSE;
-		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("RTMPDeletePMKIDCache(IF(%d), del PMKID CacheIdx=%d\n", apidx, idx));
+		MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, 
+			("%s():(IF(%d), del PMKID CacheIdx=%d\n", __FUNCTION__, apidx, idx));
 	}
 }
 
+
 VOID RTMPMaintainPMKIDCache(
-	IN  PRTMP_ADAPTER   pAd)
+	IN RTMP_ADAPTER *pAd)
 {
-	INT	i, j;
+	INT i;
 	ULONG Now;
-	for (i = 0; i < MAX_MBSSID_NUM(pAd); i++)
-	{
-		BSS_STRUCT *pMbss = &pAd->ApCfg.MBSSID[i];
 	
-		for (j = 0; j < MAX_PMKID_COUNT; j++)
+	for (i = 0; i < MAX_PMKID_COUNT; i++)
+	{
+		PAP_BSSID_INFO pBssInfo = &pAd->ApCfg.PMKIDCache.BSSIDInfo[i];
+
+		NdisGetSystemUpTime(&Now);
+
+		if ((pBssInfo->Valid)
+			&& /*((Now - pBssInfo->RefreshTime) >= pMbss->PMKCachePeriod)*/
+			(RTMP_TIME_AFTER(Now, (pBssInfo->RefreshTime + pAd->ApCfg.MBSSID[pBssInfo->Mbssidx].PMKCachePeriod))))
 		{
-			PAP_BSSID_INFO pBssInfo = &pMbss->PMKIDCache.BSSIDInfo[j];
-
-			NdisGetSystemUpTime(&Now);
-
-			if ((pBssInfo->Valid)
-				&& /*((Now - pBssInfo->RefreshTime) >= pMbss->PMKCachePeriod)*/
-				(RTMP_TIME_AFTER(Now, (pBssInfo->RefreshTime + pMbss->PMKCachePeriod))))
-			{
-				RTMPDeletePMKIDCache(pAd, i, j);
-			}
+			RTMPDeletePMKIDCache(&pAd->ApCfg.PMKIDCache, pBssInfo->Mbssidx, i);
 		}
 	}
 }

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * Taiwan, R.O.C.
@@ -11,7 +12,7 @@
  * way altering the source code is stricitly prohibited, unless the prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
 
 	Abstract:
@@ -26,15 +27,17 @@
 
 #ifdef RT_CFG80211_SUPPORT
 
+#define RTMP_CFG80211_HOSTAPD_ON(__pAd) (__pAd->net_dev->ieee80211_ptr->iftype == RT_CMD_80211_IFTYPE_AP)
+
 #ifdef RT_CFG80211_P2P_CONCURRENT_DEVICE 	
 #define CFG80211_GetEventDevice(__pAd) __pAd->cfg80211_ctrl.dummy_p2p_net_dev
 #else
 #define CFG80211_GetEventDevice(__pAd) __pAd->net_dev
 #endif	/* RT_CFG80211_P2P_CONCURRENT_DEVICE */
 
-#ifdef RT_CFG80211_P2P_SUPPORT
-#define CFG_GO_BSSID_IDX (MAIN_MBSSID + 1)
 
+#define CFG_GO_BSSID_IDX (MAIN_MBSSID + 1)
+#ifdef RT_CFG80211_P2P_SUPPORT
 //yiwei debug for P2P 7.1.3
 //yiwei tmp hard code
 #define IS_SW_NOA_TIMER(_A) (1)

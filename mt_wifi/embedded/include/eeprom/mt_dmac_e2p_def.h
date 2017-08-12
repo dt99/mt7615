@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc. 
@@ -13,7 +14,7 @@
 	Module Name:
 	mt_dmac_e2p_def.h
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __MT_DMAC_E2P_DEF_H__
 #define __MT_DMAC_E2P_DEF_H__
 

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
 	Who			When			What
 	--------	----------		----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #ifdef COMPOS_WIN
 #include "MtConfig.h"
 #if defined(EVENT_TRACING)
@@ -1179,6 +1181,23 @@ VOID MtAsicSetBARTxCntLimit(RTMP_ADAPTER *pAd, BOOLEAN Enable, UINT32 Count)
 	MAC_IO_WRITE32(pAd, AGG_MRCR, Value);
 }
 
+#ifdef VENDOR_FEATURE6_SUPPORT
+#ifdef CONFIG_AP_SUPPORT
+static VOID MtAsicSetRTSRetryCnt(RTMP_ADAPTER *pAd)
+{
+	UINT32 Value;
+	UINT32 Count = pAd->ApCfg.rts_retry_cnt;
+
+	if(Count != 0) {
+		// TODO: RTY_MODE0/1 ??
+		MAC_IO_READ32(pAd, AGG_MRCR, &Value);
+		Value &= ~RTS_RTY_CNT_LIMIT_MASK;
+		Value |= RTS_RTY_CNT_LIMIT(Count);
+		MAC_IO_WRITE32(pAd, AGG_MRCR, Value);
+	}
+}
+#endif /* CONFIG_AP_SUPPORT */
+#endif
 #ifndef MAC_INIT_OFFLOAD
 /*
  * Init TxD short format template which will copy by PSE-Client to LMAC
@@ -4966,6 +4985,12 @@ VOID MtAsicInitMac(RTMP_ADAPTER *pAd)
 	mac_val |= RTS_PKT_NUM_THRESHOLD(3);
 	MAC_IO_WRITE32(pAd, AGG_PCR1, mac_val);
 
+#ifdef VENDOR_FEATURE6_SUPPORT 
+//Set RTS Retry from profile 
+#ifdef CONFIG_AP_SUPPORT
+	MtAsicSetRTSRetryCnt(pAd);
+#endif
+#endif
 	/* When WAPI + RDG, don't mask ORDER bit  */
 	MAC_IO_READ32(pAd, SEC_SCR, &mac_val);
 	mac_val &= 0xfffffffc;
@@ -4984,12 +5009,7 @@ VOID MtAsicInitMac(RTMP_ADAPTER *pAd)
 	/*Make bcnQ move pkt to FreeQ after sent out.*/
 	MAC_IO_WRITE32(pAd, AGG_BQCR, 0x23);
 #endif
-
-#if !defined(COMPOS_WIN) && !defined(COMPOS_TESTMODE_WIN)
-    RTMP_UPDATE_RTS_THRESHOLD(pAd, pAd->CommonCfg.RtsPktThreshold, pAd->CommonCfg.RtsThreshold);
-#endif
 #endif /* MAC_INIT_OFFLOAD */
-
 }
 
 
@@ -5157,8 +5177,11 @@ INT32 MtAsicSetBssidByDriver(
 #endif
 
     UCHAR OwnMacIdx = bss_info_argument.OwnMacIdx;
-    UINT8 Active = bss_info_argument.Active;
+    UINT8 Active = FALSE;
     UCHAR *Bssid = bss_info_argument.Bssid;
+
+	if (bss_info_argument.bss_state >= BSS_ACTIVE)
+		Active = TRUE;
 
     if (OwnMacIdx < HW_BSSID_MAX)
     {

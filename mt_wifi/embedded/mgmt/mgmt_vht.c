@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -23,7 +24,7 @@
 	Who 		When			What
 	--------	----------		----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 
@@ -59,7 +60,8 @@ char *VhtBw2Str(INT VhtBw)
 	========================================================================
 */
 VOID RTMPSetVHT(
-	IN RTMP_ADAPTER *pAd)
+	IN RTMP_ADAPTER *pAd,
+	IN struct wifi_dev *wdev)
 {
 
 #ifdef VHT_TXBF_SUPPORT
@@ -69,7 +71,7 @@ VOID RTMPSetVHT(
 	{
 		/* Set ETxBF */
 #ifdef MT_MAC 
-	   mt_WrapSetVHTETxBFCap(pAd, vht_cap); 
+	   mt_WrapSetVHTETxBFCap(pAd, wdev, vht_cap); 
 #else
 	   setVHTETxBFCap(pAd, vht_cap);
 #endif
@@ -98,7 +100,7 @@ VOID rtmp_set_vht(RTMP_ADAPTER *pAd, RT_PHY_INFO *phy_info)
 }
 
 
-INT SetCommonVHT(RTMP_ADAPTER *pAd, UCHAR PhyMode, UCHAR Channel)
+INT SetCommonVHT(RTMP_ADAPTER *pAd, struct wifi_dev *wdev, UCHAR PhyMode, UCHAR Channel)
 {
 	UCHAR cent_ch = 0;
 
@@ -108,7 +110,7 @@ INT SetCommonVHT(RTMP_ADAPTER *pAd, UCHAR PhyMode, UCHAR Channel)
 		return FALSE;
 	}
 
-	RTMPSetVHT(pAd);
+	RTMPSetVHT(pAd, wdev);
 
 
 	pAd->CommonCfg.vht_cent_ch = vht_cent_ch_freq(Channel, pAd->CommonCfg.vht_bw);

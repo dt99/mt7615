@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -24,7 +25,7 @@
     --------    ----------    ----------------------------------------------
 	Jan Lee		2006	  	created for rt2860
  */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 #include "action.h"
 
@@ -138,6 +139,17 @@ VOID MlmeADDBAAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 		tr_entry = &pAd->MacTab.tr_entry[pInfo->Wcid];
 		ASSERT((pEntry->wdev != NULL));
 		wdev = pEntry->wdev;
+
+#ifdef DOT11W_PMF_SUPPORT
+		if ((pEntry->SecConfig.PmfCfg.UsePMFConnect == TRUE) &&
+		    (tr_entry->PortSecured != WPA_802_1X_PORT_SECURED))
+        {
+            MTWF_LOG(DBG_CAT_PROTO, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+				("%s: PMF connection, Ignore AddBaReq Send DUE TO NOT IN PORTSECURED\n", __FUNCTION__));
+            MlmeFreeMemory( pOutBuffer);
+			return;
+        }
+#endif /* DOT11W_PMF_SUPPORT */
 
 		Idx = pEntry->BAOriWcidArray[pInfo->TID];
 		if (Idx == 0)
@@ -411,8 +423,6 @@ VOID PeerBAAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 
 #ifdef DOT11N_DRAFT3
 #ifdef CONFIG_AP_SUPPORT
-extern UCHAR get_regulatory_class(IN PRTMP_ADAPTER pAd, UCHAR Channel);
-
 VOID ApPublicAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 {
 	UCHAR	Action = Elem->Msg[LENGTH_802_11+1];
@@ -452,7 +462,7 @@ VOID SendBSS2040CoexistMgmtAction(
 	BssCoexistInfo.BssCoexistIe.field.InfoReq = InfoReq;
 	BssIntolerantInfo.ElementID = IE_2040_BSS_INTOLERANT_REPORT;
 	BssIntolerantInfo.Len = 1;
-	BssIntolerantInfo.RegulatoryClass = get_regulatory_class(pAd,wdev->channel);
+	BssIntolerantInfo.RegulatoryClass = get_regulatory_class(pAd,wdev->channel, wdev->PhyMode,wdev);
 
 	NStatus = MlmeAllocateMemory(pAd, &pOutBuffer);  /*Get an unused nonpaged memory*/
 	if(NStatus != NDIS_STATUS_SUCCESS)
@@ -698,6 +708,7 @@ VOID ChannelSwitchAction(
 {
 	UCHAR rf_channel = 0, rf_bw;
 	struct wifi_dev *wdev = NULL;
+	UCHAR cfg_ht_bw;
 
 	MTWF_LOG(DBG_CAT_PROTO, DBG_SUBCAT_ALL, DBG_LVL_TRACE,("%s(): NewChannel=%d, Secondary=%d\n",
 				__FUNCTION__, NewChannel, Secondary));
@@ -711,31 +722,24 @@ VOID ChannelSwitchAction(
 		return;
 
 	wdev->channel = NewChannel;
+	cfg_ht_bw = wlan_config_get_ht_bw(wdev);
 
 	if (Secondary == EXTCHA_NONE)
 	{
 		pAd->CommonCfg.CentralChannel = wdev->channel;
 		pAd->MacTab.Content[Wcid].HTPhyMode.field.BW = 0;
-		pAd->CommonCfg.AddHTInfo.AddHtInfo.RecomWidth = 0;
-		pAd->CommonCfg.AddHTInfo.AddHtInfo.ExtChanOffset = 0;
-
+		wlan_operate_set_ht_bw(wdev,HT_BW_20);
+		wlan_operate_set_ext_cha(wdev,EXTCHA_NONE);
 		rf_bw = BW_20;
 		rf_channel = wdev->channel ;
 	}
 	/* 1.  Switch to BW = 40 And Station supports BW = 40.*/
 	else if (((Secondary == EXTCHA_ABOVE) || (Secondary == EXTCHA_BELOW)) &&
-			(pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth == 1)
+			(cfg_ht_bw == HT_BW_40)
 	)
 	{
 		rf_bw = BW_40;
-#ifdef GREENAP_SUPPORT
-		if (pAd->ApCfg.bGreenAPActive == 1)
-		{
-			rf_bw = BW_20;
-			pAd->CommonCfg.CentralChannel = wdev->channel;
-		}
-		else
-#endif /* GREENAP_SUPPORT */
+
 		if (Secondary == EXTCHA_ABOVE)
 			pAd->CommonCfg.CentralChannel = wdev->channel  + 2;
 		else
@@ -761,30 +765,12 @@ VOID ChannelSwitchAction(
 VOID PeerPublicAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 {
 	UCHAR Action = Elem->Msg[LENGTH_802_11+1];
-#ifdef CONFIG_AP_SUPPORT
-    struct wifi_dev *wdev = NULL;
-    if (!VALID_UCAST_ENTRY_WCID(pAd, Elem->Wcid))
-    {
-        MTWF_LOG(DBG_CAT_PROTO, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-                ("%s, Wrong Wcid:%d !!! need to check the root cause!!!!\n",
-                    __FUNCTION__, Elem->Wcid));
-        return;
-    }
-	wdev = pAd->MacTab.Content[Elem->Wcid].wdev;
-#endif
+
 
 #if defined(CONFIG_HOTSPOT) && defined(CONFIG_AP_SUPPORT)
 	if (!HotSpotEnable(pAd, Elem, ACTION_STATE_MESSAGES))
 #endif
 	if ((!VALID_UCAST_ENTRY_WCID(pAd, Elem->Wcid))
-#ifdef FTM_SUPPORT
-		&& (Action != ACTION_FTM_REQUEST)
-		&& (Action != ACTION_FTM)
-		&& (Action != ACTION_GAS_INITIAL_REQ)
-		&& (Action != ACTION_GAS_INITIAL_RSP)
-		&& (Action != ACTION_GAS_COMEBACK_REQ)
-		&& (Action != ACTION_GAS_COMEBACK_RSP)
-#endif /* FTM_SUPPORT */
 		)
 		return;
 
@@ -800,7 +786,20 @@ VOID PeerPublicAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 				BSS_2040_COEXIST_IE *pBssCoexistIe;
 				BSS_2040_INTOLERANT_CH_REPORT *pIntolerantReport = NULL;
 
-				if (Elem->MsgLen <= (LENGTH_802_11 + sizeof(BSS_2040_COEXIST_ELEMENT)) )
+#ifdef CONFIG_AP_SUPPORT
+				struct wifi_dev *wdev = NULL; 
+				if (!VALID_UCAST_ENTRY_WCID(pAd, Elem->Wcid))
+				{
+					MTWF_LOG(DBG_CAT_PROTO, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+							("%s, Wrong Wcid:%d !!! need to check the root cause!!!!",
+								__FUNCTION__, Elem->Wcid));
+					return;
+				}
+				wdev = pAd->MacTab.Content[Elem->Wcid].wdev;
+#endif
+
+
+				if (Elem->MsgLen <= (LENGTH_802_11 + sizeof(BSS_2040_COEXIST_ELEMENT)))
 				{
 					MTWF_LOG(DBG_CAT_PROTO, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("ACTION - 20/40 BSS Coexistence Management Frame length too short! len = %ld!\n", Elem->MsgLen));
 					break;
@@ -842,8 +841,7 @@ VOID PeerPublicAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 
 						MTWF_LOG(DBG_CAT_PROTO, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("BSS_2040_COEXIST: BSS20WidthReq=%d, Intolerant40=%d!\n", pBssCoexistIe->field.BSS20WidthReq, pBssCoexistIe->field.Intolerant40));
 					}
-					else if ((pIntolerantReport) && (pIntolerantReport->Len > 1)
-							/*&& (pIntolerantReport->RegulatoryClass == get_regulatory_class(pAd))*/)
+					else if ((pIntolerantReport) && (pIntolerantReport->Len > 1))
 					{
 						int i;
 						UCHAR *ptr;
@@ -893,7 +891,6 @@ VOID PeerPublicAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 
 					if (bNeedFallBack)
 					{
-                        struct wifi_dev *twdev = NULL;
 						int apidx;
 
 						NdisMoveMemory((PUCHAR)&pAd->CommonCfg.LastBSSCoexist2040,
@@ -928,43 +925,44 @@ VOID PeerPublicAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
                         /*FIXME: Carter, I don't think call update routine here is a good choice,
                                 the thing need to do for 20/40 update in legacy chip is a historical burden
                         */
-
-                        if ((pAd->CommonCfg.Bss2040CoexistFlag & BSS_2040_COEXIST_INFO_SYNC) &&
-                            (pAd->CommonCfg.bForty_Mhz_Intolerant == FALSE))
+                        if (wdev)
                         {
-                            MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
-                                        ("DTIM Period reached, BSS20WidthReq=%d, Intolerant40=%d!\n",
-                                        pAd->CommonCfg.LastBSSCoexist2040.field.BSS20WidthReq,
-                                        pAd->CommonCfg.LastBSSCoexist2040.field.Intolerant40));
-                            pAd->CommonCfg.Bss2040CoexistFlag &= (~BSS_2040_COEXIST_INFO_SYNC);
+	                        if ((pAd->CommonCfg.Bss2040CoexistFlag & BSS_2040_COEXIST_INFO_SYNC) &&
+	                            (pAd->CommonCfg.bForty_Mhz_Intolerant == FALSE))
+	                        {
+								UCHAR cfg_ht_bw = wlan_config_get_ht_bw(wdev);
+								UCHAR cfg_ext_cha = wlan_config_get_ext_cha(wdev);
 
-                            if (pAd->CommonCfg.LastBSSCoexist2040.field.BSS20WidthReq ||
-                                pAd->CommonCfg.LastBSSCoexist2040.field.Intolerant40)
-                            {
-                                pAd->CommonCfg.AddHTInfo.AddHtInfo.RecomWidth = BW_20;
-                                pAd->CommonCfg.AddHTInfo.AddHtInfo.ExtChanOffset = EXTCHA_NONE;
-								wdev->extcha = EXTCHA_NONE;
-								HcUpdateExtCha(pAd,wdev->channel,EXTCHA_NONE);
-                            }
-                            else
-                            {
-                                pAd->CommonCfg.AddHTInfo.AddHtInfo.RecomWidth = pAd->CommonCfg.RegTransmitSetting.field.BW;
-                                pAd->CommonCfg.AddHTInfo.AddHtInfo.ExtChanOffset = wdev->extcha;
-                            }
-                            MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
-                                    ("\tNow RecomWidth=%d, ExtChanOffset=%d\n",
-                                    pAd->CommonCfg.AddHTInfo.AddHtInfo.RecomWidth,
-                                    pAd->CommonCfg.AddHTInfo.AddHtInfo.ExtChanOffset));
-                            pAd->CommonCfg.Bss2040CoexistFlag |= BSS_2040_COEXIST_INFO_NOTIFY;
-                        }
+	                            MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+	                                        ("DTIM Period reached, BSS20WidthReq=%d, Intolerant40=%d!\n",
+	                                        pAd->CommonCfg.LastBSSCoexist2040.field.BSS20WidthReq,
+	                                        pAd->CommonCfg.LastBSSCoexist2040.field.Intolerant40));
+	                            pAd->CommonCfg.Bss2040CoexistFlag &= (~BSS_2040_COEXIST_INFO_SYNC);
 
-                        apidx = pAd->MacTab.Content[Elem->Wcid].apidx;
-                        twdev = &pAd->ApCfg.MBSSID[apidx].wdev;
-                        if (twdev)
-                        {
+	                            if (pAd->CommonCfg.LastBSSCoexist2040.field.BSS20WidthReq ||
+	                                pAd->CommonCfg.LastBSSCoexist2040.field.Intolerant40)
+	                            {
+	                                wlan_operate_set_ht_bw(wdev,HT_BW_20);
+									wlan_operate_set_ext_cha(wdev,EXTCHA_NONE);
+	                            }
+	                            else
+	                            {
+	                            	/*recover to origin bw & extcha*/
+	                                wlan_operate_set_ht_bw(wdev,cfg_ht_bw);
+									wlan_operate_set_ext_cha(wdev,cfg_ext_cha);
+	                            }
+	                            MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+	                                    ("\tNow RecomWidth=%d, ExtChanOffset=%d\n",
+	                                    wlan_operate_get_ht_bw(wdev),
+	                                    wlan_operate_get_ext_cha(wdev)));
+	                            pAd->CommonCfg.Bss2040CoexistFlag |= BSS_2040_COEXIST_INFO_NOTIFY;
+	                        }
+
+	     
+	                  
                             MTWF_LOG(DBG_CAT_PROTO, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
                                     ("%s, ACTION_BSS_2040_COEXIST Update Beacon for idx:%d\n", __FUNCTION__, apidx));
-                            UpdateBeaconHandler(pAd, twdev, IE_CHANGE);
+                            UpdateBeaconHandler(pAd, wdev, IE_CHANGE);
                         }
 					}
 #ifdef APCLI_SUPPORT	
@@ -997,15 +995,6 @@ VOID PeerPublicAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 			break;
 
 
-#ifdef FTM_SUPPORT
-		case ACTION_FTM_REQUEST:
-			ReceiveFTMReq(pAd, Elem);
-			break;
-
-		case ACTION_FTM:
-			ReceiveFTM(pAd, Elem);
-			break;
-#endif /* FTM_SUPPORT */
 
 		default:
 			break;
@@ -1075,7 +1064,7 @@ VOID SendNotifyBWActionFrame(RTMP_ADAPTER *pAd, UCHAR Wcid, UCHAR apidx)
 	FRAME_ACTION_HDR Frame;
 	ULONG FrameLen;
 	struct wifi_dev *wdev;
-
+	UCHAR op_ht_bw;
 
 	NStatus = MlmeAllocateMemory(pAd, &pOutBuffer);  /* Get an unused nonpaged memory */
 	if(NStatus != NDIS_STATUS_SUCCESS)
@@ -1087,6 +1076,7 @@ VOID SendNotifyBWActionFrame(RTMP_ADAPTER *pAd, UCHAR Wcid, UCHAR apidx)
 	pAddr1 = pAd->MacTab.Content[Wcid].Addr;
 
 	wdev = &pAd->ApCfg.MBSSID[apidx].wdev;
+	op_ht_bw = wlan_operate_get_ht_bw(wdev);
 	ActHeaderInit(pAd, &Frame.Hdr, pAddr1, wdev->if_addr, wdev->bssid);
 	Frame.Category = CATEGORY_HT;
 	Frame.Action = NOTIFY_BW_ACTION;
@@ -1094,12 +1084,12 @@ VOID SendNotifyBWActionFrame(RTMP_ADAPTER *pAd, UCHAR Wcid, UCHAR apidx)
 				  sizeof(FRAME_ACTION_HDR), &Frame,
 				  END_OF_ARGS);
 
-	*(pOutBuffer + FrameLen) = pAd->CommonCfg.AddHTInfo.AddHtInfo.RecomWidth;
+	*(pOutBuffer + FrameLen) = op_ht_bw;
 	FrameLen++;
 
 	MiniportMMRequest(pAd, QID_AC_BE, pOutBuffer, FrameLen);
 	MlmeFreeMemory( pOutBuffer);
-	MTWF_LOG(DBG_CAT_PROTO, DBG_SUBCAT_ALL, DBG_LVL_TRACE,("ACT - SendNotifyBWAction(NotifyBW= %d)!\n", pAd->CommonCfg.AddHTInfo.AddHtInfo.RecomWidth));
+	MTWF_LOG(DBG_CAT_PROTO, DBG_SUBCAT_ALL, DBG_LVL_TRACE,("ACT - SendNotifyBWAction(NotifyBW= %d)!\n", op_ht_bw));
 
 }
 #endif /* DOT11N_DRAFT3 */
@@ -1123,11 +1113,11 @@ VOID PeerHTAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 			MTWF_LOG(DBG_CAT_PROTO, DBG_SUBCAT_ALL, DBG_LVL_INFO,("ACTION - HT Notify Channel bandwidth action----> \n"));
 
 			if (Elem->Msg[LENGTH_802_11+2] == 0)	/* 7.4.8.2. if value is 1, keep the same as supported channel bandwidth. */
-				pEntry->HTPhyMode.field.BW = 0;
+				pEntry->HTPhyMode.field.BW = HT_BW_20;
 			else
 			{
-				pEntry->HTPhyMode.field.BW = pEntry->MaxHTPhyMode.field.BW &
-											pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth;
+				pEntry->HTPhyMode.field.BW = (pEntry->wdev) ? (pEntry->MaxHTPhyMode.field.BW &
+											(wlan_config_get_ht_bw(pEntry->wdev))) : (pEntry->MaxHTPhyMode.field.BW);
 			}
 			break;
 
@@ -1144,35 +1134,34 @@ VOID PeerHTAction(RTMP_ADAPTER *pAd, MLME_QUEUE_ELEM *Elem)
 
 			if (oldMmpsMode != pEntry->MmpsMode)
 			{
-				if ((oldMmpsMode == MMPS_DYNAMIC) || (pEntry->MmpsMode == MMPS_DYNAMIC)) {
+				if (pEntry->MmpsMode == MMPS_DYNAMIC) {
 #ifdef MT_MAC
-                    AsicSetSMPS(pAd, pEntry->wcid, 1);
+					AsicSetSMPS(pAd, pEntry->wcid, 1);
 #endif /* MT_MAC */
-				} else {
-#ifdef CONFIG_AP_SUPPORT
-#ifdef MT_MAC
-                    AsicSetSMPS(pAd, pEntry->wcid, 0);
-#endif /* MT_MAC */
-
-#ifdef RACTRL_FW_OFFLOAD_SUPPORT
-					if (pAd->chipCap.fgRateAdaptFWOffload == TRUE )
-					{
-						CMD_STAREC_AUTO_RATE_UPDATE_T rRaParam;
-
-						NdisZeroMemory(&rRaParam, sizeof(CMD_STAREC_AUTO_RATE_UPDATE_T));
-						rRaParam.u4Field = RA_PARAM_MMPS_UPDATE;
-						RAParamUpdate(pAd, pEntry, &rRaParam);
-                    }
-                    else
-#endif /* RACTRL_FW_OFFLOAD_SUPPORT */
-                    {
-                        IF_DEV_CONFIG_OPMODE_ON_AP(pAd){
-                            APMlmeDynamicTxRateSwitching(pAd);
-                        }
-                    }
-
-#endif /* CONFIG_AP_SUPPORT */
 				}
+				else {
+#ifdef MT_MAC
+					AsicSetSMPS(pAd, pEntry->wcid, 0);
+#endif /* MT_MAC */
+				}
+#ifdef CONFIG_AP_SUPPORT
+#ifdef RACTRL_FW_OFFLOAD_SUPPORT
+				if (pAd->chipCap.fgRateAdaptFWOffload == TRUE )
+				{
+					CMD_STAREC_AUTO_RATE_UPDATE_T rRaParam;
+
+					NdisZeroMemory(&rRaParam, sizeof(CMD_STAREC_AUTO_RATE_UPDATE_T));
+					rRaParam.u4Field = RA_PARAM_MMPS_UPDATE;
+					RAParamUpdate(pAd, pEntry, &rRaParam);
+				}
+				else
+#endif /* RACTRL_FW_OFFLOAD_SUPPORT */
+				{
+					IF_DEV_CONFIG_OPMODE_ON_AP(pAd){
+						APMlmeDynamicTxRateSwitching(pAd);
+					}
+				}
+#endif /* CONFIG_AP_SUPPORT */
 			}
 			MTWF_LOG(DBG_CAT_PROTO, DBG_SUBCAT_ALL, DBG_LVL_TRACE,("Wcid(%d) MIMO PS = %d\n", Elem->Wcid, pEntry->MmpsMode));
 			/* rt2860c : add something for smps change.*/

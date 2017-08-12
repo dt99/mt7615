@@ -15,6 +15,10 @@
 #ifndef __RT_LINUX_H__
 #define __RT_LINUX_H__
 
+#ifdef VENDOR_FEATURE6_SUPPORT
+#include "arris_mod_api.h"
+#include "event_common.h"
+#endif
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/kernel.h>
@@ -84,7 +88,6 @@
 #include <linux/kthread.h>
 #endif /* KTHREAD_SUPPORT */
 
-
 #include "os/rt_linux_cmm.h"
 
 #ifdef RT_CFG80211_SUPPORT
@@ -134,7 +137,7 @@ typedef struct usb_ctrlrequest devctrlrequest;
 #endif
 
 
-#define AP_DRIVER_VERSION			"4.4.0.2"
+#define AP_DRIVER_VERSION			"4.4.1.2"
 #ifdef MULTIPLE_CARD_SUPPORT
 #define CARD_INFO_PATH			"/etc/Wireless/RT2860AP/RT2860APCard.dat"
 #endif /* MULTIPLE_CARD_SUPPORT */
@@ -148,9 +151,15 @@ typedef struct usb_ctrlrequest devctrlrequest;
 
 
 #ifdef SINGLE_SKU_V2
+#ifdef VENDOR_FEATURE6_SUPPORT
+#define SINGLE_SKU_TABLE_FILE_NAME	"/tmp/.mt7615_SingleSKU.dat"
+#define BF_GAIN_TABLE_FILE_NAME     "/tmp/.mt7615_SingleSKU_BF_Gain.dat"
+#define BF_SKU_TABLE_FILE_NAME      "/tmp/.mt7615_SingleSKU_BF.dat"
+#else
 #define SINGLE_SKU_TABLE_FILE_NAME	"/etc_ro/Wireless/RT2860AP/7615_SingleSKU.dat"
 #define BF_GAIN_TABLE_FILE_NAME     "/etc_ro/Wireless/RT2860AP/7615_BF_Gain_Table.dat"
 #define BF_SKU_TABLE_FILE_NAME      "/etc_ro/Wireless/RT2860AP/7615_SingleSKU_BF.dat"
+#endif
 #endif /* SINGLE_SKU_V2 */
 
 #endif /* CONFIG_AP_SUPPORT */
@@ -559,9 +568,13 @@ do { \
 #define RT_GET_OS_PID(_x, _y)		do{rcu_read_lock(); _x=(ULONG)current->pids[PIDTYPE_PID].pid; rcu_read_unlock();}while(0)
 #define RTMP_GET_OS_PID(_a, _b)			RtmpOsGetPid(&_a, _b)
 #else
+#ifdef CONFIG_PREEMPT_RCU
+#define RT_GET_OS_PID(_x, _y)
+#else /* else CONFIG_PREEMPT_RCU */
 #define RT_GET_OS_PID(_x, _y)		do{rcu_read_lock(); _x=current->pids[PIDTYPE_PID].pid; rcu_read_unlock();}while(0)
+#endif /* CONFIG_PREEMPT_RCU */
 #define RTMP_GET_OS_PID(_a, _b)			RT_GET_OS_PID(_a, _b)
-#endif
+#endif /* OS_ABL_FUNC_SUPPORT */
 #define	GET_PID_NUMBER(_v)	pid_nr((_v))
 #define CHECK_PID_LEGALITY(_pid)	if (pid_nr((_pid)) > 0)
 #define KILL_THREAD_PID(_A, _B, _C)	kill_pid((_A), (_B), (_C))
@@ -770,15 +783,27 @@ typedef struct os_cookie	* POS_COOKIE;
 
 #undef  ASSERT
 #ifdef DBG
+#ifdef BB_SOC
 #define ASSERT(x)                                                               \
 {                                                                               \
-    if (!(x))                                                                   \
+    if (unlikely(!(x)))	                                                                 \
     {                                                                           \
         printk(KERN_WARNING __FILE__ ":%d assert " #x "failed\n", __LINE__);    \
         dump_stack();\
         /* panic("Unexpected error occurs!\n");					*/\
     }                                                                           \
 }
+#else
+#define ASSERT(x)                                                               \
+{                                                                               \
+    if (!(x))	                                                                 \
+    {                                                                           \
+        printk(KERN_WARNING __FILE__ ":%d assert " #x "failed\n", __LINE__);    \
+        dump_stack();\
+        /* panic("Unexpected error occurs!\n");					*/\
+    }                                                                           \
+}
+#endif
 #else
 #define ASSERT(x)
 #endif /* DBG */
@@ -824,7 +849,7 @@ void linux_pci_unmap_single(void *handle, ra_dma_addr_t dma_addr, size_t size, i
 		if (_Pkt != NULL) {	\
 			MEM_DBG_PKT_ALLOC_INC(_Pkt);		\
 		};
-#else
+#else  /* CONFIG_WIFI_PAGE_ALLOC_SKB */
 #ifndef NET_SKB_PAD
 #define NET_SKB_PAD	32
 #endif
@@ -835,6 +860,53 @@ void linux_pci_unmap_single(void *handle, ra_dma_addr_t dma_addr, size_t size, i
 			MEM_DBG_PKT_ALLOC_INC(_Pkt);	\
 		};
 #endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,5,0))
+#define CONFIG_WIFI_BUILD_SKB
+#define CONFIG_WIFI_PREFETCH_RXDATA
+#endif
+
+#define SKB_BUF_HEADROOM_RSV	(SKB_DATA_ALIGN(NET_IP_ALIGN) + SKB_DATA_ALIGN(NET_SKB_PAD))
+#define SKB_BUF_TAILROOM_RSV	(SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+
+#define SKB_BUF_HEADTAIL_RSV	(SKB_BUF_HEADROOM_RSV + SKB_BUF_TAILROOM_RSV)
+/* Need to do below miniume size protect for build_skb method, to avoid DATAABORT issue. */
+#define SKB_BUF_MINIMUN_SIZE	(1984)
+
+
+#ifdef  CONFIG_WIFI_BUILD_SKB
+#define DEV_ALLOC_FRAG(_Pkt, _length)		\
+		if (_length < SKB_BUF_MINIMUN_SIZE) {	\
+			_Pkt = netdev_alloc_frag(SKB_BUF_MINIMUN_SIZE);		\
+		} else {					\
+			_Pkt = netdev_alloc_frag(_length);\
+		}						\
+		if (_Pkt != NULL) {	\
+			MEM_DBG_PKT_ALLOC_INC(_Pkt);		\
+		};
+
+#define DEV_FREE_FRAG_BUF(_Pkt)		\
+		if (_Pkt != NULL) {	\
+			MEM_DBG_PKT_FREE_INC(_Pkt);		\
+			put_page(virt_to_head_page(_Pkt));	\
+		};
+
+#define DEV_BUILD_SKB(_Pkt, data_ptr, _length)				\
+		if ((_length) < (SKB_BUF_MINIMUN_SIZE - SKB_BUF_HEADTAIL_RSV)) {	\
+			_Pkt = build_skb(data_ptr, SKB_BUF_MINIMUN_SIZE);		\
+		} else {								\
+			_Pkt = build_skb(data_ptr, (_length + SKB_BUF_HEADTAIL_RSV));\
+		};
+
+#define DEV_SKB_PTR_ADJUST(_Pkt, _length, _buf_ptr)		\
+		if (_Pkt != NULL) {						\
+			MEM_DBG_PKT_FREE_INC(_buf_ptr);		\
+			skb_reserve((_Pkt), (SKB_BUF_HEADROOM_RSV)); 	\
+			skb_put((_Pkt), (_length));		\
+			MEM_DBG_PKT_ALLOC_INC(_Pkt);		\
+		};
+
+#endif //CONFIG_WIFI_BUILD_SKB
 
 /*#define PCI_MAP_SINGLE(_handle, _ptr, _size, _dir) (ULONG)0 */
 /*#define PCI_UNMAP_SINGLE(_handle, _ptr, _size, _dir) */
@@ -935,6 +1007,55 @@ do{                    \
 {																	\
 	writew(SWAP16((_V)), (PUSHORT)((_A)->PciHif.CSRBaseAddress + (_R)));	\
 }
+#elif defined(PLATFORM_M_STB)
+#define RTMP_IO_READ32(_A, _R, _pV)									\
+do{																	\
+    if ((_A)->bPCIclkOff == FALSE)                                  \
+    {                                                               \
+		(pci_read_config_dword(((POS_COOKIE)(_A->OS_Cookie))->pci_dev, _R + 0x80000000, _pV));	\
+    }                                                               \
+    else															\
+		*(_pV) = 0;													\
+}while(0)
+
+#define _RTMP_IO_WRITE32(_A, _R, _V) 								\
+do{ 																\
+	if ((_A)->bPCIclkOff == FALSE) 									\
+		(pci_write_config_dword(((POS_COOKIE)(_A->OS_Cookie))->pci_dev, _R + 0x80000000, _V));	\
+}while(0)
+
+#define RTMP_IO_READ16(_A, _R, _pV)									\
+do{ 																\
+	if ((_A)->bPCIclkOff == FALSE)									\
+	{																\
+		(pci_read_config_word(((POS_COOKIE)(_A->OS_Cookie))->pci_dev, _R + 0x80000000, _pV));	\
+	}																\
+	else															\
+		*(_pV) = 0; 												\
+}while(0)
+
+#define RTMP_IO_WRITE16(_A, _R, _V) 								\
+do{ 																\
+	if ((_A)->bPCIclkOff == FALSE) 									\
+		(pci_write_config_word(((POS_COOKIE)(_A->OS_Cookie))->pci_dev, _R + 0x80000000, _V));	\
+}while(0)
+
+#define RTMP_IO_READ8(_A, _R, _pV)									\
+do{ 																\
+	if ((_A)->bPCIclkOff == FALSE)									\
+	{																\
+		(pci_read_config_byte(((POS_COOKIE)(_A->OS_Cookie))->pci_dev, _R + 0x80000000, _pV));	\
+	}																\
+	else															\
+		*(_pV) = 0; 												\
+}while(0)
+
+#define RTMP_IO_WRITE8(_A, _R, _V) 									\
+do{ 																\
+	if ((_A)->bPCIclkOff == FALSE) 									\
+		(pci_write_config_byte(((POS_COOKIE)(_A->OS_Cookie))->pci_dev, _R + 0x80000000, _V));	\
+}while(0)
+
 #else
 #define RTMP_IO_READ32(_A, _R, _pV)								\
 do{																\
@@ -1185,20 +1306,16 @@ do {	\
 #define SET_OS_PKT_LEN(_pkt, _len)	\
 		(RTPKT_TO_OSPKT(_pkt)->len) = (_len)
 
-#ifdef NET_SKBUFF_DATA_USES_OFFSET
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,22))
 #define GET_OS_PKT_DATATAIL(_pkt) \
 		skb_tail_pointer(RTPKT_TO_OSPKT(_pkt))
+#define SET_OS_PKT_DATATAIL(_pkt, _len)	\
+		skb_set_tail_pointer(RTPKT_TO_OSPKT(_pkt), _len)
 #else
 #define GET_OS_PKT_DATATAIL(_pkt) \
 		(RTPKT_TO_OSPKT(_pkt)->tail)
-#endif
-
-#ifdef NET_SKBUFF_DATA_USES_OFFSET
-#define SET_OS_PKT_DATATAIL(_pkt, _start, _len)	\
-		skb_set_tail_pointer(RTPKT_TO_OSPKT(_pkt), _len)
-#else
-#define SET_OS_PKT_DATATAIL(_pkt, _start, _len)	\
-		((RTPKT_TO_OSPKT(_pkt))->tail) = (PUCHAR)((_start) + (_len))
+#define SET_OS_PKT_DATATAIL(_pkt, _len)	\
+		((RTPKT_TO_OSPKT(_pkt))->tail) = (PUCHAR)(((RTPKT_TO_OSPKT(_pkt))->data) + (_len))
 #endif
 
 #define GET_OS_PKT_HEAD(_pkt) \
@@ -1224,9 +1341,8 @@ do {	\
                     _newSkb = skb_copy(RTPKT_TO_OSPKT(_pkt), GFP_ATOMIC);  \
                     if (_newSkb != NULL) {MEM_DBG_PKT_ALLOC_INC(_newSkb);};
 
-#define OS_PKT_TAIL_ADJUST(_pkt, _removedTagLen)								\
-	SET_OS_PKT_DATATAIL(_pkt, GET_OS_PKT_DATATAIL(_pkt), (-_removedTagLen));	\
-	GET_OS_PKT_LEN(_pkt) -= _removedTagLen;
+#define OS_PKT_TAIL_ADJUST(_pkt, _removedTagLen)							\
+	skb_trim(RTPKT_TO_OSPKT(_pkt), GET_OS_PKT_LEN(_pkt) - _removedTagLen)
 
 #define OS_PKT_HEAD_BUF_EXTEND(_pkt, _offset)								\
 	skb_push(RTPKT_TO_OSPKT(_pkt), _offset)
@@ -1244,7 +1360,7 @@ do {	\
 	SET_OS_PKT_NETDEV(__pRxPkt, __pNetDev);									\
 	SET_OS_PKT_DATAPTR(__pRxPkt, __pData);									\
 	SET_OS_PKT_LEN(__pRxPkt, __DataSize);									\
-	SET_OS_PKT_DATATAIL(__pRxPkt, __pData, __DataSize);						\
+	SET_OS_PKT_DATATAIL(__pRxPkt, __DataSize);								\
 }
 
 #define OS_PKT_CLONE(_pAd, _pkt, _src, _flag)		\
@@ -1285,7 +1401,7 @@ extern void (*ppe_dev_unregister_hook) (VOID  *dev);
 #endif
 #endif /* CONFIG_RAETH */
 
-#if defined (CONFIG_WIFI_PKT_FWD)
+#if defined(CONFIG_WIFI_PKT_FWD) || defined(CONFIG_WIFI_PKT_FWD_MODULE)
 struct APCLI_BRIDGE_LEARNING_MAPPING_STRUCT {
 	struct net_device *rcvd_net_dev;
 	unsigned char	src_addr[ETH_ALEN];
@@ -1304,7 +1420,11 @@ extern int (*wf_fwd_tx_hook) (struct sk_buff *skb);
 extern int (*wf_fwd_rx_hook) (struct sk_buff *skb);
 extern unsigned char (*wf_fwd_entry_insert_hook) (struct net_device *src, struct net_device *dest, void *adapter);
 extern unsigned char (*wf_fwd_entry_delete_hook) (struct net_device *src, struct net_device *dest, unsigned char link_down);
+
+extern void (*wf_fwd_check_device_hook) ( struct net_device *net_dev, signed int type, signed int mbss_idx, unsigned char channel, unsigned char link);
+
 extern void (*wf_fwd_set_cb_num) (unsigned int band_cb_num, unsigned int receive_cb_num);
+extern bool (*wf_fwd_check_active_hook) (void);
 
 extern void (*wf_fwd_get_rep_hook) (unsigned char idx);
 extern void (*wf_fwd_pro_active_hook) (void);
@@ -1319,13 +1439,18 @@ extern void (*wf_fwd_show_entry_hook) (void);
 extern void (*wf_fwd_delete_entry_hook) (unsigned char idx);
 extern void (*packet_source_show_entry_hook) (void);
 extern void (*packet_source_delete_entry_hook) (unsigned char idx);
-extern void (*wf_fwd_feedback_map_table) (void *adapter, void *peer, void *opp_peer);
+extern void (*wf_fwd_feedback_map_table) (void *adapter, void *peer, void *opp_peer, void *oth_peer);
 extern void (*wf_fwd_probe_adapter) (void *adapter);
+extern void (*wf_fwd_probe_apcli_device_hook) (void *device);
 extern void (*wf_fwd_insert_bridge_mapping_hook) (struct sk_buff *skb);
-extern void (*wf_fwd_insert_repeater_mapping_hook) (void *adapter, void *lock, void *cli_mapping, void *map_mapping, void *ifAddr_mapping);
+extern void (*wf_fwd_insert_repeater_mapping_hook) (void *apcli_device, void *lock, void *cli_mapping, void *map_mapping, void *ifAddr_mapping);
 extern int (*wf_fwd_search_mapping_table_hook) (struct sk_buff *skb, struct APCLI_BRIDGE_LEARNING_MAPPING_STRUCT **tbl_entry);
 extern void (*wf_fwd_delete_entry_inform_hook) (unsigned char *addr);
 extern bool (*wf_fwd_needed_hook) (void);
+extern void (*wf_fwd_add_entry_inform_hook) (unsigned char *addr);
+
+
+extern void (*wf_fwd_probe_dev_hook) (struct net_device *net_dev_p );
 #endif /* CONFIG_WIFI_PKT_FWD */
 
 void RTMP_GetCurrentSystemTime(LARGE_INTEGER *time);
@@ -1723,6 +1848,9 @@ void __exit rt_pci_cleanup_module(void);
 
 int multi_inf_adapt_reg(VOID *pAd);
 int multi_inf_get_idx(VOID *pAd);
+#ifdef INTELP6_SUPPORT
+struct pci_dev* rtmp_get_pci_dev(void *pAd);
+#endif
 #endif /* MULTI_INF_SUPPORT */
 
 struct device* rtmp_get_dev(void *ad);

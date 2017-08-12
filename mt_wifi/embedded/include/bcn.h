@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -26,11 +27,10 @@
     --------    ----------    ----------------------------------------------
     Carter      2014-1121     Created.
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __BCN_H__
 #define __BCN_H__
 
-#include "rt_config.h"
 
 #define MAX_BEACON_LENGTH       (sizeof(HEADER_802_11) + \
                                     TIMESTAMP_FIELD_LEN + \
@@ -76,7 +76,8 @@ INT bcn_buf_init(RTMP_ADAPTER *pAd, struct wifi_dev *wdev);
 INT clearHwBcnTxMem(RTMP_ADAPTER *pAd);
 
 ULONG ComposeBcnPktHead(RTMP_ADAPTER *pAd, struct wifi_dev *wdev, UCHAR *pBeaconFrame);
-VOID BcnCheck(RTMP_ADAPTER *pAd);
+VOID dump_bcn_debug_info(RTMP_ADAPTER *pAd, UCHAR bandidx);
+VOID BcnCheck(RTMP_ADAPTER *pAd, UCHAR bandidx);
 
 #ifdef CONFIG_AP_SUPPORT
 INT BcnTimUpdate(RTMP_ADAPTER *pAd, struct wifi_dev *wdev, UCHAR *ptr);

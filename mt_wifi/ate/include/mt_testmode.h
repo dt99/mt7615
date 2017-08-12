@@ -25,6 +25,11 @@ enum {
 	ATE_RANDOM_PAYLOAD,
 };
 
+typedef struct _ATE_DATA_RATE_MAP {
+    UCHAR   mcs;            /* MCS index */
+    UINT32  tx_data_rate;   /* Data rate in K Bit */
+} ATE_DATA_RATE_MAP;
+
 typedef struct _ATE_ANT_MAP {
 	UINT32 ant_sel;
 	UINT32 spe_idx;
@@ -54,9 +59,9 @@ typedef struct _ATE_CH_KHZ_MAP {
 #define BAND_WIDTH_80		2
 #define BAND_WIDTH_160		3
 #define BAND_WIDTH_10		4	/* 802.11j has 10MHz. This definition is for internal usage. doesn't fill in the IE or other field. */
-#define BAND_WIDTH_BOTH	5	/* BW20 + BW40 */
+#define BAND_WIDTH_BOTH     5	/* BW20 + BW40 */
 #define BAND_WIDTH_5		6
-#define BAND_WIDTH_8080    7
+#define BAND_WIDTH_8080     7
 
 #define TX1_G_BAND_TARGET_PWR 0x5E
 #define TX0_G_BAND_TARGET_PWR 0x58
@@ -69,7 +74,7 @@ enum {
 #define TESTMODE_GET_PARAM(_pstruct, _band, _member) (_pstruct->_member)
 #define TESTMODE_SET_PARAM(_pstruct, _band, _member, _val) (_pstruct->_member = _val)
 #ifndef COMPOS_TESTMODE_WIN//NDIS only
-#define MAC_ADDR_LEN 6
+#define MAC_ADDR_LEN    6
 // 2-byte Frame control field
 typedef	struct	{
 	UINT16		Ver:2;				// Protocol version
@@ -153,8 +158,8 @@ INT32 MT_ATETxControl(struct _RTMP_ADAPTER *pAd, UINT32 band_idx, PNDIS_PACKET p
 VOID MT_ATEUpdateRxStatistic(struct _RTMP_ADAPTER *pAd, TESTMODE_STAT_TYPE type, VOID *data);
 INT Mt_TestModeInsertPeer(struct _RTMP_ADAPTER *pAd, UINT32 band_ext, CHAR *da, CHAR *sa, CHAR *bss);
 INT32 MT_ATETxPkt(struct _RTMP_ADAPTER *pAd, UINT32 band_idx);	//Export for Loopback
-UINT8 MT_ATEGetBandIdxByIf(struct _RTMP_ADAPTER *pAd);
-UINT8 MT_ATEGetWDevIdxByBand(struct _RTMP_ADAPTER *pAd, UINT32 band_idx);
+INT8 MT_ATEGetBandIdxByIf(struct _RTMP_ADAPTER *pAd);
+INT8 MT_ATEGetWDevIdxByBand(struct _RTMP_ADAPTER *pAd, UINT32 band_idx);
 INT MtATESetMacTxRx(struct _RTMP_ADAPTER *pAd, INT32 TxRx, BOOLEAN Enable,UCHAR BandIdx);
 INT MtATESetTxStream(struct _RTMP_ADAPTER *pAd, UINT32 StreamNums, UCHAR BandIdx);
 INT MtATESetRxPath(struct _RTMP_ADAPTER *pAd, UINT32 RxPathSel, UCHAR BandIdx);
@@ -168,10 +173,18 @@ INT32 MT_ATEInsertLog(struct _RTMP_ADAPTER *pAd, UCHAR *log, UINT32 log_type, UI
 INT MT_ATERxDoneHandle(struct _RTMP_ADAPTER *pAd, RX_BLK *pRxBlk);
 #endif
 INT32 MtATERSSIOffset(struct _RTMP_ADAPTER *pAd, INT32 RSSI_org, UINT32 RSSI_idx, INT32 Ch_Band);
-#ifdef CAL_TO_FLASH_SUPPORT
-INT MtATE_DPD_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
-INT MtATE_DCOC_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
-#endif /* CAL_TO_FLASH_SUPPORT */
+#ifdef PRE_CAL_TRX_SET1_SUPPORT
+INT MtATE_DPD_Cal_Store_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
+INT MtATE_DCOC_Cal_Store_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
+#endif /* PRE_CAL_TRX_SET1_SUPPORT */
+
+#ifdef PRE_CAL_TRX_SET2_SUPPORT
+INT MtATE_Pre_Cal_Proc(RTMP_ADAPTER *pAd, UINT8 CalId, UINT32 ChGrpId);
+#endif /* PRE_CAL_TRX_SET2_SUPPORT */
+
+#ifdef PA_TRIM_SUPPORT
+INT MtATE_PA_Trim_Proc(RTMP_ADAPTER *pAd, PUINT32 pData);
+#endif /* PA_TRIM_SUPPORT */
 
 #define MT_ATEInit( _pAd) ({		\
 	UINT32 _ret;					\

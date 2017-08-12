@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
     Who         When            What
     --------    ----------      ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #define RTMP_MODULE_OS
 
 #include "rtmp_comm.h"
@@ -236,6 +237,7 @@ static int rt_pci_resume(struct pci_dev *pci_dev)
 /*
 	PCI device probe & initialization function
 */
+int g_AdapCount = 0;
 static int DEVINIT rt_pci_probe(struct pci_dev *pdev, const struct pci_device_id *pci_id)
 {
 	void *pAd = NULL, *handle;
@@ -245,6 +247,7 @@ static int DEVINIT rt_pci_probe(struct pci_dev *pdev, const struct pci_device_id
 	int rv = 0;
 	RTMP_OS_NETDEV_OP_HOOK netDevHook;
 	unsigned long OpMode;
+	RT_CMD_PCIE_INIT pci_config;
 
 	MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_TRACE, ("===> %s()\n", __FUNCTION__));
 
@@ -263,6 +266,25 @@ static int DEVINIT rt_pci_probe(struct pci_dev *pdev, const struct pci_device_id
 	print_name = pdev->slot_name;
 #endif /* LINUX_VERSION_CODE */
 
+#if defined(PLATFORM_M_STB)
+	if (IS_ENABLED(CONFIG_ARM64) && (!IS_ENABLED(CONFIG_ZONE_DMA)))
+	{
+		if ((rv = pci_set_dma_mask(pdev, DMA_BIT_MASK(64))) != 0)
+		{
+			MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_ERROR,
+					 ("set DMA mask failed!errno=%d\n", rv));
+			return rv;
+		}
+
+		if ((rv = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(64))) != 0)
+		{
+			MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_ERROR,
+					 ("set DMA consistent mask failed!errno=%d\n", rv));
+			return rv;
+		}
+	}
+	else
+#endif
 	if ((rv = pci_set_dma_mask(pdev, DMA_BIT_MASK(32))) != 0)
 	{
 		MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_ERROR,
@@ -327,7 +349,9 @@ static int DEVINIT rt_pci_probe(struct pci_dev *pdev, const struct pci_device_id
 
 	RTMP_DRIVER_PCI_CSR_SET(pAd, csr_addr);
 
-	RTMP_DRIVER_PCIE_INIT(pAd, pdev);
+	RTMP_DRIVER_PCIE_INIT(pAd, &pci_config, pdev);
+	if (pci_config.pci_init_succeed != TRUE)
+		goto err_out_free_radev;
 
 /*NetDevInit============================================== */
 	net_dev = RtmpPhyNetDevInit(pAd, &netDevHook);
@@ -370,8 +394,17 @@ static int DEVINIT rt_pci_probe(struct pci_dev *pdev, const struct pci_device_id
 	RtmpOSNetDevAddrSet(OpMode, net_dev, &mac_addr[0], NULL);
 }
 #endif /* PRE_ASSIGN_MAC_ADDR */
+	g_AdapCount ++;
+	MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_OFF, ("pci probe count=%d\n", g_AdapCount));
 
 	MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_TRACE, ("<=%s()\n", __FUNCTION__));
+
+#ifdef VENDOR1_INITIALIZE_ALL_INTERFACE_AT_INIT
+#ifdef MBSS_SUPPORT
+	RT28xx_MBSS_Init(pAd, (PNET_DEV)net_dev);
+	MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_OFF, ("[ARRIS MOD] MT7615E MBSS Initialized\n"));
+#endif /* MBSS_SUPPORT */	
+#endif
 
 	return 0; /* probe ok */
 
@@ -418,13 +451,31 @@ err_out:
 
 static VOID DEVEXIT rt_pci_remove(struct pci_dev *pci_dev)
 {
-	PNET_DEV net_dev = pci_get_drvdata(pci_dev);
+#ifdef INTELP6_SUPPORT
+#ifdef MULTI_INF_SUPPORT
+static UINT16 pci_dev_count = MAX_NUM_OF_INF;
+while(pci_dev_count)
+{
+#endif
+#endif
+	PNET_DEV net_dev;
 	VOID *pAd = NULL;
-	ULONG csr_addr = net_dev->base_addr;
-
-
+	ULONG csr_addr;
+#ifdef INTELP6_SUPPORT	
+#ifdef MULTI_INF_SUPPORT
+	pci_dev_count--;
+	pAd = adapt_list[pci_dev_count];
+	if(pAd == NULL)
+		continue;
+	else
+		pci_dev = rtmp_get_pci_dev(pAd);
+#endif
+#endif
+	net_dev = pci_get_drvdata(pci_dev);
+	csr_addr = net_dev->base_addr;
+#ifndef INTELP6_SUPPORT
 	GET_PAD_FROM_NET_DEV(pAd, net_dev);
-	
+#endif	
 	MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_TRACE, ("===> %s()\n", __FUNCTION__));
 
 	if (pAd != NULL)
@@ -455,8 +506,15 @@ static VOID DEVEXIT rt_pci_remove(struct pci_dev *pci_dev)
 
 	/* Free the root net_device */
 	RtmpOSNetDevFree(net_dev);
+	g_AdapCount --;
+	MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_OFF, ("In remove, pci probe count=%d\n", g_AdapCount));
+#ifdef INTELP6_SUPPORT
+#ifdef MULTI_INF_SUPPORT
+	}
+#endif
+#endif
 #ifdef MEM_ALLOC_INFO_SUPPORT
-	{
+	if (g_AdapCount == 0) {
 		UINT32 memalctotal, pktalctotal;
 		memalctotal = ShowMemAllocInfo();
 		pktalctotal = ShowPktAllocInfo();

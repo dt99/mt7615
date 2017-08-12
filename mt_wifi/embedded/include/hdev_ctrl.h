@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	--------	----------  ----------------------------------------------
 	Name		Date	    Modification logs
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __HDEV_CTRL_H__
 #define __HDEV_CTRL_H__
 
@@ -45,7 +46,20 @@ INT32 HcUpdateChannel(struct _RTMP_ADAPTER *pAd, UCHAR Channel);
 INT32 HcUpdateRadio(struct _RTMP_ADAPTER *pAd,UCHAR bw,UCHAR central_ch1,UCHAR control_ch2);
 INT32 HcUpdateCsaCntByChannel(struct _RTMP_ADAPTER *pAd, UCHAR Channel);
 INT32 HcUpdatePhyMode(struct _RTMP_ADAPTER *pAd, UCHAR PhyMode);
+INT32 HcSetPhyMode(struct _RTMP_ADAPTER *pAd, UCHAR PhyMode);
 UCHAR HcGetBandByWdev(struct wifi_dev *wdev);
+VOID HcSetRadioCurStatByWdev(struct wifi_dev *wdev, PHY_STATUS CurStat);
+VOID HcSetRadioCurStatByChannel(RTMP_ADAPTER *pAd, UCHAR Channel, PHY_STATUS CurStat);
+VOID HcSetAllSupportedBandsRadioOff(RTMP_ADAPTER *pAd);
+VOID HcSetAllSupportedBandsRadioOn(RTMP_ADAPTER *pAd);
+BOOLEAN IsHcRadioCurStatOffByWdev(struct wifi_dev *wdev);
+BOOLEAN IsHcRadioCurStatOffByChannel(RTMP_ADAPTER *pAd, UCHAR Channel);
+BOOLEAN IsHcAllSupportedBandsRadioOff(RTMP_ADAPTER *pAd);
+#ifdef GREENAP_SUPPORT
+VOID HcSetGreenAPActiveByBand(struct _RTMP_ADAPTER *pAd, UCHAR BandIdx, BOOLEAN bGreenAPActive);
+BOOLEAN IsHcGreenAPActiveByBand(struct _RTMP_ADAPTER *pAd, UCHAR BandIdx);
+BOOLEAN IsHcGreenAPActiveByWdev(struct wifi_dev *wdev);
+#endif /* GREENAP_SUPPORT */
 UCHAR HcGetChannelByBf(struct _RTMP_ADAPTER *pAd);
 BOOLEAN HcIsRadioAcq(struct wifi_dev *wdev);
 BOOLEAN HcIsBfCapSupport(struct wifi_dev *wdev);
@@ -67,7 +81,7 @@ UCHAR HcHwReleaseWcid(struct _RTMP_ADAPTER *pAd,UCHAR idx);
 VOID HcWtblRecDump(struct _RTMP_ADAPTER *pAd);
 
 VOID RxTrackingInit(struct wifi_dev *wdev);
-VOID TaTidRecAndCmp(struct _RTMP_ADAPTER *pAd, struct _RXD_BASE_STRUCT *rx_base, UINT16 SN);
+VOID TaTidRecAndCmp(struct _RTMP_ADAPTER *pAd, struct _RXD_BASE_STRUCT *rx_base, UINT16 SN, UCHAR Tid);
 
 
 #ifdef DBDC_MODE
@@ -96,6 +110,7 @@ UCHAR HcGetOmacIdx(struct _RTMP_ADAPTER *pAd, struct wifi_dev *wdev);
 UCHAR HcGetChannelByRf(struct _RTMP_ADAPTER *pAd, UCHAR RfIC);
 UCHAR  HcGetCentralChByRf(struct _RTMP_ADAPTER *pAd,UCHAR RfIC);
 UCHAR HcGetPhyModeByRf(struct _RTMP_ADAPTER *pAd, UCHAR RfIC);
+CHAR HcGetBwByRf(struct _RTMP_ADAPTER *pAd,UCHAR RfIC);
 UCHAR HcGetRadioPhyMode(struct _RTMP_ADAPTER *pAd);
 UCHAR HcGetRadioChannel(struct _RTMP_ADAPTER *pAd);
 BOOLEAN  HcIsRfSupport(struct _RTMP_ADAPTER *pAd,UCHAR RfIC);
@@ -128,5 +143,9 @@ INT32 HcDelRepeaterEntry(struct wifi_dev *wdev, UINT32 ReptIdx);
 UCHAR HcGetRepeaterOmac(struct _RTMP_ADAPTER *pAd,struct _MAC_TABLE_ENTRY *pEntry);
 #endif /*#MAC_REPEATER_SUPPORT*/
 UCHAR HcGetAmountOfBand(struct _RTMP_ADAPTER *pAd);
+INT32 HcUpdateMSDUTxAllowByChannel(RTMP_ADAPTER *pAd,UCHAR Channel);
+INT32 HcSuspendMSDUTxByChannel(RTMP_ADAPTER *pAd,UCHAR Channel);
+
+INT hc_radio_acquire(struct wifi_dev *wdev,UCHAR bw,UCHAR ext_cha);
 
 #endif /*__HDEV_CTRL_H__*/

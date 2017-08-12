@@ -4,7 +4,7 @@
 /*! \file   "txbf_wrapper_embedded.c"
     \brief
 */
-
+#ifdef MTK_LICENSE
 /*******************************************************************************
 * Copyright (c) 2014 MediaTek Inc.
 *
@@ -46,7 +46,7 @@
 * (ICC).
 ********************************************************************************
 */
-
+#endif /* MTK_LICENSE */
 /*
 ** $Log: txbf_wrapper_embedded.c $
 **
@@ -127,8 +127,21 @@ VOID mt_WrapTxBFInit(
     TXBF_MAC_TABLE_ENTRY TxBfMacEntry; 
     TXBF_STATUS_INFO  TxBfInfo;
     HT_BF_CAP *pTxBFCap = &ie_list->HTCapability.TxBFCap;
+    UCHAR TxStream;
 
-    TxBfInfo.ucTxPathNum = pAd->Antenna.field.TxPath;
+	if (pAd->CommonCfg.dbdc_mode)
+	{
+		UCHAR band_idx = HcGetBandByWdev(pEntry->wdev);
+
+		if (band_idx == DBDC_BAND0)
+			TxStream = pAd->dbdc_2G_tx_stream;
+		else
+			TxStream = pAd->dbdc_5G_tx_stream;
+	} else {
+		TxStream = pAd->Antenna.field.TxPath;
+	}
+
+    TxBfInfo.ucTxPathNum = TxStream;
     TxBfInfo.ucETxBfTxEn = (UCHAR) pAd->CommonCfg.ETxBfEnCond;
     TxBfInfo.cmmCfgETxBfNoncompress = pAd->CommonCfg.ETxBfNoncompress;
     TxBfInfo.ucITxBfTxEn = pAd->CommonCfg.RegTransmitSetting.field.ITxBfEn;
@@ -195,14 +208,28 @@ BOOLEAN mt_Wrap_chk_itxbf_calibration(
 */
 void mt_WrapSetETxBFCap(
     IN  RTMP_ADAPTER      *pAd,
+    IN  struct wifi_dev   *wdev,
     IN  HT_BF_CAP         *pTxBFCap)
 {
     TXBF_STATUS_INFO   TxBfInfo;
-    
+    UCHAR RxStream;
+
+	if (pAd->CommonCfg.dbdc_mode)
+	{
+		UCHAR band_idx = HcGetBandByWdev(wdev);
+
+		if (band_idx == DBDC_BAND0)
+			RxStream = pAd->dbdc_2G_rx_stream;
+		else
+			RxStream = pAd->dbdc_5G_rx_stream;
+	} else {
+		RxStream = pAd->Antenna.field.RxPath;
+	}
+
     TxBfInfo.pHtTxBFCap = pTxBFCap;
     TxBfInfo.cmmCfgETxBfEnCond= pAd->CommonCfg.ETxBfEnCond;
     TxBfInfo.cmmCfgETxBfNoncompress= pAd->CommonCfg.ETxBfNoncompress;
-    TxBfInfo.ucRxPathNum = pAd->Antenna.field.RxPath;
+    TxBfInfo.ucRxPathNum = RxStream;
 
     pAd->chipOps.setETxBFCap(pAd, &TxBfInfo);
 
@@ -214,12 +241,26 @@ void mt_WrapSetETxBFCap(
 */
 void mt_WrapSetVHTETxBFCap(
     IN  RTMP_ADAPTER *pAd,
+    IN  struct wifi_dev *wdev,
     IN  VHT_CAP_INFO *pTxBFCap)
 {
     TXBF_STATUS_INFO   TxBfInfo;
+    UCHAR TxStream;
+
+	if (pAd->CommonCfg.dbdc_mode)
+	{
+		UCHAR band_idx = HcGetBandByWdev(wdev);
+
+		if (band_idx == DBDC_BAND0)
+			TxStream = pAd->dbdc_2G_tx_stream;
+		else
+			TxStream = pAd->dbdc_5G_tx_stream;
+	} else {
+		TxStream = pAd->Antenna.field.TxPath;
+	}
 
     TxBfInfo.pVhtTxBFCap = pTxBFCap;
-    TxBfInfo.ucTxPathNum = pAd->CommonCfg.TxStream;
+    TxBfInfo.ucTxPathNum = TxStream;
     TxBfInfo.cmmCfgETxBfEnCond= pAd->CommonCfg.ETxBfEnCond;    
     
     pAd->chipOps.setVHTETxBFCap(pAd,&TxBfInfo);

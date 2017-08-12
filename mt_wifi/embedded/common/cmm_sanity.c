@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
 	--------	----------		----------------------------------------------
 	John Chang  2004-09-01      add WMM support
 */
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 #ifdef DOT11R_FT_SUPPORT
 #include "ft.h"
@@ -271,12 +273,13 @@ BOOLEAN PeerBeaconAndProbeRspSanity(
 	OUT BCN_IE_LIST *ie_list,
 	OUT USHORT *LengthVIE,	
 	OUT PNDIS_802_11_VARIABLE_IEs pVIE,
-	IN BOOLEAN bGetDtim)
+	IN BOOLEAN bGetDtim,
+	IN BOOLEAN bFromBeaconReport)
 {
 	UCHAR *Ptr;
 	PFRAME_802_11 pFrame;
 	PEID_STRUCT pEid;
-	UCHAR SubType;
+	UCHAR SubType = SUBTYPE_ASSOC_REQ;
 	UCHAR Sanity;
 	ULONG Length = 0;
 	UCHAR *pPeerWscIe = NULL;
@@ -284,7 +287,6 @@ BOOLEAN PeerBeaconAndProbeRspSanity(
 	BOOLEAN bWscCheck = TRUE;
 	UCHAR LatchRfChannel = 0;
     UCHAR *ptr_eid = NULL;
-	UCHAR Channel5G = HcGetChannelByRf(pAd,RFIC_5GHZ);
 
 	/*
 		For some 11a AP which didn't have DS_IE, we use two conditions to decide the channel
@@ -301,21 +303,31 @@ BOOLEAN PeerBeaconAndProbeRspSanity(
 	ie_list->AironetCellPowerLimit = 0xFF;  /* Default of AironetCellPowerLimit is 0xFF*/
 	ie_list->NewExtChannelOffset = 0xff;	/*Default 0xff means no such IE*/
 	*LengthVIE = 0; /* Set the length of VIE to init value 0*/
-	
-	pFrame = (PFRAME_802_11)Msg;
-    
-	/* get subtype from header*/
-	SubType = (UCHAR)pFrame->Hdr.FC.SubType;
 
-    /* get Addr2 and BSSID from header*/
-    COPY_MAC_ADDR(&ie_list->Addr2[0], pFrame->Hdr.Addr2);
-    COPY_MAC_ADDR(&ie_list->Bssid[0], pFrame->Hdr.Addr3);
+	if (bFromBeaconReport == FALSE)
+	{
+		pFrame = (PFRAME_802_11)Msg;
 
-    Ptr = pFrame->Octet;
-    Length += LENGTH_802_11;
-    
-    /* get timestamp from payload and advance the pointer*/
-    NdisMoveMemory(&ie_list->TimeStamp, Ptr, TIMESTAMP_LEN);
+		/* get subtype from header*/
+		SubType = (UCHAR)pFrame->Hdr.FC.SubType;
+
+		/* get Addr2 and BSSID from header*/
+		COPY_MAC_ADDR(&ie_list->Addr2[0], pFrame->Hdr.Addr2);
+		COPY_MAC_ADDR(&ie_list->Bssid[0], pFrame->Hdr.Addr3);
+
+		Ptr = pFrame->Octet;
+		Length += LENGTH_802_11;
+	}
+	else
+	{
+		// beacon report response's body have no 802.11 header part!
+		SubType = 255; //beacon report can't get SubType init 255		
+		Ptr = (UINT8*)Msg;
+		pFrame = NULL; //init.
+	}
+
+	/* get timestamp from payload and advance the pointer*/
+	NdisMoveMemory(&ie_list->TimeStamp, Ptr, TIMESTAMP_LEN);
 
 	ie_list->TimeStamp.u.LowPart = cpu2le32(ie_list->TimeStamp.u.LowPart);
 	ie_list->TimeStamp.u.HighPart = cpu2le32(ie_list->TimeStamp.u.HighPart);
@@ -514,6 +526,15 @@ BOOLEAN PeerBeaconAndProbeRspSanity(
 		case IE_VENDOR_SPECIFIC:
 			/* Check the OUI version, filter out non-standard usage*/
             check_vendor_ie(pAd, (UCHAR *)pEid, &(ie_list->vendor_ie));
+#ifdef CUSTOMER_DCC_FEATURE
+			 if (((pEid->Len >= 3)) &&  !NdisEqualMemory(pEid->Octet, FILTER_OUI, 3))
+			 {            	
+			 	if (ie_list->VendorID0[0] == 0x0 && ie_list->VendorID0[1] == 0x0 && ie_list->VendorID0[2] == 0x0)
+					NdisMoveMemory(ie_list->VendorID0, pEid->Octet, 3);
+				else if ((!NdisEqualMemory(pEid->Octet, ie_list->VendorID0, 3)) && (ie_list->VendorID1[0] == 0x0 && ie_list->VendorID1[1] == 0x0 && ie_list->VendorID1[2] == 0x0))
+					NdisMoveMemory(ie_list->VendorID1, pEid->Octet, 3);	
+			 }
+#endif			
 			if (NdisEqualMemory(pEid->Octet, WPA_OUI, 4))
 			{
 				/* Copy to pVIE which will report to bssid list.*/
@@ -740,7 +761,7 @@ BOOLEAN PeerBeaconAndProbeRspSanity(
 			}
 			break;
 		case IE_OPERATING_MODE_NOTIFY:
-			if (pEid->Len == sizeof(OPERATING_MODE)) {
+			if (pEid->Len == sizeof(OPERATING_MODE) && (bFromBeaconReport == FALSE)) {
 #ifdef CONFIG_AP_SUPPORT
 				MAC_TABLE_ENTRY *pEntry = MacTableLookup(pAd, pFrame->Hdr.Addr2);
 #endif
@@ -792,16 +813,17 @@ BOOLEAN PeerBeaconAndProbeRspSanity(
 	if ((LatchRfChannel > 14) && ((Sanity & 0x4) == 0))
 #endif /* !CONFIG_MULTI_CHANNEL */
 	{
+		UCHAR bw = HcGetBwByRf(pAd,RFIC_5GHZ);
 		if (CtrlChannel != 0)
 			ie_list->Channel = CtrlChannel;
 		else {
-			if (pAd->CommonCfg.RegTransmitSetting.field.BW == BW_40
+			if (bw == BW_40
 #ifdef DOT11_VHT_AC
-				|| pAd->CommonCfg.RegTransmitSetting.field.BW == BW_80
+				|| bw == BW_80
 #endif /* DOT11_VHT_AC */
 			) {
 				{
-					ie_list->Channel = Channel5G;
+					ie_list->Channel = LatchRfChannel;
 				}
 			}
 			else
@@ -827,15 +849,22 @@ SanityCheck:
 
 	if ((Sanity != 0x7) || ( bWscCheck == FALSE))
 	{
-		MTWF_LOG(DBG_CAT_MLME, DBG_SUBCAT_ALL, DBG_LVL_LOUD, ("%s() - missing field, Sanity=0x%02x\n", __FUNCTION__, Sanity));
-		return FALSE;
+		if (((bFromBeaconReport == FALSE) && (Sanity != 0x7)) //case 1:
+			|| ((bFromBeaconReport == TRUE) && (!(Sanity & 0x1))) //case 2:
+			|| ( bWscCheck == FALSE) // case 3
+			)
+		{
+			MTWF_LOG(DBG_CAT_MLME, DBG_SUBCAT_ALL, DBG_LVL_LOUD, ("%s() - missing field, Sanity=0x%02x, bWscCheck=%d\n", __FUNCTION__, Sanity,bWscCheck));
+			return FALSE;
+		}
 	}
 	else
 	{
-		return TRUE;
 	}
-}
 
+	return TRUE;
+	
+}
 
 #ifdef DOT11N_DRAFT3
 /* 
@@ -942,7 +971,15 @@ BOOLEAN MlmeScanReqSanity(
 	OUT UCHAR *pBssType, 
 	OUT CHAR Ssid[], 
 	OUT UCHAR *pSsidLen, 
-	OUT UCHAR *pScanType) 
+	OUT UCHAR *pScanType
+#ifdef CONFIG_AP_SUPPORT
+#ifdef CUSTOMER_DCC_FEATURE
+	,
+	OUT UINT	*pChannel,
+	OUT UINT	*pTimeout 
+#endif
+#endif					
+						) 	
 {
 	MLME_SCAN_REQ_STRUCT *Info;
 
@@ -951,6 +988,12 @@ BOOLEAN MlmeScanReqSanity(
 	*pSsidLen = Info->SsidLen;	
 	NdisMoveMemory(Ssid, Info->Ssid, *pSsidLen);
 	*pScanType = Info->ScanType;
+#ifdef CONFIG_AP_SUPPORT
+#ifdef CUSTOMER_DCC_FEATURE
+	*pChannel = Info->Channel;
+	*pTimeout = Info->Timeout;
+#endif
+#endif
 
 	if ((*pBssType == BSS_INFRA || *pBssType == BSS_ADHOC || *pBssType == BSS_ANY)
 		&& (SCAN_MODE_VALID(*pScanType))
@@ -1408,11 +1451,24 @@ BOOLEAN PeerProbeReqSanity(
 				break;
 #ifdef BAND_STEERING
 			case IE_HT_CAP:
+				if (pAd->ApCfg.BandSteering != TRUE)
+					break;
 				if (eid_len >= SIZE_HT_CAP_IE)
+				{
 					ProbeReqParam->IsHtSupport = TRUE;
+					ProbeReqParam->RxMCSBitmask = *(UINT32 *)(eid_data + 3);
+				}
 				else
 					MTWF_LOG(DBG_CAT_MLME, DBG_SUBCAT_ALL, DBG_LVL_WARN, ("%s() - wrong IE_HT_CAP. eid_len = %d\n", __FUNCTION__, eid_len));
-				
+				break;			
+
+			case IE_VHT_CAP:
+				if (pAd->ApCfg.BandSteering != TRUE)
+					break;
+				if (eid_len >= SIZE_OF_VHT_CAP_IE)
+					ProbeReqParam->IsVhtSupport = TRUE;
+				else
+					MTWF_LOG(DBG_CAT_MLME, DBG_SUBCAT_ALL, DBG_LVL_WARN, ("%s() - wrong IE_VHT_CAP. eid_len = %d\n", __FUNCTION__, eid_len));
 				break;			
 #endif
             default:

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -22,9 +23,14 @@
     Who          When          What
     ---------    ----------    ----------------------------------------------
  */
-
+#endif /* MTK_LICENSE */
 #include	"rt_config.h"
 
+#ifdef VENDOR_FEATURE6_SUPPORT
+#ifdef WSC_INCLUDED
+#include "arris_wps_gpio_handler.h"
+#endif
+#endif
 #ifdef LED_CONTROL_SUPPORT
 
 #ifdef CONFIG_ANDES_SUPPORT
@@ -553,6 +559,9 @@ INT RTMPSetLED(RTMP_ADAPTER *pAd, UCHAR Status)
 	if (IS_PCI_INF(pAd) || IS_RBUS_INF(pAd))
 	{
 #ifdef LED_CONTROL_SUPPORT
+#ifdef CONFIG_INIT_RADIO_ONOFF	//avoid setting LED status in case radio is off
+	if(pAd->ApCfg.bRadioOn)
+#endif
 		RTMPSetLEDStatus(pAd, Status);
 #endif /* LED_CONTROL_SUPPORT */
 	}

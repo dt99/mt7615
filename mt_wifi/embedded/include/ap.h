@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
     Who         When          What
     --------    ----------    ----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #ifndef __AP_H__
 #define __AP_H__
 
@@ -33,9 +35,21 @@
 #endif /* DOT11R_FT_SUPPORT */
 
 #define INFRA_TP_PEEK_BOUND_THRESHOLD 50
-#define BYTES_PER_SEC_TO_MBPS	17
-#define TX_MODE_RATIO_THRESHOLD	70
+#define VERIWAVE_TP_PEEK_BOUND_TH 30
+#define VERIWAVE_2G_PKT_CNT_TH 100
+#define VERIWAVE_5G_PKT_CNT_TH 200
+#define BYTES_PER_SEC_TO_MBPS 17
+#define TX_MODE_RATIO_THRESHOLD 70
 #define STA_NUMBER_FOR_TRIGGER                1
+#define MULTI_CLIENT_NUMS_TH 16
+#define MULTI_CLIENT_2G_NUMS_TH 16
+#define INFRA_KEEP_STA_PKT_TH 10
+#define VERIWAVE_TP_AMSDU_DIS_TH 1400
+#define VERIWAVE_2G_TP_AMSDU_DIS_TH 1024
+#define VERIWAVE_PER_RTS_DIS_TH 3
+#define VERIWAVE_PKT_LEN_LOW 60
+#define VERIWAVE_INVALID_PKT_LEN_HIGH 2000
+#define VERIWAVE_INVALID_PKT_LEN_LOW 64
 
 /* ============================================================= */
 /*      Common definition */
@@ -60,6 +74,16 @@
 	}																	\
 }
 
+#ifdef CUSTOMER_RSG_FEATURE
+#define TIMESTAMP_GET(__pAd, __TimeStamp)			\
+	{													\
+		UINT32 tsf_l=0, tsf_h=0; UINT64 __Value64;				\
+		AsicGetTsfTime((__pAd), &tsf_h, &tsf_l);\
+		__TimeStamp = (UINT64)tsf_l;					\
+		__Value64 = (UINT64)tsf_h;						\
+		__TimeStamp |= (tsf_h << 32);				\
+	}	
+#endif
 
 typedef struct _AUTH_FRAME_INFO{
 	UCHAR addr1[MAC_ADDR_LEN];
@@ -183,6 +207,49 @@ VOID ApSiteSurvey_by_wdev(
 	IN	BOOLEAN				ChannelSel,
 	IN  struct wifi_dev 	*wdev);
 
+#if defined(CUSTOMER_RSG_FEATURE) || defined (CUSTOMER_DCC_FEATURE)
+VOID Update_Wtbl_Counters(
+	IN PRTMP_ADAPTER   pAd);
+
+#endif
+#ifdef CUSTOMER_RSG_FEATURE
+VOID UpdateRadioStatCounters(
+	IN PRTMP_ADAPTER   	pAd);
+
+VOID ReadChannelStats(
+	IN PRTMP_ADAPTER 	pAd);
+
+VOID ClearChannelStatsCr(
+	IN PRTMP_ADAPTER  	pAd);
+
+VOID ResetChannelStats(
+	IN PRTMP_ADAPTER 	pAd);
+
+#endif
+#ifdef CUSTOMER_DCC_FEATURE
+VOID GetTxRxActivityTime(
+	IN PRTMP_ADAPTER   pAd,
+	IN UINT wcid);
+VOID RemoveOldStaList(
+	IN PRTMP_ADAPTER 	pAd);
+
+VOID APResetStreamingStatus(
+	IN PRTMP_ADAPTER  	pAd);
+UCHAR Channel2Index(   
+	IN PRTMP_ADAPTER 	pAd,
+	IN UCHAR 			channel);
+
+VOID ApSiteSurveyNew_by_wdev(
+	IN	PRTMP_ADAPTER  	pAd,
+	IN 	UINT			Channel,
+	IN  UINT 			Timeout,
+	IN	UCHAR			ScanType,
+	IN	BOOLEAN			ChannelSel,
+	IN  struct wifi_dev *wdev);
+
+VOID RemoveOldBssEntry(
+	IN PRTMP_ADAPTER 	pAd);
+#endif
 VOID SupportRate(
 	IN PUCHAR SupRate,
 	IN UCHAR SupRateLen,
@@ -232,13 +299,18 @@ VOID APAsicRxAntEvalTimeout(RTMP_ADAPTER *pAd);
 UCHAR get_apidx_by_addr(RTMP_ADAPTER *pAd, UCHAR *addr);
 
 NDIS_STATUS APOneShotSettingInitialize(RTMP_ADAPTER *pAd);
-
+#ifdef CONFIG_INIT_RADIO_ONOFF
+VOID ApAutoChannelAtBootUp(RTMP_ADAPTER *pAd);
+VOID APStartUpForMain(RTMP_ADAPTER *pAd);
+#endif
 //INT ap_func_init(RTMP_ADAPTER *pAd);
 
 VOID APShutdown(RTMP_ADAPTER *pAd);
 VOID APStartUp(RTMP_ADAPTER *pAd);
+VOID APStartUpByRf(RTMP_ADAPTER *pAd,UCHAR RfIC);
 VOID APStartUpForMbss(RTMP_ADAPTER *pAd,BSS_STRUCT *pMbss);
 VOID APStop(RTMP_ADAPTER *pAd);
+VOID APStopByRf(RTMP_ADAPTER *pAd,UCHAR RfIC);
 
 VOID APCleanupPsQueue(RTMP_ADAPTER *pAd, QUEUE_HEADER *pQueue);
 
@@ -264,7 +336,8 @@ VOID ApLogEvent(
 #define ApLogEvent(_pAd, _pAddr, _Event)
 #endif /* SYSTEM_LOG_SUPPORT */
 
-VOID APUpdateCapabilityAndErpIe(RTMP_ADAPTER *pAd);
+
+VOID ApUpdateCapabilityAndErpIe(RTMP_ADAPTER *pAd,struct _BSS_STRUCT *mbss);
 
 BOOLEAN ApCheckAccessControlList(RTMP_ADAPTER *pAd, UCHAR *addr, UCHAR apidx);
 VOID ApUpdateAccessControlList(RTMP_ADAPTER *pAd, UCHAR apidx);
@@ -277,9 +350,9 @@ VOID QBSS_LoadAlarmResume(RTMP_ADAPTER *pAd);
 UINT32 QBSS_LoadBusyTimeGet(RTMP_ADAPTER *pAd);
 BOOLEAN QBSS_LoadIsAlarmIssued(RTMP_ADAPTER *pAd);
 BOOLEAN QBSS_LoadIsBusyTimeAccepted(RTMP_ADAPTER *pAd, UINT32 BusyTime);
-UINT32 QBSS_LoadElementAppend(RTMP_ADAPTER *pAd, UINT8 *buf_p);
+UINT32 QBSS_LoadElementAppend(RTMP_ADAPTER *pAd, UINT8 *pBeaconBuf, QLOAD_CTRL *pQloadCtrl);
 VOID QBSS_LoadUpdate(RTMP_ADAPTER *pAd, ULONG UpTime);
-VOID QBSS_LoadStatusClear(RTMP_ADAPTER *pAd);
+VOID QBSS_LoadStatusClear(RTMP_ADAPTER	*pAd, UCHAR	Channel);
 
 INT	Show_QoSLoad_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
 #ifdef CONFIG_HOTSPOT_R2

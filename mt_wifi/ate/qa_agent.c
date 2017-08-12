@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,7 +14,7 @@
 	Module Name:
 	qa_agent.c
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 static INT ResponseToQA(

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -24,7 +25,7 @@
     --------    ----------    ----------------------------------------------
     John Chang  08-04-2003    created for 11g soft-AP
  */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 #include <stdarg.h>
 
@@ -83,22 +84,32 @@ VOID APDetectOverlappingExec(
 #ifdef DOT11_N_SUPPORT
 	PRTMP_ADAPTER	pAd = (RTMP_ADAPTER *)FunctionContext;
 	BOOLEAN bSupport2G = HcIsRfSupport(pAd,RFIC_24GHZ);
-	UCHAR Channel = HcGetChannelByRf(pAd,RFIC_24GHZ);
+	int i;
+	struct wifi_dev *wdev;
+	UCHAR cfg_ht_bw;
+	UCHAR cfg_ext_cha;
 
 	if (DetectOverlappingPeriodicRound == 0)
 	{
 		/* switch back 20/40 */
-		if ( bSupport2G && (pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth == BW_40))
-		{
-			pAd->CommonCfg.AddHTInfo.AddHtInfo.RecomWidth = 1;
-			pAd->CommonCfg.AddHTInfo.AddHtInfo.ExtChanOffset = HcGetExtCha(pAd,Channel);
+		if ( bSupport2G)
+		{	
+			for(i=0;i<pAd->ApCfg.BssidNum;i++){
+				wdev = &pAd->ApCfg.MBSSID[i].wdev;
+				cfg_ht_bw = wlan_config_get_ht_bw(wdev);
+				if(wmode_2_rfic(wdev->PhyMode)== RFIC_24GHZ && (cfg_ht_bw == HT_BW_40)){
+					wlan_operate_set_ht_bw(wdev,HT_BW_40);
+					cfg_ext_cha = wlan_config_get_ext_cha(wdev);
+					wlan_operate_set_ext_cha(wdev,cfg_ext_cha);
+				}
+			}
 		}
 	}
 	else
 	{
 		if ((DetectOverlappingPeriodicRound == 25) || (DetectOverlappingPeriodicRound == 1))
 		{
-   			if (bSupport2G  && (pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth==BW_40))
+   			if (bSupport2G  && (HcGetBwByRf(pAd,RFIC_24GHZ) == HT_BW_40))
 			{
 				SendBeaconRequest(pAd, 1);
 				SendBeaconRequest(pAd, 2);
@@ -129,7 +140,18 @@ VOID APMlmePeriodicExec(
 #ifdef DFS_SUPPORT
 	UCHAR Channel5G = HcGetChannelByRf(pAd,RFIC_5GHZ);
 #endif /*DFS_SUPPORT*/
+
+#ifdef MT_DFS_SUPPORT
+    USHORT ChannelMovingTime;
+#endif
 #endif /*A_BAND_SUPPORT*/
+#ifdef CUSTOMER_DCC_FEATURE
+	if(pAd->AllowedStaList.StaCount > 0)
+		RemoveOldStaList(pAd);
+	if(pAd->ApEnableBeaconTable == TRUE)
+		RemoveOldBssEntry(pAd);
+	APResetStreamingStatus(pAd);
+#endif
     /* 
 		Reqeust by David 2005/05/12
 		It make sense to disable Adjust Tx Power on AP mode, since we can't
@@ -235,8 +257,6 @@ VOID APMlmePeriodicExec(
 	AutoChannelSelCheck(pAd);
 #endif /* AP_SCAN_SUPPORT */
 
-	APUpdateCapabilityAndErpIe(pAd);
-
 #ifdef APCLI_SUPPORT
 	if (pAd->Mlme.OneSecPeriodicRound % 2 == 0)
 		ApCliIfMonitor(pAd);
@@ -252,6 +272,13 @@ VOID APMlmePeriodicExec(
 	{
 		INT loop;
 		ULONG Now32;
+
+#ifdef MAC_REPEATER_SUPPORT
+		if (pAd->ApCfg.bMACRepeaterEn)
+		{
+			RTMPRepeaterReconnectionCheck(pAd);
+		}
+#endif /* MAC_REPEATER_SUPPORT */
 
 
 		NdisGetSystemUpTime(&Now32);
@@ -277,20 +304,23 @@ VOID APMlmePeriodicExec(
 #endif /* APCLI_SUPPORT */
 
 #ifdef DOT11_N_SUPPORT
-	if (pAd->CommonCfg.bHTProtect) 
-    {
-        /* TODO: not yet prepare wdev */
-		//APUpdateCapabilityAndErpIe(pAd);
-		//APUpdateOperationMode(pAd, wdev);
-#if defined(RTMP_MAC) || defined(RLT_MAC)
-        if (pAd->chipCap.hif_type == HIF_RTMP 
-                || pAd->chipCap.hif_type == HIF_RLT)
-        {
-            if (pAd->CommonCfg.IOTestParm.bRTSLongProtOn == FALSE)
-                AsicUpdateProtect(pAd, (USHORT)pAd->CommonCfg.AddHTInfo.AddHtInfo2.OperaionMode,
-                        ALLN_SETPROTECT, FALSE, pAd->MacTab.fAnyStationNonGF);
-        }
-#endif
+	{
+		INT IdBss = 0;
+		UCHAR ht_protect_en = 1;
+		BSS_STRUCT *pMbss = NULL;
+		
+		for(IdBss = 0; IdBss < pAd->ApCfg.BssidNum; IdBss++)
+		{
+			pMbss = &pAd->ApCfg.MBSSID[IdBss];
+			
+			if ((pMbss) && (&pMbss->wdev) && (pMbss->wdev.DevInfo.Active)){
+				ht_protect_en = wlan_config_get_ht_protect_en(&pMbss->wdev);
+				if (ht_protect_en) {
+					ApUpdateCapabilityAndErpIe(pAd,pMbss);
+					APUpdateOperationMode(pAd, &pMbss->wdev);
+				}
+			}
+		}
 	}
 #endif /* DOT11_N_SUPPORT */
 
@@ -303,17 +333,29 @@ VOID APMlmePeriodicExec(
 		pAd->Dot11_H.InServiceMonitorCount++;
 		if (pAd->Dot11_H.RDMode == RD_SILENCE_MODE)
 		{
-			if (pAd->Dot11_H.RDCount++ > pAd->Dot11_H.ChMovingTime)
+#ifdef MT_DFS_SUPPORT		
+#ifdef BACKGROUND_SCAN_SUPPORT
+
+		    if(IS_SUPPORT_MT_ZEROWAIT_DFS(pAd) == TRUE)
 			{
-				//MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("[OutSide MT_DFS]CAC time end\n"));
+                ChannelMovingTime = pAd->Dot11_H.DfsZeroWaitChMovingTime;
+            }
+            else                
+#endif                
+            {
+                ChannelMovingTime = pAd->Dot11_H.ChMovingTime;
+            }
+
+			if (pAd->Dot11_H.RDCount++ > ChannelMovingTime)
+			{
+				
 				pAd->Dot11_H.RDCount = 0;
-#ifdef MT_DFS_SUPPORT
-				//MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("[MT_DFS]CAC time end\n"));
+				pAd->CommonCfg.DfsParameter.DfsStatMachine.CurrState = DFS_BEFORE_SWITCH;
 				MlmeEnqueue(pAd, DFS_STATE_MACHINE, DFS_CAC_END, 0, NULL, 0);	
-#endif
 				AsicSetSyncModeAndEnable(pAd, pAd->CommonCfg.BeaconPeriod, HW_BSSID_0,  OPMODE_AP);
 				pAd->Dot11_H.RDMode = RD_NORMAL_MODE;
 			}
+#endif
 		}
 #endif /* !DFS_SUPPORT */
 		}
@@ -321,6 +363,7 @@ VOID APMlmePeriodicExec(
 
 #ifdef MT_DFS_SUPPORT
     DfsNonOccupancyCountDown(pAd);//Jelly20150416
+    DfsCheckRDDByTXTP(pAd);
 #endif
 
 #ifdef DOT11R_FT_SUPPORT
@@ -332,45 +375,99 @@ VOID APMlmePeriodicExec(
 #ifdef DOT11N_DRAFT3
 #ifdef APCLI_CERT_SUPPORT
 	/* Perform 20/40 BSS COEX scan every Dot11BssWidthTriggerScanInt	*/
-	if (APCLI_IF_UP_CHECK(pAd, 0) && (pAd->bApCliCertTest == TRUE))
 	{
-		if ((OPSTATUS_TEST_FLAG(pAd, fOP_STATUS_SCAN_2040)) && 
-			(pAd->CommonCfg.Dot11BssWidthTriggerScanInt != 0) && 
-			((pAd->Mlme.OneSecPeriodicRound % pAd->CommonCfg.Dot11BssWidthTriggerScanInt) == (pAd->CommonCfg.Dot11BssWidthTriggerScanInt-1)))
+		UCHAR apcli2Gidx = 0;
+#ifdef DBDC_MODE
+		if (pAd->CommonCfg.dbdc_mode)
+			apcli2Gidx = 1;
+#endif
+		if (APCLI_IF_UP_CHECK(pAd, apcli2Gidx) && (pAd->bApCliCertTest == TRUE))
 		{
-			MTWF_LOG(DBG_CAT_MLME, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
-							("MMCHK - LastOneSecTotalTxCount/LastOneSecRxOkDataCnt  = %d/%d \n", 
-									pAd->RalinkCounters.LastOneSecTotalTxCount,
-									pAd->RalinkCounters.LastOneSecRxOkDataCnt));
-
-			/* Check last scan time at least 30 seconds from now. 		*/
-			/* Check traffic is less than about 1.5~2Mbps.*/
-			/* it might cause data lost if we enqueue scanning.*/
-			/* This criteria needs to be considered*/
-			if ((pAd->RalinkCounters.LastOneSecTotalTxCount < 70) && (pAd->RalinkCounters.LastOneSecRxOkDataCnt < 70))		
+			if ((OPSTATUS_TEST_FLAG(pAd, fOP_STATUS_SCAN_2040)) && 
+				(pAd->CommonCfg.Dot11BssWidthTriggerScanInt != 0) && 
+				((pAd->Mlme.OneSecPeriodicRound % pAd->CommonCfg.Dot11BssWidthTriggerScanInt) == (pAd->CommonCfg.Dot11BssWidthTriggerScanInt-1)))
 			{
-				MLME_SCAN_REQ_STRUCT ScanReq;
+#ifdef MT7615
+				if (IS_MT7615(pAd))
+				{
+					PAPCLI_STRUCT pApCliEntry = &pAd->ApCfg.ApCliTab[BSS0];
+					MAC_TABLE_ENTRY *pEntry = NULL;
+					STA_TR_ENTRY *tr_entry = NULL;
+					UINT tx_tp = 0;
+					UINT rx_tp = 0;
 
-				/* Fill out stuff for scan request and kick to scan*/
-				ScanParmFill(pAd, &ScanReq, ZeroSsid, 0, BSS_ANY, SCAN_2040_BSS_COEXIST);
+					if (pApCliEntry->Valid == TRUE)
+					{
+						pEntry = &pAd->MacTab.Content[pApCliEntry->MacTabWCID];
+						tr_entry = &pAd->MacTab.tr_entry[pApCliEntry->MacTabWCID];
+					}
 
-				/* Before scan, reset trigger event table. */
-				TriEventInit(pAd);
+					if((pEntry) && IS_ENTRY_APCLI(pEntry) && (tr_entry->PortSecured == WPA_802_1X_PORT_SECURED))
+					{
+						tx_tp = ((pApCliEntry->OneSecTxBytes)>> BYTES_PER_SEC_TO_MBPS);
+						rx_tp = ((pApCliEntry->OneSecRxBytes)>> BYTES_PER_SEC_TO_MBPS);
+					}
 
-				MlmeEnqueue(pAd, AP_SYNC_STATE_MACHINE, APMT2_MLME_SCAN_REQ, sizeof(MLME_SCAN_REQ_STRUCT), &ScanReq, 0);
-			
-				/* Set InfoReq = 1, So after scan , alwats sebd 20/40 Coexistence frame to AP*/
-				pAd->CommonCfg.BSSCoexist2040.field.InfoReq = 1;
-				RTMP_MLME_HANDLER(pAd);
+
+					/* Check last scan time at least 30 seconds from now. 		*/
+					/* Check traffic is less than about 1.5~2Mbps.*/
+					/* it might cause data lost if we enqueue scanning.*/
+					/* This criteria needs to be considered*/
+
+					if ((tx_tp < 1) && (rx_tp < 1))		
+					{
+						MLME_SCAN_REQ_STRUCT ScanReq;
+
+						/* Fill out stuff for scan request and kick to scan*/
+						ScanParmFill(pAd, &ScanReq, ZeroSsid, 0, BSS_ANY, SCAN_2040_BSS_COEXIST);
+
+						/* Before scan, reset trigger event table. */
+						TriEventInit(pAd);
+
+						MlmeEnqueue(pAd, AP_SYNC_STATE_MACHINE, APMT2_MLME_SCAN_REQ, sizeof(MLME_SCAN_REQ_STRUCT), &ScanReq, (ULONG)(&pApCliEntry->wdev));
+
+						/* Set InfoReq = 1, So after scan , alwats sebd 20/40 Coexistence frame to AP*/
+						pAd->CommonCfg.BSSCoexist2040.field.InfoReq = 1;
+						RTMP_MLME_HANDLER(pAd);
+					}
+				}
+				else
+#endif /* MT7615 */
+				{
+					MTWF_LOG(DBG_CAT_MLME, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+									("MMCHK - LastOneSecTotalTxCount/LastOneSecRxOkDataCnt  = %d/%d \n", 
+											pAd->RalinkCounters.LastOneSecTotalTxCount,
+											pAd->RalinkCounters.LastOneSecRxOkDataCnt));
+
+					/* Check last scan time at least 30 seconds from now. 		*/
+					/* Check traffic is less than about 1.5~2Mbps.*/
+					/* it might cause data lost if we enqueue scanning.*/
+					/* This criteria needs to be considered*/
+					if ((pAd->RalinkCounters.LastOneSecTotalTxCount < 70) && (pAd->RalinkCounters.LastOneSecRxOkDataCnt < 70))		
+					{
+						MLME_SCAN_REQ_STRUCT ScanReq;
+
+						/* Fill out stuff for scan request and kick to scan*/
+						ScanParmFill(pAd, &ScanReq, ZeroSsid, 0, BSS_ANY, SCAN_2040_BSS_COEXIST);
+
+						/* Before scan, reset trigger event table. */
+						TriEventInit(pAd);
+
+						MlmeEnqueue(pAd, AP_SYNC_STATE_MACHINE, APMT2_MLME_SCAN_REQ, sizeof(MLME_SCAN_REQ_STRUCT), &ScanReq, 0);
+
+						/* Set InfoReq = 1, So after scan , alwats sebd 20/40 Coexistence frame to AP*/
+						pAd->CommonCfg.BSSCoexist2040.field.InfoReq = 1;
+						RTMP_MLME_HANDLER(pAd);
+					}
+
+					MTWF_LOG(DBG_CAT_MLME, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+									("MMCHK - LastOneSecTotalTxCount/LastOneSecRxOkDataCnt	= %d/%d \n", 
+											pAd->RalinkCounters.LastOneSecTotalTxCount,
+											pAd->RalinkCounters.LastOneSecRxOkDataCnt));
+				}
 			}
-
-			MTWF_LOG(DBG_CAT_MLME, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
-							("MMCHK - LastOneSecTotalTxCount/LastOneSecRxOkDataCnt	= %d/%d \n", 
-									pAd->RalinkCounters.LastOneSecTotalTxCount,
-									pAd->RalinkCounters.LastOneSecRxOkDataCnt));
-
-		}
-	}	
+		}	
+	}
 #endif /* APCLI_CERT_SUPPORT */
 #endif /* DOT11N_DRAFT3 */
 #endif /* DOT11_N_SUPPORT */
@@ -413,6 +510,22 @@ BOOLEAN APMsgTypeSubst(
 	{
 #ifdef WSC_AP_SUPPORT
 		WSC_CTRL *wsc_ctrl;
+#endif /* WSC_AP_SUPPORT */
+
+#ifdef WDS_SUPPORT
+		if ((pFrame->Hdr.FC.FrDs == 1) && (pFrame->Hdr.FC.ToDs == 1))
+		{
+			MTWF_LOG(DBG_CAT_AP, DBG_SUBCAT_ALL, DBG_LVL_TRACE,("%s, AP WDS recv UC data from %02x-%02x-%02x-%02x-%02x-%02x\n", __FUNCTION__, 
+				PRINT_MAC(pFrame->Hdr.Addr2)));
+
+			*Machine = AP_SYNC_STATE_MACHINE;
+			*MsgType = APMT2_WDS_RECV_UC_DATA;
+
+			return TRUE;
+		}
+#endif /* WDS_SUPPORT */
+
+#ifdef WSC_AP_SUPPORT
 		/*WSC EAPOL PACKET */
 		pEntry = MacTableLookup(pAd, pFrame->Hdr.Addr2);
 		if (pEntry &&
@@ -583,14 +696,7 @@ VOID APAsicEvaluateRxAnt(
 #endif /* TXBF_SUPPORT */
 
 
-#ifdef DOT11_N_SUPPORT
-#ifdef GREENAP_SUPPORT
-	if (pAd->ApCfg.bGreenAPActive == TRUE)
-		bbp_set_rxpath(pAd, 1);
-	else
-#endif /* GREENAP_SUPPORT */
-#endif /* DOT11_N_SUPPORT */
-		bbp_set_rxpath(pAd, pAd->Antenna.field.RxPath);
+	bbp_set_rxpath(pAd, pAd->Antenna.field.RxPath);
 
 	TxTotalCnt = pAd->RalinkCounters.OneSecTxNoRetryOkCount +
 					pAd->RalinkCounters.OneSecTxRetryOkCount +
@@ -637,34 +743,9 @@ VOID APAsicRxAntEvalTimeout(RTMP_ADAPTER *pAd)
 		target_rssi = &pAd->ApCfg.RssiSample.AvgRssi[0];
 	NdisMoveMemory(&rssi[0], target_rssi, 3);
 
-#ifdef DOT11N_SS3_SUPPORT
-	if(pAd->Antenna.field.RxPath == 3)
-	{
-		CHAR larger = -127;
-
-		larger = max(rssi[0], rssi[1]);
-		if (pAd->CommonCfg.RxStream >= 3)
-			pAd->Mlme.RealRxPath = 3;
-		else
-		{
-			if (larger > (rssi[2] + 20))
-				pAd->Mlme.RealRxPath = 2;
-			else
-				pAd->Mlme.RealRxPath = 3;
-		}
-	}
-#endif /* DOT11N_SS3_SUPPORT */
-
 	/* Disable the below to fix 1T/2R issue. It's suggested by Rory at 2007/7/11. */
 
-#ifdef DOT11_N_SUPPORT
-#ifdef GREENAP_SUPPORT
-	if (pAd->ApCfg.bGreenAPActive == TRUE)
-		bbp_set_rxpath(pAd, 1);
-	else
-#endif /* GREENAP_SUPPORT */
-#endif /* DOT11_N_SUPPORT */
-		bbp_set_rxpath(pAd, pAd->Mlme.RealRxPath);
+	bbp_set_rxpath(pAd, pAd->Mlme.RealRxPath);
 
 }
 

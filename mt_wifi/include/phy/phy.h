@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,7 +14,7 @@
 	Module Name:
 	phy.h
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __PHY_H__
 #define __PHY_H__
 

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -16,12 +17,88 @@
  ***************************************************************************
 
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 #include "hdev/hdev.h"
 
 
 #define INVAILD_WCID 0xff
+
+/*
+* local function
+*/
+static VOID wtc_mcast_complete(WTBL_CFG *cfg)
+{
+	RTMP_OS_COMPLETE(&cfg->mcast_complete);
+}
+
+static VOID wtc_mcast_wait_complete(WTBL_CFG *cfg)
+{
+    NdisAcquireSpinLock(&cfg->WtblIdxRecLock);
+	cfg->mcast_wait  = TRUE;
+    NdisReleaseSpinLock(&cfg->WtblIdxRecLock);
+	RTMP_OS_INIT_COMPLETION(&cfg->mcast_complete);
+
+	if(!RTMP_OS_WAIT_FOR_COMPLETION_TIMEOUT(&cfg->mcast_complete,WTC_WAIT_TIMEOUT))
+	{
+		MTWF_LOG(DBG_CAT_CLIENT, CATCLIENT_APCLI, DBG_LVL_ERROR,
+		("(%s) mcast wait can't done.\n", __FUNCTION__));
+	}
+}
+
+/*
+*
+*/
+static UCHAR wtc_acquire_groupkey_wcid(WTBL_CFG *pWtblCfg,HD_DEV_OBJ *pObj)
+{
+    UCHAR AvailableWcid = INVAILD_WCID;
+    UCHAR OmacIdx, WdevType;
+    int i;
+    WTBL_IDX_PARAMETER *pWtblIdxRec = NULL;
+	UCHAR min_wcid = pWtblCfg->MinMcastWcid;
+
+    OmacIdx = pObj->OmacIdx;
+    WdevType = pObj->Type;
+
+    NdisAcquireSpinLock(&pWtblCfg->WtblIdxRecLock);
+
+    for (i = (MAX_LEN_OF_TR_TABLE - 1); i >= min_wcid; i--)
+    {
+        pWtblIdxRec = &pWtblCfg->WtblIdxRec[i];
+        if (pWtblIdxRec->State != WTBL_STATE_NONE_OCCUPIED)
+        {
+            continue;
+        }
+        else
+        {
+            pWtblIdxRec->State = WTBL_STATE_SW_OCCUPIED;
+            pWtblIdxRec->WtblIdx = i;
+            /*TODO: Carter, check flow when calling this function, OmacIdx might be erroed.*/
+            pWtblIdxRec->LinkToOmacIdx = OmacIdx;
+            pWtblIdxRec->LinkToWdevType = WdevType;
+            AvailableWcid = (UCHAR)i;
+
+            MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+                    ("%s: Found a non-occupied wtbl_idx:%d for WDEV_TYPE:%d\n"
+                        " LinkToOmacIdx = %x, LinkToWdevType = %d\n",
+                        __FUNCTION__, i, WdevType, OmacIdx, WdevType));
+
+            NdisReleaseSpinLock(&pWtblCfg->WtblIdxRecLock);
+            return AvailableWcid;
+        }
+    }
+    NdisReleaseSpinLock(&pWtblCfg->WtblIdxRecLock);
+
+    if (i < min_wcid)
+    {
+        MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+                    ("%s: no available wtbl_idx for WDEV_TYPE:%d\n",
+                        __FUNCTION__, WdevType));
+    }
+
+    return AvailableWcid;
+}
+
 
 /*Wtable control*/
 /*
@@ -85,82 +162,45 @@ UCHAR WtcSetMaxStaNum(HD_CFG *pHdCfg,UCHAR BssidNum,UCHAR MSTANum)
     wtbl_num_use_for_sta = MAX_LEN_OF_MAC_TABLE -
                             wtbl_num_resv_for_mcast -
                             wtbl_num_use_for_ucast;
-
     MaxUcastEntryNum = wtbl_num_use_for_sta + wtbl_num_use_for_ucast;
-
-    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-            ("%s: MaxStaNum:%d, BssidNum:%d, WdsNum:%d, ApcliNum:%d,"
-                " MaxNumChipRept:%d\n",
-                                __FUNCTION__,
-                                wtbl_num_use_for_sta,
-                                BssidNum,
-                                WdsNum,
-                                ApcliNum,
-                                MaxNumChipRept));
 	
 	pHdCfg->HwResourceCfg.WtblCfg.MaxUcastEntryNum = MaxUcastEntryNum;
+	pHdCfg->HwResourceCfg.WtblCfg.MinMcastWcid = MAX_LEN_OF_MAC_TABLE-wtbl_num_resv_for_mcast;
+
+    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+    ("%s: MaxStaNum:%d, BssidNum:%d, WdsNum:%d, ApcliNum:%d,"
+        " MaxNumChipRept:%d,"
+        " MinMcastWcid:%d\n",
+                        __FUNCTION__,
+                        wtbl_num_use_for_sta,
+                        BssidNum,
+                        WdsNum,
+                        ApcliNum,
+                        MaxNumChipRept,
+                        pHdCfg->HwResourceCfg.WtblCfg.MinMcastWcid));
 
 	return MaxUcastEntryNum;
 }
-
-
 
 /*
 *
 */
 UCHAR WtcAcquireGroupKeyWcid(HD_CFG *pHdCfg,HD_DEV_OBJ *pObj)
 {
-    UCHAR AvailableWcid = INVAILD_WCID;
-    UCHAR OmacIdx, WdevType;
-    int i;
+	UCHAR wcid;
 	HD_RESOURCE_CFG *pResource = &pHdCfg->HwResourceCfg;
 	WTBL_CFG *pWtblCfg=&pResource->WtblCfg;
-    WTBL_IDX_PARAMETER *pWtblIdxRec = NULL;
-
-    OmacIdx = pObj->OmacIdx;
-    WdevType = pObj->Type;
-
-    NdisAcquireSpinLock(&pWtblCfg->WtblIdxRecLock);
 	
-    for (i = (MAX_LEN_OF_TR_TABLE - 1); i >= 0; i--)
-    {
-        pWtblIdxRec = &pWtblCfg->WtblIdxRec[i];
-        if (pWtblIdxRec->State != WTBL_STATE_NONE_OCCUPIED)
-        {
-            continue;
-        }
-        else
-        {
-            pWtblIdxRec->State = WTBL_STATE_SW_OCCUPIED;
-            pWtblIdxRec->WtblIdx = i;
-            /*TODO: Carter, check flow when calling this function, OmacIdx might be erroed.*/
-            pWtblIdxRec->LinkToOmacIdx = OmacIdx;
-            pWtblIdxRec->LinkToWdevType = WdevType;
-            AvailableWcid = (UCHAR)i;
+	wcid = wtc_acquire_groupkey_wcid(pWtblCfg,pObj);
 
-            MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
-                    ("%s: Found a non-occupied wtbl_idx:%d for WDEV_TYPE:%d\n"
-                        " LinkToOmacIdx = %x, LinkToWdevType = %d\n",
-                        __FUNCTION__, i, WdevType, OmacIdx, WdevType));
-
-			DlListAddTail(&pObj->WtblList,&pWtblIdxRec->list);
-			
-            NdisReleaseSpinLock(&pWtblCfg->WtblIdxRecLock);
-            return AvailableWcid;
-        }
-    }
-    NdisReleaseSpinLock(&pWtblCfg->WtblIdxRecLock);
-
-    if (i < 0)
-    {
-        MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
-                    ("%s: no available wtbl_idx for WDEV_TYPE:%d\n",
-                        __FUNCTION__, WdevType));
-    }
-	
-    return AvailableWcid;
+	/*try again*/
+	if(wcid == INVAILD_WCID){
+		/*try again and wait complete*/
+		wtc_mcast_wait_complete(pWtblCfg);
+		return wtc_acquire_groupkey_wcid(pWtblCfg,pObj);
+	}
+	return wcid;
 }
-
 
 /*
 *
@@ -193,7 +233,6 @@ UCHAR WtcReleaseGroupKeyWcid(HD_CFG *pHdCfg,HD_DEV_OBJ *pObj, UCHAR idx)
     {
         if(pWtblIdxRec->State == WTBL_STATE_SW_OCCUPIED)
         {
-		    DlListDel(&pWtblIdxRec->list);
             os_zero_mem(pWtblIdxRec, sizeof(WTBL_IDX_PARAMETER));
             /*make sure entry is cleared to usable one.*/
             pWtblIdxRec->State = WTBL_STATE_NONE_OCCUPIED;
@@ -202,7 +241,6 @@ UCHAR WtcReleaseGroupKeyWcid(HD_CFG *pHdCfg,HD_DEV_OBJ *pObj, UCHAR idx)
             pWtblIdxRec->State = WTBL_STATE_WAIT_RELEASE_FOR_HW;
         }
     }
-
     NdisReleaseSpinLock(&pWtblCfg->WtblIdxRecLock);
 	
 	return ReleaseWcid;
@@ -255,6 +293,13 @@ UCHAR WtcAcquireUcastWcid(HD_CFG *pHdCfg, HD_DEV_OBJ *pObj)
 	WTBL_CFG *pWtblCfg = &pResource->WtblCfg;
 	WTBL_IDX_PARAMETER *pWtblIdxRec = NULL;
 
+	if (pObj == NULL || pResource == NULL || pWtblCfg == NULL)
+	{
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+					   ("%s: unexpected NULL please check!!\n",__FUNCTION__));
+		return INVAILD_WCID;
+	}
+
     NdisAcquireSpinLock(&pWtblCfg->WtblIdxRecLock);
 
 	/* skip entry#0 so that "entry index == AID" for fast lookup*/
@@ -263,8 +308,14 @@ UCHAR WtcAcquireUcastWcid(HD_CFG *pHdCfg, HD_DEV_OBJ *pObj)
 		/* sanity check to avoid out of bound with pAd->MacTab.Content */
 		if (i >= MAX_LEN_OF_MAC_TABLE)
 			continue;
-
+		
 		pWtblIdxRec = &pWtblCfg->WtblIdxRec[i];
+		if (pWtblIdxRec == NULL)
+		{
+		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+					   ("%s: unexpected NULL please check!!\n",__FUNCTION__));
+			return INVAILD_WCID;
+		}
 		
 		if(pWtblIdxRec->State!=WTBL_STATE_NONE_OCCUPIED)
 			continue;
@@ -274,7 +325,6 @@ UCHAR WtcAcquireUcastWcid(HD_CFG *pHdCfg, HD_DEV_OBJ *pObj)
 		/*TODO: Carter, check flow when calling this function, OmacIdx might be erroed.*/
 		pWtblIdxRec->LinkToOmacIdx = pObj->OmacIdx;
 		pWtblIdxRec->LinkToWdevType = pObj->Type;
-		DlListAddTail(&pObj->WtblList,&pWtblIdxRec->list);
 		
 		NdisReleaseSpinLock(&pWtblCfg->WtblIdxRecLock);
 		return i;
@@ -317,7 +367,6 @@ UCHAR WtcReleaseUcastWcid(HD_CFG *pHdCfg, HD_DEV_OBJ *pObj, UCHAR idx)
 	{
 	    if(pWtblIdxRec->State == WTBL_STATE_SW_OCCUPIED)
         {   
-		    DlListDel(&pWtblIdxRec->list);
 		    os_zero_mem(pWtblIdxRec, sizeof(WTBL_IDX_PARAMETER));
             /*make sure entry is cleared to usable one.*/
 		    pWtblIdxRec->State = WTBL_STATE_NONE_OCCUPIED;
@@ -391,12 +440,14 @@ UCHAR WtcHwReleaseWcid(HD_CFG *pHdCfg,UCHAR idx)
         return idx;
     }
 
-    DlListDel(&pWtblIdxRec->list);
     os_zero_mem(pWtblIdxRec,sizeof(WTBL_IDX_PARAMETER));
     pWtblIdxRec->State = WTBL_STATE_NONE_OCCUPIED;
 
+	/*idx is owned by mcast, check is wait need to complete*/
+	if((idx >= pWtblCfg->MinMcastWcid) && pWtblCfg->mcast_wait){
+		wtc_mcast_complete(pWtblCfg);
+	}
 	NdisReleaseSpinLock(&pWtblCfg->WtblIdxRecLock);
-	
 	return idx;
 }
 

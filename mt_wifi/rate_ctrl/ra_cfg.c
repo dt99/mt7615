@@ -4,7 +4,7 @@
 /*! \file   "ra_cfg.c"
     \brief  Set rate turning parameter for embedded platform.
 */
-
+#ifdef MTK_LICENSE
 /*******************************************************************************
 * Copyright (c) 2014 MediaTek Inc.
 *
@@ -46,7 +46,7 @@
 * (ICC).
 ********************************************************************************
 */
-
+#endif /* MTK_LICENSE */
 /*
 ** $Log: ra_cfg.c $
 **
@@ -59,174 +59,6 @@
 
 #include "rt_config.h"
 
-#ifdef NEW_RATE_ADAPT_SUPPORT
-/*
-	Set_RateTable_Proc - Display or replace byte for item in RateSwitchTableAdapt11N3S
-		usage: iwpriv ra0 set RateTable=<item>[:<offset>:<value>]
-*/
-INT Set_RateTable_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
-{
-#if defined(RTMP_MAC) || defined(RLT_MAC)
-	UCHAR *pTable, TableSize, InitTxRateIdx;
-	int i;
-	MAC_TABLE_ENTRY *pEntry;
-	int itemNo, rtIndex, value;
-	UCHAR *pRateEntry;
-
-	if ((pAd->chipCap.hif_type == HIF_RTMP) || (pAd->chipCap.hif_type == HIF_RLT))
-	{
-		/* Find first Associated STA in MAC table */
-		for (i=1; VALID_UCAST_ENTRY_WCID(pAd, i); i++)
-		{
-			pEntry = &pAd->MacTab.Content[i];
-			if (IS_ENTRY_CLIENT(pEntry) && pEntry->Sst==SST_ASSOC)
-			{
-				break;
-			}
-		}
-
-		if (i == GET_MAX_UCAST_NUM(pAd))
-		{
-		    MTWF_LOG(DBG_CAT_RA, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("Set_RateTable_Proc: Empty MAC Table\n"));
-			return FALSE;
-		}
-
-		/* Get peer's rate table */
-		MlmeSelectTxRateTable(pAd, pEntry, &pTable, &TableSize, &InitTxRateIdx);
-
-		/* Get rate index */
-		itemNo = simple_strtol(arg, &arg, 10);
-		if (itemNo<0 || itemNo>=RATE_TABLE_SIZE(pTable))
-		{
-			return FALSE;
-		}
-
-#ifdef NEW_RATE_ADAPT_SUPPORT
-		if (ADAPT_RATE_TABLE(pTable))
-		{
-			pRateEntry = (UCHAR *)PTX_RA_GRP_ENTRY(pTable, itemNo);
-		}
-		else
-#endif /* NEW_RATE_ADAPT_SUPPORT */
-		{
-			pRateEntry = (UCHAR *)PTX_RA_LEGACY_ENTRY(pTable, itemNo);
-		}
-
-		/* If no addtional parameters then print the entry */
-		if (*arg != ':')
-		{
-			MTWF_LOG(DBG_CAT_RA, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("Set_RateTable_Proc::%d\n", itemNo));
-		}
-		else
-		{
-			/* Otherwise get the offset and the replace byte */
-			while (*arg<'0' || *arg>'9')
-			{
-				arg++;
-			}
-			rtIndex = simple_strtol(arg, &arg, 10);
-			if (rtIndex<0 || rtIndex>9)
-			{
-				return FALSE;
-			}
-
-			if (*arg!=':')
-			{
-				return FALSE;
-			}
-			while (*arg<'0' || *arg>'9')
-			{
-				arg++;
-			}
-			value = simple_strtol(arg, &arg, 10);
-			pRateEntry[rtIndex] = value;
-			MTWF_LOG(DBG_CAT_RA, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("Set_RateTable_Proc::%d:%d:%d\n", itemNo, rtIndex, value));
-		}
-
-		MTWF_LOG(DBG_CAT_RA, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%d, 0x%02x, %d, %d, %d, %d, %d, %d, %d, %d\n",
-				pRateEntry[0], pRateEntry[1], pRateEntry[2], pRateEntry[3], pRateEntry[4],
-				pRateEntry[5], pRateEntry[6], pRateEntry[7], pRateEntry[8], pRateEntry[9]));
-	}
-#endif /* defined(RTMP_MAC) || defined(RLT_MAC) */
-
-#ifdef MT_MAC
-	if (pAd->chipCap.hif_type == HIF_MT)
-	{
-		MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s(%d): Not support for HIF_MT yet!\n",
-				__FUNCTION__, __LINE__));
-	}
-#endif
-
-	return TRUE;
-}
-
-
-INT	Set_PerThrdAdj_Proc(
-	IN	PRTMP_ADAPTER	pAd,
-	IN	RTMP_STRING *arg)
-{
-	UCHAR i;
-	for (i=0; VALID_UCAST_ENTRY_WCID(pAd, i); i++){
-		pAd->MacTab.Content[i].perThrdAdj = (BOOLEAN)simple_strtol(arg, 0, 10);
-	}
-	return TRUE;
-}
-
-
-/* Set_LowTrafficThrd_Proc - set threshold for reverting to default MCS based on RSSI */
-INT	Set_LowTrafficThrd_Proc(
-	IN	PRTMP_ADAPTER	pAd,
-	IN	RTMP_STRING *arg)
-{
-	pAd->CommonCfg.lowTrafficThrd = (USHORT)simple_strtol(arg, 0, 10);
-
-	return TRUE;
-}
-
-
-/* Set_TrainUpRule_Proc - set rule for Quick DRS train up */
-INT	Set_TrainUpRule_Proc(
-	IN	PRTMP_ADAPTER	pAd,
-	IN	RTMP_STRING *arg)
-{
-	pAd->CommonCfg.TrainUpRule = (BOOLEAN)simple_strtol(arg, 0, 10);
-
-	return TRUE;
-}
-
-
-/* Set_TrainUpRuleRSSI_Proc - set RSSI threshold for Quick DRS Hybrid train up */
-INT	Set_TrainUpRuleRSSI_Proc(
-	IN	PRTMP_ADAPTER	pAd,
-	IN	RTMP_STRING *arg)
-{
-	pAd->CommonCfg.TrainUpRuleRSSI = (SHORT)simple_strtol(arg, 0, 10);
-
-	return TRUE;
-}
-
-
-/* Set_TrainUpLowThrd_Proc - set low threshold for Quick DRS Hybrid train up */
-INT	Set_TrainUpLowThrd_Proc(
-	IN	PRTMP_ADAPTER	pAd,
-	IN	RTMP_STRING *arg)
-{
-	pAd->CommonCfg.TrainUpLowThrd = (USHORT)simple_strtol(arg, 0, 10);
-
-	return TRUE;
-}
-
-
-/* Set_TrainUpHighThrd_Proc - set high threshold for Quick DRS Hybrid train up */
-INT	Set_TrainUpHighThrd_Proc(
-	IN	PRTMP_ADAPTER	pAd,
-	IN	RTMP_STRING *arg)
-{
-	pAd->CommonCfg.TrainUpHighThrd = (USHORT)simple_strtol(arg, 0, 10);
-
-	return TRUE;
-}
-#endif /* NEW_RATE_ADAPT_SUPPORT */
 
 
 INT	Set_RateAlg_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)

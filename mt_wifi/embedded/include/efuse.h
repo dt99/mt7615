@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc. 
@@ -13,6 +14,7 @@
 	Module Name:
 	efuse.h
 */
+#endif /* MTK_LICENSE */
 #ifndef __EFUSE_H__
 #define __EFUSE_H__
 

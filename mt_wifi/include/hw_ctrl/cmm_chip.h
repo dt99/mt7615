@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #ifndef __CMM_CHIP_H__
 #define __CMM_CHIP_H__
@@ -200,8 +201,11 @@ typedef struct _RTMP_CHIP_OP {
 	void (*AsicHaltAction)(struct _RTMP_ADAPTER *pAd);
 
 	/* Power save */
-	void (*EnableAPMIMOPS)(struct _RTMP_ADAPTER *pAd, IN BOOLEAN ReduceCorePower);
-	void (*DisableAPMIMOPS)(struct _RTMP_ADAPTER *pAd);
+#ifdef GREENAP_SUPPORT	
+        VOID (*EnableAPMIMOPS)(struct _RTMP_ADAPTER *pAd, struct greenap_on_off_ctrl *greenap_on_off);
+        VOID (*DisableAPMIMOPS)(struct _RTMP_ADAPTER *pAd, struct greenap_on_off_ctrl *greenap_on_off);
+#endif /* GREENAP_SUPPORT */
+
 	INT (*PwrSavingOP)(struct _RTMP_ADAPTER *pAd, UINT32 PwrOP, UINT32 PwrLevel,
 							UINT32 ListenInterval, UINT32 PreTBTTLeadTime,
 							UINT8 TIMByteOffset, UINT8 TIMBytePattern);
@@ -271,7 +275,16 @@ typedef struct _RTMP_CHIP_OP {
 #ifdef CAL_FREE_IC_SUPPORT
 	BOOLEAN (*is_cal_free_ic)(IN struct _RTMP_ADAPTER *pAd);
 	VOID (*cal_free_data_get)(IN struct _RTMP_ADAPTER *pAd);
+	BOOLEAN (*check_is_cal_free_merge)(IN struct _RTMP_ADAPTER *pAd);
 #endif /* CAL_FREE_IC_SUPPORT */
+
+#ifdef RF_LOCKDOWN
+    BOOLEAN (*check_RF_lock_down)(IN struct _RTMP_ADAPTER *pAd);
+    BOOLEAN (*write_RF_lock_parameter)(IN struct _RTMP_ADAPTER *pAd, IN USHORT offset);
+    BOOLEAN (*merge_RF_lock_parameter)(IN struct _RTMP_ADAPTER *pAd);
+    UCHAR   (*Read_Effuse_parameter)(IN struct _RTMP_ADAPTER *pAd, IN USHORT offset);
+    BOOLEAN (*Config_Effuse_Country)(IN struct _RTMP_ADAPTER *pAd);
+#endif /* RF_LOCKDOWN */
 
 	/* The chip specific function list */
 
@@ -360,7 +373,8 @@ typedef struct _RTMP_CHIP_OP {
     INT32 (*BfHwEnStatusUpdate)(struct _RTMP_ADAPTER *ad, BOOLEAN fgETxBf, BOOLEAN fgITxBf);
     INT32 (*TxBfTxApplyCtrl)(struct _RTMP_ADAPTER *pAd, UCHAR ucWlanId, BOOLEAN fgETxBf, BOOLEAN fgITxBf, BOOLEAN fgMuTxBf, BOOLEAN fgPhaseCali);
     INT32 (*archSetAid)(struct _RTMP_ADAPTER *pAd, UINT16 Aid);
-    INT32 (*BfApClientCluster)(struct _RTMP_ADAPTER *pAd, UCHAR ucWlanId, UCHAR ucPfmuId);
+    INT32 (*BfApClientCluster)(struct _RTMP_ADAPTER *pAd, UCHAR ucWlanId, UCHAR ucCmmWlanId);
+    INT32 (*BfReptClonedStaToNormalSta)(struct _RTMP_ADAPTER *pAd, UCHAR ucWlanId, UCHAR ucCliIdx);
 #endif /* MT_MAC */
 #endif /* TXBF_SUPPORT */
 #ifdef SMART_CARRIER_SENSE_SUPPORT
@@ -369,6 +383,8 @@ typedef struct _RTMP_CHIP_OP {
 #endif /* SMART_CARRIER_SENSE_SUPPORT */
 	INT32 (*hif_io_read32)(void *cookie,UINT32 addr,UINT32 *value);
 	INT32 (*hif_io_write32)(void *cookie,UINT32 addr,UINT32 value);
+	VOID (*heart_beat_check)(struct _RTMP_ADAPTER *ad);
+	VOID (*hif_set_pcie_read_params)(struct _RTMP_ADAPTER *pAd);
 }RTMP_CHIP_OP;
 
 
@@ -508,6 +524,7 @@ typedef struct _RTMP_CHIP_CAP {
 	UINT8 SnrFormula;
 
 	UINT8 max_nss;			/* maximum Nss, 3 for 3883 or 3593 */
+	UINT8 max_bw160_nss;		/* maximum Nss for BW160 & 80+80, may not equal to BW80 */
 	UINT8 max_vht_mcs;		/* Maximum Vht MCS */
 	UINT8 max_mpdu_len;	/* Maximum ASIC capable MPDU length */
 
@@ -549,6 +566,7 @@ typedef struct _RTMP_CHIP_CAP {
 #endif /* RTMP_EFUSE_SUPPORT */
 
 	UCHAR *EEPROM_DEFAULT_BIN;
+	UCHAR *EEPROM_DEFAULT_BIN_FILE;
 	UINT16 EEPROM_DEFAULT_BIN_SIZE;
     UINT16 EFUSE_BUFFER_CONTENT_SIZE;
 
@@ -726,6 +744,8 @@ typedef struct _RTMP_CHIP_CAP {
 	BOOLEAN RxDMAScatter;
 #endif /* RX_SCATTER */
 
+	/* the length of partial payload delivered to MCU for further processing */
+	UINT16 CtParseLen;
 }RTMP_CHIP_CAP;
 
 #endif

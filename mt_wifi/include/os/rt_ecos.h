@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * Taiwan, R.O.C.
@@ -21,7 +22,7 @@
     Who          When          What
     ---------    ----------    ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __RT_ECOS_H__
 #define __RT_ECOS_H__
 
@@ -407,6 +408,8 @@ typedef cyg_sem_t           NDIS_SPIN_LOCK;
 #define RTMP_SEM_UNLOCK 		RTMP_Spinlock_UNLOCK
 #define NdisAcquireSpinLock		RTMP_Spinlock_LOCK
 #define NdisReleaseSpinLock		RTMP_Spinlock_UNLOCK
+#define RTMP_SPIN_LOCK			RTMP_Spinlock_LOCK
+#define RTMP_SPIN_UNLOCK		RTMP_Spinlock_UNLOCK
 
 typedef int		wait_queue_head_t;
 

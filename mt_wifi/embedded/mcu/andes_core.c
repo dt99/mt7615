@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,6 +14,7 @@
 	Module Name:
 	andes_core.c
 */
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 struct cmd_msg *AndesAllocCmdMsg(RTMP_ADAPTER *ad, unsigned int length)
@@ -516,8 +518,8 @@ VOID AndesCleanupCmdMsg(RTMP_ADAPTER *ad, DL_LIST *list)
 	struct MCU_CTRL *ctl = &ad->MCUCtrl;
 
 	lock = AndesGetSpinLock(ctl, list);
-
-	RTMP_SPIN_LOCK_IRQSAVE(lock, &flags);
+    if(lock)
+	    RTMP_SPIN_LOCK_IRQSAVE(lock, &flags);
 	DlListForEachSafe(msg, msg_tmp, list, struct cmd_msg, list) {
                 
 		_AndesUnlinkCmdMsg(msg, list);
@@ -529,7 +531,8 @@ VOID AndesCleanupCmdMsg(RTMP_ADAPTER *ad, DL_LIST *list)
 			AndesFreeCmdMsg(msg);
 	}
 	DlListInit(list);
-	RTMP_SPIN_UNLOCK_IRQRESTORE(lock, &flags);
+    if(lock)
+	    RTMP_SPIN_UNLOCK_IRQRESTORE(lock, &flags);
 }
 
 
@@ -685,6 +688,10 @@ static INT32 AndesDequeueAndKickOutCmdMsgs(RTMP_ADAPTER *ad)
 		if (ret) {
 			MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
                                                 ("kick out msg fail\n"));
+
+			if (ret == NDIS_STATUS_FAILURE)
+				AndesForceFreeCmdMsg(msg);
+
 			break;
 		}
 	}
@@ -711,7 +718,7 @@ INT32 AndesSendCmdMsg(PRTMP_ADAPTER ad, struct cmd_msg *msg)
 {
 	struct MCU_CTRL *ctl = &ad->MCUCtrl;
         BOOLEAN is_cmd_need_wait = IS_CMD_MSG_NEED_SYNC_WITH_FW_FLAG_SET(msg);
-	int ret = 0;
+	int ret = NDIS_STATUS_SUCCESS;
 
         if (in_interrupt() && IS_CMD_MSG_NEED_SYNC_WITH_FW_FLAG_SET(msg)) {
                 MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
@@ -724,6 +731,13 @@ INT32 AndesSendCmdMsg(PRTMP_ADAPTER ad, struct cmd_msg *msg)
                 AndesForceFreeCmdMsg(msg);
 		return NDIS_STATUS_FAILURE;
 	}
+
+#ifdef ERR_RECOVERY
+	if (IsStopingPdma(&ad->ErrRecoveryCtl)) {
+		AndesForceFreeCmdMsg(msg);
+		return NDIS_STATUS_FAILURE;
+	}
+#endif
 
         if (!RTMP_TEST_FLAG(ad, fRTMP_ADAPTER_MCU_SEND_IN_BAND_CMD)     || 
                 RTMP_TEST_FLAG(ad, fRTMP_ADAPTER_NIC_NOT_EXIST)         || 
@@ -825,7 +839,7 @@ retransmit:
 #endif /* MT_PS */
                         MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
                                 ("msg->retry_times = %d\n", msg->retry_times));
-	                ASSERT(FALSE);
+	                //ASSERT(FALSE);
 		} 
 		else 
 		{ 
@@ -857,8 +871,17 @@ retransmit:
 			AndesQueueHeadCmdMsg(&ctl->txq, msg, state);
 			goto retransmit;
 		} else {
+			if (msg->attr.ext_type == EXT_CMD_STAREC_UPDATE)
+			{
+				/* Only StaRec update command read FW's response to minimize the impact.
+				 FW's response will become the final return value.
+				*/
+				ret = msg->cmd_return_status;
+			}	
 			MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_INFO,
 				("%s: msg state = %d\n", __FUNCTION__, state));
+
+			// msg will be free after enqueuing to tx_doneq. So msg is not able to pass FW's response to caller.
 			AndesQueueTailCmdMsg(&ctl->tx_doneq, msg, state);
 		}
 	}

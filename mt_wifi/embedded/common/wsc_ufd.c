@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -23,7 +24,7 @@
 	Revision History:
 	Who			When			What
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 #ifdef WSC_INCLUDED

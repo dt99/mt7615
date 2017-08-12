@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -14,7 +15,7 @@
  * way altering	the	source code	is stricitly prohibited, unless	the	prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
 	Abstract:
 
@@ -231,13 +232,8 @@ VOID RRM_InsertNeighborRepIE(
 	IN PRTMP_ADAPTER pAd,
 	OUT PUCHAR pFrameBuf,
 	OUT PULONG pFrameLen,
-	IN UINT8 Len,
-	IN PUINT8 pBssid,
-	IN RRM_BSSID_INFO BssidInfo,
-	IN UINT8 RegClass,
-	IN UINT8 Channel,
-	IN UINT8 PhyType);
-
+	IN UINT8 Len,	
+	IN RRM_PNEIGHBOR_REP_INFO pNeighborRepInfo);
 /*
 	==========================================================================
 	Description:
@@ -437,6 +433,7 @@ VOID RRM_PeerNeighborReqAction(
 VOID RRM_PeerMeasureRepAction(
 	IN PRTMP_ADAPTER pAd, 
 	IN MLME_QUEUE_ELEM *Elem);
+
 #endif /* DOT11K_RRM_SUPPORT */
 
 #endif /* __RRM_H */

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
 	--------	----------		----------------------------------------------
 	Name		Date			Modification logs
 */
+#endif /* MTK_LICENSE */
 #ifndef _OID_H_
 #define _OID_H_
 
@@ -37,6 +39,7 @@
 #define EXTCHA_NONE			0
 #define EXTCHA_ABOVE		0x1
 #define EXTCHA_BELOW		0x3
+#define EXTCHA_NOASSIGN		0xf
 
 /* BW */
 #define BAND_WIDTH_20		0
@@ -47,6 +50,7 @@
 #define BAND_WIDTH_5		5
 #define BAND_WIDTH_8080		6
 #define BAND_WIDTH_BOTH		7	/* BW20 + BW40 */
+#define BAND_WIDTH_25		8
 
 /* SHORTGI */
 #define GAP_INTERVAL_400	1	/* only support in HT mode */
@@ -183,6 +187,19 @@
 #define OID_802_11_EAP_METHOD						0x0529
 #define OID_802_11_ACL_LIST							0x052A
 
+#define OID_802_11_PASSPHRASE						0x052B
+#define OID_802_11_CHANNEL_WIDTH					0x052C
+#define OID_802_11_BEACON_PERIOD					0x052D
+#define OID_802_11_HT_STBC							0x052E
+#define OID_802_11_UAPSD							0x052F
+#define OID_802_11_COEXISTENCE					0x0530
+#define OID_802_11_AMSDU							0x0531
+#define OID_802_11_AMPDU							0x0532
+#define OID_802_11_APCFG							0x0533
+#define OID_802_11_ASSOLIST						0x0534
+#define OID_802_11_CURRENT_CRED 					0x0535
+#define OID_802_11_SCAN_STATUS	 					0x0536
+
 /* For 802.1x daemin using */
 #ifdef DOT1X_SUPPORT
 #define OID_802_DOT1X_CONFIGURATION					0x0540
@@ -195,6 +212,9 @@
 #define OID_802_DOT1X_RADIUS_ACL_DEL_CACHE          0x0547
 #define OID_802_DOT1X_RADIUS_ACL_CLEAR_CACHE        0x0548
 #define OID_802_DOT1X_QUERY_STA_AID                 0x0549
+#ifdef RADIUS_ACCOUNTING_SUPPORT
+#define OID_802_DOT1X_QUERY_STA_DATA                 0x0550
+#endif /*RADIUS_ACCOUNTING_SUPPORT*/
 #endif /* DOT1X_SUPPORT */
 
 #define	RT_OID_DEVICE_NAME							0x0607
@@ -559,7 +579,11 @@ typedef ULONGLONG NDIS_802_11_KEY_RSC;
 
 #ifdef DOT1X_SUPPORT
 #define MAX_RADIUS_SRV_NUM			2	/* 802.1x failover number */
-
+#ifdef VENDOR_FEATURE6_SUPPORT
+#define MAX_MBSSID_1X_NUM				8
+#else
+#define MAX_MBSSID_1X_NUM				16
+#endif
 /* The dot1x related structure.
    It's used to communicate with DOT1X daemon */
 typedef struct GNU_PACKED _RADIUS_SRV_INFO {
@@ -580,6 +604,18 @@ typedef struct GNU_PACKED _DOT1X_BSS_INFO {
 	UCHAR nasId_len;
 } DOT1X_BSS_INFO, *PDOT1X_BSS_INFO;
 
+#ifdef RADIUS_ACCOUNTING_SUPPORT
+typedef struct GNU_PACKED _ACCT_BSS_INFO
+{
+	unsigned char		radius_srv_num;			
+	RADIUS_SRV_INFO		radius_srv_info[MAX_RADIUS_SRV_NUM];
+	//int 				radius_request_cui;
+	int 				radius_acct_authentic;
+	int					acct_interim_interval;	
+	int					acct_enable;
+} ACCT_BSS_INFO, *PACCT_BSS_INFO;
+#endif /*RADIUS_ACCOUNTING_SUPPORT*/
+
 typedef struct GNU_PACKED _DOT1X_CMM_CONF {
 	UINT32 Length;		/* Length of this structure */
 	UCHAR mbss_num;		/* indicate multiple BSS number */
@@ -587,11 +623,14 @@ typedef struct GNU_PACKED _DOT1X_CMM_CONF {
 	UINT32 retry_interval;
 	UINT32 session_timeout_interval;
 	UINT32 quiet_interval;
-	UCHAR EAPifname[8][IFNAMSIZ];
-	UCHAR EAPifname_len[8];
-	UCHAR PreAuthifname[8][IFNAMSIZ];
-	UCHAR PreAuthifname_len[8];
-	DOT1X_BSS_INFO Dot1xBssInfo[8];
+	UCHAR EAPifname[MAX_MBSSID_1X_NUM][IFNAMSIZ];
+	UCHAR EAPifname_len[MAX_MBSSID_1X_NUM];
+	UCHAR PreAuthifname[MAX_MBSSID_1X_NUM][IFNAMSIZ];
+	UCHAR PreAuthifname_len[MAX_MBSSID_1X_NUM];
+	DOT1X_BSS_INFO Dot1xBssInfo[MAX_MBSSID_1X_NUM];
+#ifdef RADIUS_ACCOUNTING_SUPPORT
+	ACCT_BSS_INFO AcctBssInfo[MAX_MBSSID_1X_NUM];
+#endif /*RADIUS_ACCOUNTING_SUPPORT*/
 } DOT1X_CMM_CONF, *PDOT1X_CMM_CONF;
 
 typedef struct GNU_PACKED _DOT1X_IDLE_TIMEOUT {
@@ -603,6 +642,16 @@ typedef struct GNU_PACKED _DOT1X_QUERY_STA_AID {
 	UCHAR StaAddr[MAC_ADDR_LEN];
 	UINT aid;
 } DOT1X_QUERY_STA_AID, *PDOT1X_QUERY_STA_AID;
+
+#ifdef RADIUS_ACCOUNTING_SUPPORT
+typedef struct GNU_PACKED _DOT1X_QUERY_STA_DATA {
+	UCHAR StaAddr[MAC_ADDR_LEN];
+	unsigned long rx_packets;
+	unsigned long tx_packets;
+	unsigned long rx_bytes;
+	unsigned long tx_bytes;
+} DOT1X_QUERY_STA_DATA, *PDOT1X_QUERY_STA_DATA;
+#endif /*RADIUS_ACCOUNTING_SUPPORT*/
 #endif /* DOT1X_SUPPORT */
 
 #ifdef CONFIG_AP_SUPPORT
@@ -687,6 +736,12 @@ typedef enum _NDIS_802_11_AUTHENTICATION_MODE {
 
 typedef UCHAR NDIS_802_11_RATES[NDIS_802_11_LENGTH_RATES];	/* Set of 8 data rates */
 typedef UCHAR NDIS_802_11_RATES_EX[NDIS_802_11_LENGTH_RATES_EX];	/* Set of 16 data rates */
+
+typedef struct GNU_PACKED _NDIS80211PSK
+{
+	UINT    WPAKeyLen;
+	UCHAR   WPAKey[64];
+} NDIS80211PSK;
 
 typedef struct GNU_PACKED _NDIS_802_11_SSID {
 	UINT SsidLength;	/* length of SSID field below, in bytes; */
@@ -865,6 +920,7 @@ typedef UCHAR NDIS_802_11_PMKID_VALUE[16];
 #endif /* APCLI_SUPPORT */
 
 typedef struct _AP_BSSID_INFO {
+	UCHAR Mbssidx;
 	NDIS_802_11_MAC_ADDRESS MAC;
 	NDIS_802_11_PMKID_VALUE PMKID;
 	UCHAR PMK[32];
@@ -872,7 +928,8 @@ typedef struct _AP_BSSID_INFO {
 	BOOLEAN Valid;
 } AP_BSSID_INFO, *PAP_BSSID_INFO;
 
-#define MAX_PMKID_COUNT		8
+#define MAX_PMKID_COUNT		128
+#define INVALID_PMKID_IDX	-1
 typedef struct _NDIS_AP_802_11_PMKID {
 	AP_BSSID_INFO BSSIDInfo[MAX_PMKID_COUNT];
 } NDIS_AP_802_11_PMKID, *PNDIS_AP_802_11_PMKID;
@@ -923,9 +980,11 @@ typedef struct _NDIS_802_11_CAPABILITY {
 #define RT_OID_802_11_MANUFACTUREID				0x0711
 
 /* //dot11Phy(4) */
-#define OID_802_11_CURRENTCHANNEL				0x0712
+
 
 #endif /* SNMP_SUPPORT */
+
+#define OID_802_11_CURRENTCHANNEL				0x0712
 
 /*dot11mac */
 #define RT_OID_802_11_MAC_ADDRESS				0x0713
@@ -970,6 +1029,12 @@ typedef struct _NDIS_802_11_CAPABILITY {
 #define RT_OID_WSC_WRITE_UFD_FILE					0x075B
 #define RT_OID_WSC_QUERY_PEER_INFO_ON_RUNNING		0x075C
 #define RT_OID_WSC_MAC_ADDRESS						0x0760
+#ifdef VENDOR_FEATURE6_SUPPORT
+#define ARRIS_OID_WSC_QUERY_STATE                   0x0AA0 //Case to return WPS STATE
+#ifdef DOT11_N_SUPPORT 
+#define ARRIS_OID_HTEXTCHA_QUERY_VALUE              0x0AA1 //Case to return HtExtCha
+#endif
+#endif
 
 #ifdef LLTD_SUPPORT
 /* for consistency with RT61 */
@@ -1139,16 +1204,26 @@ typedef struct _RT_802_11_MAC_ENTRY {
 	CHAR AvgRssi0;
 	CHAR AvgRssi1;
 	CHAR AvgRssi2;
+#ifdef CUSTOMER_DCC_FEATURE	
+	CHAR AvgRssi3;
+#endif
 	UINT32 ConnectedTime;
+#ifndef CUSTOMER_DCC_FEATURE	
 	MACHTTRANSMIT_SETTING TxRate;
+#else
+	HTTRANSMIT_SETTING TxRate;
+	UINT32 AvgSnr;
+#endif /* CUSTOMER_DCC_FEATURE */
 	UINT32 LastRxRate;
 /*
 	sync with WEB UI's structure for ioctl usage.
 */
+#ifndef CUSTOMER_DCC_FEATURE
 	SHORT StreamSnr[3];				/* BF SNR from RXWI. Units=0.25 dB. 22 dB offset removed */
 	SHORT SoundingRespSnr[3];			/* SNR from Sounding Response. Units=0.25 dB. 22 dB offset removed */
 /*	SHORT TxPER;	*/					/* TX PER over the last second. Percent */
 /*	SHORT reserved;*/
+#endif /* !CUSTOMER_DCC_FEATURE */
 } RT_802_11_MAC_ENTRY, *PRT_802_11_MAC_ENTRY;
 
 typedef struct _RT_802_11_MAC_TABLE {
@@ -1569,6 +1644,8 @@ struct qosmap_data {
 #define OID_802_11_GET_STA_HSINFO             	0x0946
 #define OID_802_11_BSS_LOAD			           	0x0947
 #define OID_802_11_HS_LOCATION_DRV_INFORM_IE	0x0948
+#define OID_802_11_HS_INTERWORKING_ENABLE		0x0949
+
 
 /* for VOW SUPPORT web UI */
 #ifdef CONFIG_AP_SUPPORT
@@ -1587,13 +1664,178 @@ struct qosmap_data {
 #define OID_802_11_VOW_GROUP_MAX_RATIO          0x0967
 #define OID_802_11_VOW_GROUP_MIN_RATIO          0x0968
 #endif /* VOW_SUPPORT */
+#ifdef CUSTOMER_DCC_FEATURE
+#define OID_802_11_SCAN_BSSID_LIST						0x069b
+#ifdef MEMORY_OPTIMIZATION
+#define MAX_LEN_OF_BSS_TABLE             1
+#define MAX_REORDERING_MPDU_NUM			 256
+#else
+#define MAX_LEN_OF_BSS_TABLE             256 /* 64 */
+#define MAX_LEN_OF_BSS_SCAN_TABLE		128 // ARRIS Chnages
+#if defined(MT7615) || defined(MT7622)
+#define MAX_REORDERING_MPDU_NUM			 (512 * 4)
+#else
+#define MAX_REORDERING_MPDU_NUM			 512
+#endif
+#endif
+typedef struct _DCC_CH
+{
+	UINT8	ChannelNo;
+	UINT32 	FalseCCA;
+	UINT32	chanbusytime;
+} DCC_CH, *PDCC_CH;
+typedef struct _WLAN_BSSID_LIST
+{   
+   NDIS_802_11_MAC_ADDRESS        	Bssid;         // BSSID
+   UCHAR 							WpsAP; 		/* 0x00: not support WPS, 0x01: support normal WPS, 0x02: support Ralink auto WPS, 0x04: support Samsung WAC */
+   USHORT							WscDPIDFromWpsAP;   
+   UCHAR							Privacy;    // WEP encryption requirement
+   UINT                    			Signal;       // receive signal strength in dBm
+   NDIS_802_11_NETWORK_TYPE    		wireless_mode;
+   NDIS_802_11_AUTHENTICATION_MODE	AuthMode;	
+   NDIS_802_11_WEP_STATUS			Cipher;				// Unicast Encryption Algorithm extract from VAR_IE
+   UINT8 							Channel;
+   UINT8							ExtChannel;
+   UCHAR   							BssType;
+   UCHAR							SupportedRates[MAX_LENGTH_OF_SUPPORT_RATES];
+   BOOLEAN     						bQbssLoadValid;                     // 1: variable contains valid value
+   USHORT      						QbssLoadStaNum;
+   UCHAR       						QbssLoadChannelUtilization;
+   UCHAR  							Snr[4];
+   UINT8							NumSpatialStream;
+   CHAR								rssi[4];
+   UCHAR  							vendorOUI0[3];
+   UCHAR  							vendorOUI1[3];
+   UINT8						   	ChannelWidth;
+   NDIS_802_11_SSID					Ssid;       // SSID
+} WLAN_BSSID_LIST, *PWLAN_BSSID_LIST;
+typedef struct  _BSSID_LIST_RESULTS
+{
+   UINT           					NumberOfItems;      // in list below, at least 1
+   WLAN_BSSID_LIST 					BssidTable[MAX_LEN_OF_BSS_TABLE];
+   DCC_CH							DccCh[30]; //anand to handle 5g and 2g both channels
+}BSSID_LIST_RESULTS, *PBSSID_LIST_RESULTS;
+#endif /* CUSTOMER_DCC_FEATURE */
 #endif /* CONFIG_AP_SUPPORT */
 
 #ifdef INTERNAL_CAPTURE_SUPPORT
 #define OID_802_11_WIFISPECTRUM_SET_PARAMETER            0x0970
 #define OID_802_11_WIFISPECTRUM_GET_CAPTURE_STOP_INFO    0x0971
 #define OID_802_11_WIFISPECTRUM_DUMP_DATA                0x0972
+#define OID_802_11_WIFISPECTRUM_GET_CAPTURE_BW           0x0973
+#define OID_802_11_WIFISPECTRUM_GET_CENTRAL_FREQ         0x0974
 #endif/*INTERNAL_CAPTURE_SUPPORT*/
+#ifdef CUSTOMER_RSG_FEATURE
+#define OID_802_11_GET_CURRENT_CHANNEL_FALSE_CCA_AVG	0x0690	
+#define OID_802_11_GET_CURRENT_CHANNEL_CST_TIME_AVG		0x0691
+#define	OID_802_11_GET_CURRENT_CHANNEL_BUSY_TIME_AVG	0x0692
+#define OID_802_11_GET_CURRENT_CHANNEL_STATS 			0x0693
+#define OID_802_11_GET_CURRENT_CHANNEL_AP_ACTIVITY_AVG  0x0694
+#define	OID_802_11_GET_RADIO_STATS_COUNT				0x0699
 
+
+typedef struct _CURRENT_CHANNEL_STATS{
+ UINT32		SamplePeriod;                 
+ UINT32		FalseCCACount;                               
+ UINT32  	ChannelApActivity;       
+ UINT32  	EdCcaBusyTime;                              
+ UINT32   	ChannelBusyTime;                           
+} CURRENT_CHANNEL_STATISTICS , *PCURRENT_CHANNEL_STATISTICS; 
+
+#endif
+#ifdef CUSTOMER_DCC_FEATURE
+#define OID_802_11_STA_STATISTICS						0x0695
+#define OID_802_11_GET_CURRENT_CHANNEL_AP_TABLE			0x0696
+#define OID_802_11_GET_ACCESS_CATEGORY_TRAFFIC_STATUS	0x0697
+#define OID_802_11_GET_SCAN_RESULTS						0x0698
+#define	OID_802_11_GET_RADIO_STATS_COUNT				0x0699
+#define OID_802_11_MBSS_STATISTICS						0x069a
+#define OID_802_11_SCAN_BSSID_LIST						0x069b
+
+typedef struct __RT_MBSS_STAT_ENTRY{
+	// DATA counter
+	UINT32 RxCount;
+	UINT32 TxCount;
+	UINT32 ReceivedByteCount;
+	UINT32 TransmittedByteCount;
+	UINT32 RxErrorCount;
+	UINT32 RxDropCount;
+	UINT32 TxErrorCount;
+	UINT32 TxDropCount;
+	UINT32 UnicastPktsRx;
+	UINT32 UnicastPktsTx;
+	UINT32 MulticastPktsRx;
+	UINT32 MulticastPktsTx;
+	UINT32 BroadcastPktsRx;
+	UINT32 BroadcastPktsTx;
+	UINT32 TxRetriedPktCount;
+	UINT32 ChannelUseTime;
+	// MGMT counter
+	UINT32 MGMTRxCount;
+	UINT32 MGMTTxCount;
+	UINT32 MGMTReceivedByteCount;
+	UINT32 MGMTTransmittedByteCount;
+	UINT32 MGMTRxErrorCount;
+	UINT32 MGMTRxDropCount;
+	UINT32 MGMTTxErrorCount;
+	UINT32 MGMTTxDropCount;
+} RT_MBSS_STAT_ENTRY;
+
+typedef struct  __RT_MBSS_STATISTICS_TABLE{
+	UINT32				Num;
+	RT_MBSS_STAT_ENTRY	MbssEntry[8];
+} RT_MBSS_STATISTICS_TABLE;
+
+typedef struct  __RT_STA_STAT_ENTRY
+{
+	UCHAR  ApIdx;
+    UCHAR  Addr[MAC_ADDR_LEN];
+	UINT32 RxCount;
+	UINT32 TxCount;
+	UINT32 ReceivedByteCount;
+	UINT32 TransmittedByteCount;
+	UINT32 RxErrorCount;
+	UINT32 RxDropCount;
+	UINT32 TxErrorCount;
+	UINT32 TxDropCount;
+	UINT32 TxRetriedPktCount;
+	UINT32 ChannelUseTime;
+} RT_STA_STAT_ENTRY;
+
+typedef struct  __RT_STA_STATISTICS_TABLE
+{
+	int Num;
+	RT_STA_STAT_ENTRY	STAEntry[MAX_NUMBER_OF_MAC];
+} RT_STA_STATISTICS_TABLE;
+
+typedef struct _BSS_ENTRY_TABLE
+{
+	UINT8   Bssid[MAC_ADDR_LEN];
+	UINT16  SsidLen;
+	UINT8	Ssid[33];
+	UINT8 	Channel;
+	UINT8	ChannelWidth;
+	UINT8	ExtChannel;
+	CHAR	RSSI;
+	UINT8	SNR;
+	UINT8	PhyMode;
+	UINT8	NumSpatialStream;
+}BSS_ENTRY_TABLE, *PBSS_ENTRY_TABLE;
+
+typedef struct _BEACON_TABLE
+{
+	UINT8 Num;
+	BSS_ENTRY_TABLE BssTable[MAX_LEN_OF_BSS_TABLE];
+} BEACON_TABLE, *PBEACON_TABLE;
+
+typedef struct _SCAN_RESULTS
+{
+	UINT32	ch_busy_time;
+	UINT32	cca_err_cnt;
+	UINT32	num_ap;
+	BSS_ENTRY_TABLE BssTable[MAX_LEN_OF_BSS_TABLE];
+}SCAN_RESULTS, *PSCAN_RESULTS;
+
+#endif
 #endif /* _OID_H_ */
 

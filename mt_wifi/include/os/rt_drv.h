@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -27,7 +28,7 @@
     Who          When          What
     ---------    ----------    ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 /* same as rt_linux.h to warn users the two files can not be used simultaneously */
 #ifndef __RT_LINUX_H__
 #define __RT_LINUX_H__

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When			What
 	--------	----------		----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 
@@ -143,7 +144,7 @@ INT RtAsicAutoFallbackInit(RTMP_ADAPTER *pAd)
 	RTMP_IO_WRITE32(pAd, HT_FBK_CFG1, 0xedcba980);
 #endif // RANGE_EXTEND //
 #ifdef DOT11N_SS3_SUPPORT
-	if (pAd->CommonCfg.TxStream >= 3)
+	if (pAd->Antenna.field.TxPath >= 3)
 	{
 		RTMP_IO_WRITE32(pAd, TX_FBK_CFG_3S_0, 0x12111008);
 		RTMP_IO_WRITE32(pAd, TX_FBK_CFG_3S_1, 0x16151413);
@@ -1388,7 +1389,7 @@ VOID dynamic_tune_be_tx_op(RTMP_ADAPTER *pAd, ULONG nonBEpackets)
 	{
 		if (
 #ifdef DOT11_N_SUPPORT
-			(pAd->WIFItestbed.bGreenField && pAd->MacTab.fAnyStationNonGF == TRUE) ||
+			(pAd->WIFItestbed.bGreenField && pAd->MacTab.fAnyStationNonGF[0] == TRUE) ||
 			((pAd->OneSecondnonBEpackets > nonBEpackets) || pAd->MacTab.fAnyStationMIMOPSDynamic) ||
 #endif /* DOT11_N_SUPPORT */
 			(pAd->MacTab.fAnyTxOPForceDisable))
@@ -3340,6 +3341,7 @@ VOID RtmpPrepareHwNullFrame(
 	mac_info.TID = 0;
 	mac_info.Txopmode = IFS_HTTXOP;
 	mac_info.Preamble = LONG_PREAMBLE;
+	mac_info.IsAutoRate = FALSE;
 	mac_info.SpeEn = 1;
 
 		if (Index == 1)

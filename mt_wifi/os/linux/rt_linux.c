@@ -534,11 +534,7 @@ PNDIS_PACKET ClonePacket(PNET_DEV ndev, PNDIS_PACKET pkt, UCHAR *buf, ULONG sz)
 		pClonedPkt->dev = pRxPkt->dev;
 		pClonedPkt->data = buf;
 		pClonedPkt->len = sz;
-#ifdef NET_SKBUFF_DATA_USES_OFFSET
-		pClonedPkt->tail = (pClonedPkt->data-pClonedPkt->head)+pClonedPkt->len;
-#else
-		pClonedPkt->tail = pClonedPkt->data + pClonedPkt->len;
-#endif
+		SET_OS_PKT_DATATAIL(pClonedPkt, pClonedPkt->len);
 	}
 
 	return pClonedPkt;
@@ -592,26 +588,16 @@ PNDIS_PACKET duplicate_pkt_vlan(
 
 		skb_reserve(skb, 2);
 
-#ifdef NET_SKBUFF_DATA_USES_OFFSET
-		VLAN_Size = VLAN_8023_Header_Copy(VLAN_VID, VLAN_Priority,
-						  pHeader802_3, HdrLen,
-						  skb->data+skb->tail,
-						  TPID);
-
-		skb_put(skb, HdrLen + VLAN_Size);
-		os_move_mem(skb->data+skb->tail, pData, DataSize);
-#else
 		/* copy header (maybe with VLAN tag) */
 		VLAN_Size = VLAN_8023_Header_Copy(VLAN_VID, VLAN_Priority,
 						  pHeader802_3, HdrLen,
-						  skb->tail,
+						  GET_OS_PKT_DATATAIL(skb),
 						  TPID);
 
 		skb_put(skb, HdrLen + VLAN_Size);
 
 		/* copy data body */
-		os_move_mem(skb->tail, pData, DataSize);
-#endif
+		os_move_mem(GET_OS_PKT_DATATAIL(skb), pData, DataSize);
 
 		skb_put(skb, DataSize);
 		skb->dev = pNetDev;
@@ -754,7 +740,7 @@ VOID RtmpOsPktInit(
 	SET_OS_PKT_NETDEV(pRxPkt, pNetDev);
 	SET_OS_PKT_DATAPTR(pRxPkt, pData);
 	SET_OS_PKT_LEN(pRxPkt, DataSize);
-	SET_OS_PKT_DATATAIL(pRxPkt, pData, DataSize);
+	SET_OS_PKT_DATATAIL(pRxPkt, DataSize);
 }
 
 
@@ -778,11 +764,7 @@ void wlan_802_11_to_802_3_packet(
 	pOSPkt->dev = pNetDev;
 	pOSPkt->data = pData;
 	pOSPkt->len = DataSize;
-#ifdef NET_SKBUFF_DATA_USES_OFFSET
-	pOSPkt->tail = (pOSPkt->data - pOSPkt->head) + pOSPkt->len;
-#else
-	pOSPkt->tail = pOSPkt->data + pOSPkt->len;
-#endif
+	SET_OS_PKT_DATATAIL(pOSPkt, pOSPkt->len);
 
 	/* copy 802.3 header */
 #ifdef CONFIG_AP_SUPPORT
@@ -1483,6 +1465,45 @@ Return Value:
 Note:
 ========================================================================
 */
+
+unsigned long RtmpOSGetNetDevState(VOID *pDev)
+{
+	return (((PNET_DEV) pDev)->state);
+}
+
+
+
+unsigned int RtmpOSGetNetDevFlag(VOID *pDev)
+{
+	return (((PNET_DEV)pDev)->flags);
+}
+
+
+unsigned int RtmpOSGetNetDevQNum(VOID *pDev)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
+	return (((PNET_DEV)pDev)->num_tx_queues);
+#else
+	return 0;
+#endif
+}
+
+
+unsigned long RtmpOSGetNetDevQState(VOID *pDev, unsigned int q_idx)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
+	struct netdev_queue *que = netdev_get_tx_queue((PNET_DEV)pDev, q_idx);
+
+	if (que)
+		return (que->state);
+	else
+		return (~0x0);
+#else
+	return (~0x0);
+#endif
+}
+
+
 char *RtmpOsGetNetDevName(VOID *pDev)
 {
 	return ((PNET_DEV) pDev)->name;
@@ -1550,7 +1571,7 @@ static int RtmpOSNetDevRequestName(
 
 		slotNameLen = strlen(suffixName);
 		ASSERT(((slotNameLen + prefixLen) < IFNAMSIZ));
-		strcat(desiredName, suffixName);
+		strncat(desiredName, suffixName, strlen(suffixName));
 
 		existNetDev = RtmpOSNetDevGetByName(dev, &desiredName[0]);
 		if (existNetDev == NULL)
@@ -1563,7 +1584,7 @@ static int RtmpOSNetDevRequestName(
 #ifdef HOSTAPD_SUPPORT
 		*pIoctlIF = ifNameIdx;
 #endif /*HOSTAPD_SUPPORT */
-		strcpy(&dev->name[0], &desiredName[0]);
+		strncpy(&dev->name[0], &desiredName[0], sizeof(dev->name) - 1);
 		Status = NDIS_STATUS_SUCCESS;
 	} else {
 		MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
@@ -1722,7 +1743,7 @@ static void RALINK_ET_DrvInfoGet(
 	struct net_device *pDev,
 	struct ethtool_drvinfo *pInfo)
 {
-	strcpy(pInfo->driver, "RALINK WLAN");
+	strncpy(pInfo->driver, "RALINK WLAN", sizeof(pInfo->driver) - 1);
 
 
 	sprintf(pInfo->bus_info, "CSR 0x%lx", pDev->base_addr);
@@ -2037,7 +2058,7 @@ VOID RtmpDrvAllMacPrint(
 				printk("%s", msg);
 				macAddr += AddrStep;
 			}
-			sprintf(msg, "\nDump all MAC values to %s\n", fileName);
+			snprintf(msg, 1024, "\nDump all MAC values to %s\n", fileName);
 		}
 		filp_close(file_w, NULL);
 	}
@@ -2088,8 +2109,7 @@ VOID RtmpDrvAllE2PPrint(
 				eepAddr += AddrStep;
 				pMacContent += (AddrStep >> 1);
 			}
-			sprintf(msg, "\nDump all EEPROM values to %s\n",
-				fileName);
+			snprintf(msg, 1024, "\nDump all EEPROM values to %s\n", fileName);
 		}
 		filp_close(file_w, NULL);
 	}
@@ -2529,17 +2549,17 @@ void OS_SPIN_UNLOCK_IRQ(NDIS_SPIN_LOCK *lock)
 	spin_unlock_irq((spinlock_t *)(lock));
 }
 
-int OS_TEST_BIT(int bit, unsigned long *flags)
+int OS_TEST_BIT(int bit, ULONG *flags)
 {
 	return test_bit(bit, flags);
 }
 
-void OS_SET_BIT(int bit, unsigned long *flags)
+void OS_SET_BIT(int bit, ULONG *flags)
 {
 	set_bit(bit, flags);
 }
 
-void OS_CLEAR_BIT(int bit, unsigned long *flags)
+void OS_CLEAR_BIT(int bit, ULONG *flags)
 {
 	clear_bit(bit, flags);
 }

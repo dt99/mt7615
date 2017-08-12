@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,10 +14,10 @@
 	Module Name:
 	ap_vow.h
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __AP_VOW_H_
 #define __AP_VOW_H_
-
+#ifdef VOW_SUPPORT
 #define VOW_MAX_GROUP_NUM   16
 #define VOW_MAX_STA_DWRR_NUM    8
 #define VOW_MAX_WMM_SET_NUM 4
@@ -53,6 +54,20 @@
 /* WMM backoff time selection */
 #define VOW_WMM_ONE2ONE_MAPPING     1
 #define VOW_WMM_SHARE_MAPPING       0
+
+/* Weighted ATF */
+#define VOW_WATF_LEVEL_NUM       	4
+
+
+/* MACRO for status */
+#define VOW_IS_ENABLED(_pAd) ((_pAd != NULL) && \
+                             ((_pAd->vow_cfg.en_bw_ctrl == TRUE) || \
+                             (_pAd->vow_cfg.en_airtime_fairness == TRUE)))
+
+/* for dummy group/sta id */
+#define VOW_ALL_GROUP	0
+#define VOW_ALL_STA	0
+
 
 /* group id */
 enum
@@ -104,14 +119,14 @@ enum
 /* station DWRR quantum */
 enum
 {
-    VOW_STA_DWRR_QUANTUM0 = 2,  //unit: 256us
-    VOW_STA_DWRR_QUANTUM1 = 4,
-    VOW_STA_DWRR_QUANTUM2 = 6,
-    VOW_STA_DWRR_QUANTUM3 = 8,
-    VOW_STA_DWRR_QUANTUM4 = 10,
-    VOW_STA_DWRR_QUANTUM5 = 12,
-    VOW_STA_DWRR_QUANTUM6 = 14,
-    VOW_STA_DWRR_QUANTUM7 = 16
+    VOW_STA_DWRR_QUANTUM0 = 6,  //unit: 256us
+    VOW_STA_DWRR_QUANTUM1 = 12,
+    VOW_STA_DWRR_QUANTUM2 = 16,
+    VOW_STA_DWRR_QUANTUM3 = 20,
+    VOW_STA_DWRR_QUANTUM4 = 24,
+    VOW_STA_DWRR_QUANTUM5 = 28,
+    VOW_STA_DWRR_QUANTUM6 = 32,
+    VOW_STA_DWRR_QUANTUM7 = 36
 };
 /* WMM set */
 enum
@@ -186,7 +201,7 @@ typedef struct _VOW_CFG_T
     BOOLEAN en_bw_ctrl;  //enable bandwidth(airtime) control
     BOOLEAN en_bw_refill;   //enable token refill
     BOOLEAN en_airtime_fairness;    //enable airtime fairness
-    BOOLEAN en_txop_no_change_bss;  //enable HW doesnâ€™t change BSS group in TXOP burst  
+    BOOLEAN en_txop_no_change_bss;  //enable HW doesn??¢t change BSS group in TXOP burst  
     BOOLEAN dbdc0_search_rule;  //1 WMM set first, 0  WMM AC first
     BOOLEAN dbdc1_search_rule;  //1 WMM set first, 0  WMM AC first
     UINT8   refill_period;  //token refill period
@@ -238,16 +253,39 @@ typedef struct _VOW_UI_CONFIG
 
 /* function prototype */
 typedef struct _RTMP_ADAPTER *PRTMP_ADAPTER;
+typedef struct _EDCA_PARM *PEDCA_PARM;
+
+/* weighted airtime fairness*/
+
+typedef struct _VOW_WATF_ENTRY {
+	UINT8 Addr[MAC_ADDR_LEN];
+} VOW_WATF_ENTRY, *P_VOW_WATF_ENTRY;
+
+typedef struct GNU_PACKED _VOW_WATF {
+	UINT8 Num;
+	VOW_WATF_ENTRY Entry[MAX_LEN_OF_MAC_TABLE];
+} VOW_WATF, *PVOW_WATF;
+
 
 VOID vow_init(PRTMP_ADAPTER pad);
 VOID vow_init_sta(PRTMP_ADAPTER pad);
 VOID vow_init_group(PRTMP_ADAPTER pad);
 VOID vow_init_rx(PRTMP_ADAPTER pad);
 VOID vow_init_misc(PRTMP_ADAPTER pad);
+VOID vow_reset(PRTMP_ADAPTER pad);
+VOID vow_reset_dvt(PRTMP_ADAPTER pad);
 
 UINT16 vow_convert_rate_token(PRTMP_ADAPTER pad, UINT8 type, UINT8 group_id);
 UINT16 vow_convert_airtime_token(PRTMP_ADAPTER pad, UINT8 type, UINT8 group_id);
 VOID vow_set_client(PRTMP_ADAPTER pad, UINT8 group, UINT8 sta_id);
+VOID vow_group_band_map(PRTMP_ADAPTER pad, UCHAR band_idx, UCHAR group_idx);
+VOID vow_mbss_grp_band_map(PRTMP_ADAPTER pad, struct wifi_dev *wdev);
+VOID vow_mbss_wmm_map(PRTMP_ADAPTER pad, struct wifi_dev *wdev);
+VOID vow_mbss_init(PRTMP_ADAPTER pad, struct wifi_dev *wdev);
+VOID vow_update_om_wmm(PRTMP_ADAPTER pad, struct wifi_dev *wdev, PEDCA_PARM pApEdcaParm);
+BOOLEAN vow_is_enabled(PRTMP_ADAPTER pad);
+VOID vow_atf_off_init(PRTMP_ADAPTER pad);
+INT32 vow_set_sta(PRTMP_ADAPTER pad, UINT8 sta_id, UINT32 subcmd);
 
 INT set_vow_min_rate_token(
     IN  PRTMP_ADAPTER pAd,
@@ -345,6 +383,9 @@ INT set_vow_sta_dwrr_quantum(
     IN  PRTMP_ADAPTER pAd,
     IN  RTMP_STRING *arg);
 
+INT set_vow_sta_frr_quantum(
+	IN	PRTMP_ADAPTER pad,
+	IN	RTMP_STRING *arg);
 INT set_vow_bss_dwrr_quantum(
     IN  PRTMP_ADAPTER pAd,
     IN  RTMP_STRING *arg);
@@ -572,6 +613,7 @@ INT set_vow_sta2_q(
 INT set_vow_sta_th(
     IN  PRTMP_ADAPTER pAd,
     IN  RTMP_STRING *arg);
+
 /* show */
 INT show_vow_rx_time(
     IN  PRTMP_ADAPTER pAd, 
@@ -594,6 +636,10 @@ INT show_vow_bss_conf(
     IN  RTMP_STRING *arg);
 
 INT show_vow_all_bss_conf(
+    IN  PRTMP_ADAPTER pAd,
+    IN  RTMP_STRING *arg);
+
+INT show_vow_info(
     IN  PRTMP_ADAPTER pAd,
     IN  RTMP_STRING *arg);
 
@@ -653,4 +699,43 @@ INT set_vow_help(
 INT show_vow_help(
     IN  PRTMP_ADAPTER pAd,
     IN  RTMP_STRING *arg);
+
+//WATF
+
+VOID vow_reset_watf(
+	IN PRTMP_ADAPTER pad);
+
+BOOLEAN vow_watf_is_enabled(
+	IN PRTMP_ADAPTER pad);
+
+INT show_vow_watf_info(
+    IN  PRTMP_ADAPTER pAd,
+    IN  RTMP_STRING *arg);
+
+INT set_vow_watf_en(
+    IN  PRTMP_ADAPTER pAd,
+    IN  RTMP_STRING *arg);
+
+INT set_vow_watf_q(
+    IN  PRTMP_ADAPTER pAd,
+    IN  RTMP_STRING *arg);
+
+INT set_vow_watf_add_entry(
+    IN  PRTMP_ADAPTER pAd,
+    IN  RTMP_STRING *arg);
+
+INT set_vow_watf_del_entry(
+    IN  PRTMP_ADAPTER pAd,
+    IN  RTMP_STRING *arg);
+
+VOID set_vow_watf_sta_dwrr(
+	IN	PRTMP_ADAPTER pAd,
+	IN	UINT8 *Addr,
+	IN	UINT8 Wcid);
+
+#else
+typedef struct _RTMP_ADAPTER *PRTMP_ADAPTER;
+VOID vow_atf_off_init(PRTMP_ADAPTER pad);
+#endif
+
 #endif /* __AP_VOW_H_ */

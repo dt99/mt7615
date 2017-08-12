@@ -302,12 +302,13 @@
 
 /* Release not used CB  */
 /* [CB_OFF + 33] */
-#if defined (CONFIG_WIFI_PKT_FWD)
+#if defined(CONFIG_WIFI_PKT_FWD) || defined(CONFIG_WIFI_PKT_FWD_MODULE)
 /* set link cover packet send by 5G or 2G */
 #define PACKET_BAND_CB 				33
 #define RTMP_PACKET_SPECIFIC_2G		0x1
 #define RTMP_PACKET_SPECIFIC_5G		0x2
 #define RTMP_PACKET_SPECIFIC_ETHER	0x4
+#define RTMP_PACKET_SPECIFIC_5G_H	0x10
 
 #define RTMP_CLEAN_PACKET_BAND(_p)   (RTPKT_TO_OSPKT(_p)->cb[CB_OFF+33] = 0)
 
@@ -323,10 +324,13 @@
 
 /* [CB_OFF + 34]: tag the packet received from which net device */
 #define RECV_FROM_CB			34
+#define H_CHANNEL_BIGGER_THAN   144
 #define RTMP_PACKET_RECV_FROM_2G_CLIENT 	0x1
 #define RTMP_PACKET_RECV_FROM_5G_CLIENT 	0x2
 #define RTMP_PACKET_RECV_FROM_2G_AP			0x4
-#define RTMP_PACKET_RECV_FROM_5G_AP     		0x8
+#define RTMP_PACKET_RECV_FROM_5G_AP 		0x8
+#define RTMP_PACKET_RECV_FROM_5G_H_CLIENT   0x10
+#define RTMP_PACKET_RECV_FROM_5G_H_AP     	0x20
 
 #define RTMP_CLEAN_PACKET_RECV_FROM(_p)   (RTPKT_TO_OSPKT(_p)->cb[CB_OFF+34] = 0)
 #define RTMP_SET_PACKET_RECV_FROM(_p, _flg)	\
@@ -338,10 +342,24 @@
           }while(0)
 
 #define RTMP_GET_PACKET_RECV_FROM(_p)        (PACKET_CB(_p, 34))
-#define RTMP_IS_PACKET_APCLI(_p)	((RTPKT_TO_OSPKT(_p)->cb[CB_OFF+34]) & (RTMP_PACKET_RECV_FROM_2G_CLIENT | RTMP_PACKET_RECV_FROM_5G_CLIENT))
+#define RTMP_IS_PACKET_APCLI(_p)	((RTPKT_TO_OSPKT(_p)->cb[CB_OFF+34]) & (RTMP_PACKET_RECV_FROM_2G_CLIENT | RTMP_PACKET_RECV_FROM_5G_CLIENT | RTMP_PACKET_RECV_FROM_5G_H_CLIENT))
 #define RTMP_IS_PACKET_AP_APCLI(_p)	((RTPKT_TO_OSPKT(_p)->cb[CB_OFF+34])!= 0)
 
 #endif /* CONFIG_WIFI_PKT_FWD */
+#ifdef CONFIG_HOTSPOT_R2
+#define RTMP_PACKET_DIRECT_TX     	0x40
+#define RTMP_SET_PACKET_DIRECT_TX(_p, _flg)	\
+	do{ 									\
+			if (_flg)								\
+				PACKET_CB(_p, 34) |= (RTMP_PACKET_DIRECT_TX);		\
+			else									\
+				PACKET_CB(_p, 34) &= (~RTMP_PACKET_DIRECT_TX);		\
+	}while(0)
+
+#define RTMP_IS_PACKET_DIRECT_TX(_p)	((RTPKT_TO_OSPKT(_p)->cb[CB_OFF+34])& (RTMP_PACKET_DIRECT_TX))
+
+#endif /* CONFIG_HOTSPOT_R2 */
+
 
 #ifdef RX_CUT_THROUGH
 #define RTMP_SET_RMACLEN(_p, _len)   (RTPKT_TO_OSPKT(_p)->cb[CB_OFF+35] = (_len))
@@ -353,3 +371,6 @@
 #define RTMP_SET_PKT_REPT_CLI_IDX(_p, _idx)   (RTPKT_TO_OSPKT(_p)->cb[CB_OFF+36] = (_idx))
 #define RTMP_GET_PKT_REPT_CLI_IDX(_p)         (RTPKT_TO_OSPKT(_p)->cb[CB_OFF+36])
 #endif
+
+
+

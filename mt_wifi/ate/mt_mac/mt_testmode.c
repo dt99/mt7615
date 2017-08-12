@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,7 +14,7 @@
 	mt_testmode.c
 
 */
-
+#endif /* MTK_LICENSE */
 #define MCAST_WCID_TO_REMOVE 0  //Pat: TODO
 
 #ifdef COMPOS_TESTMODE_WIN
@@ -23,6 +24,92 @@
 #else
 #include "rt_config.h"
 #endif
+
+ATE_DATA_RATE_MAP cck_mode_mcs_to_data_rate_map[] = {
+	{0, 1000},
+	{1, 2000},
+	{2, 5500},
+	{3, 11000},
+	{9, 2000},
+	{10,5500},
+	{11,11000},
+};
+
+ATE_DATA_RATE_MAP ofdm_mode_mcs_to_data_rate_map[] = {
+	{0, 6000},
+	{1, 9000},
+	{2, 12000},
+	{3, 18000},
+	{4, 24000},
+	{5, 36000},
+	{6, 48500},
+	{7, 54000},
+};
+
+ATE_DATA_RATE_MAP n_mode_mcs_to_data_rate_map[] = {
+	{0, 6500},  
+	{1, 13000},
+	{2, 19500},
+	{3, 26000},
+	{4, 39000},
+	{5, 52000},
+	{6, 58500},
+	{7, 65000},
+    {32,6000},   /* MCS32 */
+};
+
+ATE_DATA_RATE_MAP ac_mode_mcs_to_data_rate_map_bw20[] = {
+	{0, 65},    /* in unit of 100k */
+	{1, 130},
+	{2, 195},
+	{3, 260},
+	{4, 390},
+	{5, 520},
+	{6, 585},
+	{7, 650},
+	{8, 780},
+};
+
+ATE_DATA_RATE_MAP ac_mode_mcs_to_data_rate_map_bw40[] = {
+	{0, 135},   /* in unit of 100k */
+	{1, 270},
+	{2, 405},
+	{3, 540},
+	{4, 810},
+	{5, 1080},
+	{6, 1215},
+	{7, 1350},
+	{8, 1620},
+	{9, 1800},
+};
+
+
+ATE_DATA_RATE_MAP ac_mode_mcs_to_data_rate_map_bw80[] = {
+	{0, 293},   /* in unit of 100k */
+	{1, 585},
+	{2, 878},
+	{3, 1170},
+	{4, 1755},
+	{5, 2340},
+	{6, 2633},
+	{7, 2925},
+	{8, 3510},
+	{9, 3900},
+};
+
+ATE_DATA_RATE_MAP ac_mode_mcs_to_data_rate_map_bw160[] = {
+	{0, 585},   /* in unit of 100k */
+	{1, 1170},
+	{2, 1755},
+	{3, 2340},
+	{4, 3510},
+	{5, 4680},
+	{6, 5265},
+	{7, 5850},
+	{8, 7020},
+	{9, 7800},
+};
+
 #if defined(MT7615) || defined(MT7622)
 #define ATE_ANT_USER_SEL 0x80000000
 /* BIT[0]:all, BIT[X==1]:ant(X-1) sel */
@@ -116,6 +203,17 @@ static UINT32 *_rssi_eeprom_band_offset[] = {NULL};
 static UINT32 _n_band_offset[] = {0};
 #endif
 
+#ifdef PRE_CAL_TRX_SET2_SUPPORT
+static UINT16 PreCalGroupList[] = { 
+     0x00ED, /* 0 - Ch group 0,2,3,5,6,7 */
+     0x01FF, /*All group 0 ~ 8*/    
+                                   };
+
+static UINT8 PreCalItemList[] = { 
+     0x1F, /* 0 - Pre-cal Bit[0]:TXLPF, Bit[1]:TXIQ, Bit[2]:TXDC, Bit[3]:RXFI, Bit[4]:RXFD */
+                                  };
+#endif /* PRE_CAL_TRX_SET2_SUPPORT */
+
 struct rssi_offset_eeprom eeprom_rssi_offset = {
 	.rssi_eeprom_band_offset = _rssi_eeprom_band_offset,
 	.n_band_offset = _n_band_offset,
@@ -123,8 +221,7 @@ struct rssi_offset_eeprom eeprom_rssi_offset = {
 };
 
 #if defined(TXBF_SUPPORT) && defined(MT_MAC)
-UINT8 g_EBF_certification = 0;
-UINT8 BF_ON_certification;
+extern UCHAR TemplateFrame[32];
 #endif /* TXBF_SUPPORT && MT_MAC */
 
 extern UCHAR g_BFBackOffMode; // BF Backoff Mode: 2/3/4: apply 2T/3T/4T value in BF backoff table
@@ -246,7 +343,7 @@ INT MtATESetRxFilter(RTMP_ADAPTER *pAd, MT_RX_FILTER_CTRL_T filter)
 		param.Data.rAteSetRxFilter.ucPromiscuousMode = 1;
 	else{
 		param.Data.rAteSetRxFilter.ucReportEn = (UCHAR)filter.bFrameReport;
-		param.Data.rAteSetRxFilter.u4FilterMask = filter.filterMask;
+		param.Data.rAteSetRxFilter.u4FilterMask = cpu2le32(filter.filterMask);
 	}
 	ret =  MtCmdATETest(pAd, &param);
 
@@ -587,6 +684,9 @@ static INT MT_ATETxHandler(RTMP_ADAPTER *pAd, UINT32 band_idx)
 	UINT32 txed_cnt = 0;
 	UINT32 tx_cnt = 0;
 	UCHAR hwq_idx = q_idx;
+    UINT32 pkt_tx_time = TESTMODE_GET_PARAM(ate_ctrl, band_idx, pkt_tx_time);
+    UINT8 need_ampdu = TESTMODE_GET_PARAM(ate_ctrl, band_idx, pkt_need_ampdu);
+
 #if defined(MT7615) || defined(MT7622)
 	if (IS_MT7615(pAd) || IS_MT7622(pAd)) {
 		UCHAR wdev_idx = TESTMODE_GET_PARAM(ate_ctrl, band_idx, wdev_idx);
@@ -600,19 +700,21 @@ static INT MT_ATETxHandler(RTMP_ADAPTER *pAd, UINT32 band_idx)
 	tx_cnt = TESTMODE_GET_PARAM(ate_ctrl, band_idx, TxCount);
 	do {
 		ULONG free_num;
-		ate_thread_dequeue:
+
+ate_thread_dequeue:
+
 #ifdef COMPOS_TESTMODE_WIN
 		free_num = 1;
 #else
 		free_num = 0;
-
 		if ((q_idx & MGMT_USE_QUEUE_FLAG) == MGMT_USE_QUEUE_FLAG) {
 			free_num = GET_TXRING_FREENO(pAd, hwq_idx);
 		} else {
 			free_num = GET_MGMTRING_FREENO(pAd,hwq_idx);
 		}
 #endif
-		if (multi_users>0) {
+
+		if (multi_users > 0) {
 			UCHAR *pate_pkt = TESTMODE_GET_PARAM(ate_ctrl, band_idx, pate_pkt);
 			ate_ctrl->wcid_ref = multi_users;
 			ret = MT_ATEGenPkt(pAd, pate_pkt, band_idx);
@@ -628,6 +730,15 @@ static INT MT_ATETxHandler(RTMP_ADAPTER *pAd, UINT32 band_idx)
 		if(!free_num)
 			break;
 
+#ifdef MT7615
+#ifdef FAST_PATH_TXQ
+        if ((pkt_tx_time > 0) && (pAd->FPTxElementFreeNum <= (FP_TX_FREE_LOWER_BOUND * 2)))
+            break;
+#endif /* FAST_PATH_TXQ */
+
+round_tx:
+#endif /* MT7615 */
+
 		if(tx_cnt<=txed_cnt)
 			break;
 
@@ -635,16 +746,34 @@ static INT MT_ATETxHandler(RTMP_ADAPTER *pAd, UINT32 band_idx)
 		if (ret)
 			break;
 		txed_cnt++;
+
+#ifdef MT7615
+        if ((pkt_tx_time > 0) && need_ampdu)
+        {
+            PKT_TOKEN_CB *pktTokenCb = (PKT_TOKEN_CB *)pAd->PktTokenCb;
+
+            free_num = GET_TXRING_FREENO(pAd, hwq_idx);
+            if ((pktTokenCb->tx_id_list.list->FreeTokenCnt > pktTokenCb->TxTokenLowWaterMark) && 
+                (free_num > 0))
+            {
+#ifdef FAST_PATH_TXQ
+                if (pAd->FPTxElementFreeNum >= (FP_TX_FREE_LOWER_BOUND * 2))
+                    goto round_tx;
+#endif /* FAST_PATH_TXQ */
+            }
+        }
+#endif /* MT7615 */
+
 		dequeue_size--;
 
 		MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_INFO,
-			("%s::band:%u, tx_cnt:%u, txed_cnt:%u, deque:%d, multi_user:%u, free:%lu\n"
+			("%s():: band_idx:%u, tx_cnt:%u, txed_cnt:%u, deque:%d, multi_user:%u, free:%lu\n"
 			, __FUNCTION__, band_idx, tx_cnt, txed_cnt, dequeue_size, multi_users, free_num));
 
 		if (!dequeue_size) {
 			multi_users--;
 			MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_INFO,
-				("%s::Dequeue %d finish, multi_user:%d\n",
+				("%s():: Dequeue %d finish, multi_user:%d\n",
 				__FUNCTION__, dequeue_size, multi_users));
 		} else
 			goto ate_thread_dequeue;
@@ -654,7 +783,7 @@ static INT MT_ATETxHandler(RTMP_ADAPTER *pAd, UINT32 band_idx)
 	TESTMODE_SET_PARAM(ate_ctrl, band_idx, TxCount, tx_cnt);
 
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_INFO,
-		("%s-->::band:%u, tx_cnt:%u, txed_cnt:%u, deque:%d\n"
+		("%s():: band_idx:%u, tx_cnt:%u, txed_cnt:%u, deque:%d\n"
 		, __FUNCTION__, band_idx, tx_cnt, txed_cnt, dequeue_size));
 	return ret;
 }
@@ -961,7 +1090,7 @@ INT MtTestModeBkCr(PRTMP_ADAPTER pAd, ULONG offset, TEST_BK_CR_TYPE type)
 	TESTMODE_BK_CR *entry = NULL;
 	INT32 i;
 
-	if((type>=TEST_BKCR_TYPE_NUM)||(type==TEST_EMPTY_BKCR))
+	if((type>TEST_BKCR_TYPE_NUM) || (type<=TEST_EMPTY_BKCR))
 		return NDIS_STATUS_INVALID_DATA;
 
 	for(i=0;i<MAX_TEST_BKCR_NUM;i++){
@@ -1054,15 +1183,14 @@ INT MtTestModeRestoreCr(PRTMP_ADAPTER pAd, ULONG offset)
 static INT32 MtATEPayloadInit(RTMP_ADAPTER *pAd, UCHAR *pPacket, UINT32 len, UINT32 band_idx)
 {
 	ATE_CTRL *ATECtrl = &pAd->ATECtrl;
-	UINT32 txlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, TxLength);
 	UINT32 policy = TESTMODE_GET_PARAM(ATECtrl, band_idx, FixedPayload);
 	UCHAR *payload = TESTMODE_GET_PARAM(ATECtrl, band_idx, payload);
 	UINT32 pl_len = TESTMODE_GET_PARAM(ATECtrl, band_idx, pl_len);
 	UINT32 pos = 0;
 
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-			("%s, len:%d, band_idx:%u, txlen:%u, pl_len:%u, policy:%x\n",
-			__FUNCTION__, len, band_idx, txlen, pl_len, policy));
+			("%s, len:%d, band_idx:%u, len:%u, pl_len:%u, policy:%x\n",
+			__FUNCTION__, len, band_idx, len, pl_len, policy));
 
 	if (policy == ATE_RANDOM_PAYLOAD) {
 		for (pos = 0; pos < len; pos++)
@@ -1566,6 +1694,7 @@ INT32 MT_ATEDumpLog(RTMP_ADAPTER *pAd, struct _ATE_LOG_DUMP_CB *log_cb, UINT32 l
 {
 	INT32 ret = 0;
 	INT idx = 0;
+    UINT32 u4BufferCounter = 0;
 #ifdef LOGDUMP_TO_FILE
 	INT32 (*dump_func)(struct _ATE_LOG_DUMP_ENTRY, INT idx, RTMP_OS_FD_EXT fd) = NULL;
 #else
@@ -1580,6 +1709,9 @@ INT32 MT_ATEDumpLog(RTMP_ADAPTER *pAd, struct _ATE_LOG_DUMP_CB *log_cb, UINT32 l
 #endif
 	if (!log_cb->entry)
 		goto err0;
+	/* For QAtool log buffer limitation. We should record the current index for next function called.  */
+	if (pAd->fgQAtoolBatchDumpSupport)
+		idx = pAd->u2LogEntryIdx;    
 	if (log_cb->is_overwritten)
 		idx = log_cb->idx;
 
@@ -1631,7 +1763,10 @@ INT32 MT_ATEDumpLog(RTMP_ADAPTER *pAd, struct _ATE_LOG_DUMP_CB *log_cb, UINT32 l
 	CreateThread(pAd);
 	MT_ATEDumpRXVToFile(pAd, log_cb, idx);
 #else
+	if (idx == 0) {
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s DUMP START]\n", Log_type));
+		pAd->fgDumpStart = 1;
+	}
 	do {
 		if (log_cb->entry[idx].un_dumped) {
 			//MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%d]", idx));
@@ -1641,6 +1776,12 @@ INT32 MT_ATEDumpLog(RTMP_ADAPTER *pAd, struct _ATE_LOG_DUMP_CB *log_cb, UINT32 l
 			dump_func(log_cb->entry[idx], idx);
 #endif
 			log_cb->entry[idx].un_dumped = FALSE;
+            u4BufferCounter++;
+		}
+        /* The size of per entry is 38 bytes and for QAtool log buffer limitation. */
+		if ((pAd->fgQAtoolBatchDumpSupport) && (u4BufferCounter >= (1 << (CONFIG_LOG_BUF_SHIFT - 1))/38)) {
+			pAd->u2LogEntryIdx = idx;
+			break;
 		}
 		INC_RING_INDEX(idx, log_cb->len);
 	} while (idx != log_cb->idx);
@@ -1650,7 +1791,10 @@ INT32 MT_ATEDumpLog(RTMP_ADAPTER *pAd, struct _ATE_LOG_DUMP_CB *log_cb, UINT32 l
 		MT_ATEWriteFd(msg, log_cb->fd);
 	}
 #endif
+	if((idx == log_cb->idx) && (pAd->fgDumpStart)) {
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("[%s DUMP END]\n", Log_type));
+		pAd->fgDumpStart = 0;
+	}
 #endif
 	OS_SPIN_LOCK(&log_cb->lock);
 	log_cb->is_dumping = FALSE;
@@ -1761,8 +1905,12 @@ static INT32 MT_ATELogOnOff(struct _RTMP_ADAPTER *pAd, UINT32 type, UINT32 on_of
 		if (ret)
 			goto err1;
 		ATECtrl->en_log |= mask;
+		if (pAd->fgQAtoolBatchDumpSupport)
+			pAd->u2LogEntryIdx = 0;        
 	} else if (on_off == ATE_LOG_OFF) {
 		ATECtrl->en_log &= ~mask;
+ 		if (pAd->fgQAtoolBatchDumpSupport)
+			pAd->u2LogEntryIdx = 0;       
 	} else if (on_off == ATE_LOG_DUMP) {
 		if (log_cb)
 			ret = MT_ATEDumpLog(pAd, log_cb, type);
@@ -1855,7 +2003,7 @@ static struct wifi_dev* MT_ATEGetWDev(RTMP_ADAPTER *pAd)
 	return wdev;
 }
 
-UINT8 MT_ATEGetBandIdxByIf(RTMP_ADAPTER *pAd)
+INT8 MT_ATEGetBandIdxByIf(RTMP_ADAPTER *pAd)
 {
 	UINT8 band_idx = 0;
 	struct wifi_dev *wdev = NULL;
@@ -1869,13 +2017,13 @@ UINT8 MT_ATEGetBandIdxByIf(RTMP_ADAPTER *pAd)
 		goto err0;
 
 
-	band_idx = HcGetBandByWdev(wdev);
+	band_idx = HcGetBandByChannel(pAd, wdev->channel);
 	return band_idx;
 	err0:
 	return -1;
 }
 
-UINT8 MT_ATEGetWDevIdxByBand(RTMP_ADAPTER *pAd, UINT32 band_idx)
+INT8 MT_ATEGetWDevIdxByBand(RTMP_ADAPTER *pAd, UINT32 band_idx)
 {
 	UINT8 wdev_idx = 0;
 	struct wifi_dev *wdev = NULL;
@@ -1888,7 +2036,7 @@ UINT8 MT_ATEGetWDevIdxByBand(RTMP_ADAPTER *pAd, UINT32 band_idx)
 			if (!pWdev) {
 				continue;
 			}
-			BandIdx = HcGetBandByWdev(pWdev);
+			BandIdx = HcGetBandByChannel(pAd, pWdev->channel);
 			if (BandIdx == band_idx) {
 				wdev = pWdev;
 				break;
@@ -1967,14 +2115,13 @@ static INT32 MT_ATEInitBandInfo(RTMP_ADAPTER *pAd, UINT32 band_idx)
 	RTMP_OS_COMPLETION *tx_wait = TESTMODE_GET_PADDR(ATECtrl, band_idx, tx_wait);
 	INT8 wdev_idx = MT_ATEGetWDevIdxByBand(pAd, band_idx);
 	CHAR addr[MAC_ADDR_LEN] = {0x00, 0x11, 0x22, 0xBA, 0x2D, 0x11};
-	if (wdev_idx<0) {
-		MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
-		("%s, cannot find wdev by band_idx %u\n", __FUNCTION__, band_idx));
-		ret = -1;
-	}
+
+	if (wdev_idx < 0)
+		goto err;
 
 	if (ATECtrl->band_ext[idx].pate_pkt)
 		os_free_mem(ATECtrl->band_ext[idx].pate_pkt);
+
 	NdisZeroMemory(&ATECtrl->band_ext[idx], sizeof(struct _BAND_INFO));
 	ret = os_alloc_mem(pAd, (PUCHAR *)&ATECtrl->band_ext[idx].pate_pkt, ATE_TESTPKT_LEN);
 	TESTMODE_SET_PARAM(ATECtrl, band_idx, Channel, 36);
@@ -2002,11 +2149,109 @@ static INT32 MT_ATEInitBandInfo(RTMP_ADAPTER *pAd, UINT32 band_idx)
 	RTMP_OS_INIT_COMPLETION(tx_wait);
 
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-			("%s, idx:%u, pkt:%p, wdev_idx:%u\n"
-			, __FUNCTION__, idx ,ATECtrl->band_ext[idx].pate_pkt, wdev_idx));
+		("%s, idx:%u, pkt:%p, wdev_idx:%u\n",
+		__FUNCTION__, idx , ATECtrl->band_ext[idx].pate_pkt, wdev_idx));
 #endif
 	return ret;
+err:
+	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+		("%s: cannot find wdev by band_idx %u\n", __FUNCTION__, band_idx));
+	return -1;
 }
+
+
+static INT mt_ate_mac_cr_restore(RTMP_ADAPTER *pAd)
+{
+	/* Data frame protection CR recover */
+	MtTestModeRestoreCr(pAd, AGG_PCR);
+
+	/* RTS threshold CR recover */
+	MtTestModeRestoreCr(pAd, AGG_PCR1);
+#ifdef DBDC_MODE	
+	MtTestModeRestoreCr(pAd, AGG_PCR2);
+#endif /* DBDC_MODE */
+
+	/* BA related CR recover */
+	MtTestModeRestoreCr(pAd, AGG_AALCR0);
+	MtTestModeRestoreCr(pAd, AGG_AALCR1);
+	MtTestModeRestoreCr(pAd, AGG_AALCR2);
+	MtTestModeRestoreCr(pAd, AGG_AALCR3);
+
+	MtTestModeRestoreCr(pAd, AGG_AWSCR0);
+	MtTestModeRestoreCr(pAd, AGG_AWSCR1);
+
+	/* Station pause CR recover */
+	MtTestModeRestoreCr(pAd, STATION_PAUSE0);
+	MtTestModeRestoreCr(pAd, STATION_PAUSE1);
+	MtTestModeRestoreCr(pAd, STATION_PAUSE2);
+	MtTestModeRestoreCr(pAd, STATION_PAUSE3);
+
+	/* Enable HW BAR feature */
+	MtTestModeRestoreCr(pAd, AGG_MRCR);
+
+	return 0;
+}
+
+
+static INT mt_ate_mac_cr_backup_and_set(RTMP_ADAPTER *pAd)
+{
+    ATE_CTRL *ATECtrl = &pAd->ATECtrl;
+
+
+	NdisZeroMemory(&ATECtrl->bk_cr, sizeof(TESTMODE_BK_CR)*MAX_TEST_BKCR_NUM);
+
+#ifdef MT7615
+    // TODO: check if following operation also need to do for other chips
+    if (IS_MT7615(pAd)) {
+        UINT32 val = 0;
+
+        /* Enable data frame protection for test mode */
+        MtTestModeBkCr(pAd, AGG_PCR, TEST_MAC_BKCR);
+        MAC_IO_READ32(pAd, AGG_PCR, &val);
+        val = 0x80008;
+        MAC_IO_WRITE32(pAd, AGG_PCR, val);
+        
+        /* RTS threshold need to change to 1 for test mode */
+        MtTestModeBkCr(pAd, AGG_PCR1, TEST_MAC_BKCR);
+        MAC_IO_READ32(pAd, AGG_PCR1, &val);
+        //val &= 0x0FFFFFFF;
+        //val |= 0x10000000;
+        /* Setting RTS threshold to max value to aviod send RTS in test mode */
+        val = 0xFE0FFFFF;
+        MAC_IO_WRITE32(pAd, AGG_PCR1, val);
+#ifdef DBDC_MODE
+	MtTestModeBkCr(pAd, AGG_PCR2, TEST_MAC_BKCR);
+	val = 0xFE0FFFFF;
+        MAC_IO_WRITE32(pAd, AGG_PCR2, val);
+#endif /* DBDC_MODE */
+
+        /* BA related CR backup */
+        MtTestModeBkCr(pAd, AGG_AALCR0, TEST_MAC_BKCR);
+        MtTestModeBkCr(pAd, AGG_AALCR1, TEST_MAC_BKCR);
+        MtTestModeBkCr(pAd, AGG_AALCR2, TEST_MAC_BKCR);
+        MtTestModeBkCr(pAd, AGG_AALCR3, TEST_MAC_BKCR);
+
+        MtTestModeBkCr(pAd, AGG_AWSCR0, TEST_MAC_BKCR);
+        MtTestModeBkCr(pAd, AGG_AWSCR1, TEST_MAC_BKCR);
+
+        /* Station pause CR backup for TX after reset WTBL */
+        MtTestModeBkCr(pAd, STATION_PAUSE0, TEST_MAC_BKCR);
+        MtTestModeBkCr(pAd, STATION_PAUSE1, TEST_MAC_BKCR);
+        MtTestModeBkCr(pAd, STATION_PAUSE2, TEST_MAC_BKCR);
+        MtTestModeBkCr(pAd, STATION_PAUSE3, TEST_MAC_BKCR);
+
+        /* HW BAR feature */
+        MtTestModeBkCr(pAd, AGG_MRCR, TEST_MAC_BKCR);
+        MAC_IO_READ32(pAd, AGG_MRCR, &val);
+        val &= ~BAR_TX_CNT_LIMIT_MASK;
+        val |= BAR_TX_CNT_LIMIT(0);
+        MAC_IO_WRITE32(pAd, AGG_MRCR, val);        
+    }
+#endif /* MT7615 */
+
+    return 0;
+}
+
 
 static INT32 MT_ATEStart(RTMP_ADAPTER *pAd)
 {
@@ -2014,13 +2259,15 @@ static INT32 MT_ATEStart(RTMP_ADAPTER *pAd)
 	ATE_IF_OPERATION *if_ops = ATECtrl->ATEIfOps;
 	INT32 Ret = 0;
 	BOOLEAN Cancelled;
-	UINT32 val = 0;
 	MT_RX_FILTER_CTRL_T rx_filter;
 	UINT8 WPDMABurstSize = pAd->chipCap.WPDMABurstSIZE;
 #ifdef CONFIG_AP_SUPPORT
 	INT32 IdBss, MaxNumBss = pAd->ApCfg.BssidNum;
 #endif
-	UINT8 band_idx = 0;
+#ifdef DBDC_MODE
+	BAND_INFO   *Info = &(ATECtrl->band_ext[0]);
+#endif /* DBDC_MODE */
+	INT8 band_idx = 0;
 
     MtCmdATEModeCtrl(pAd, 1); // Remind FW that Enable ATE mode
     MtCmdTxPwrUppBoundCtrl(pAd, 0); // 0: recover to default (0x820F4080=0x3F403F40)  1: reset by EEPROM low rate Power
@@ -2067,17 +2314,29 @@ static INT32 MT_ATEStart(RTMP_ADAPTER *pAd)
 	if (IS_ATE_DBDC(pAd))
 		Ret = MT_ATEInitBandInfo(pAd, TESTMODE_BAND1);
 
+    /* Tx Power related Status Initialization */
+    ATECtrl->fgTxPowerSKUEn        = FALSE;
+    ATECtrl->fgTxPowerPercentageEn = FALSE;
+    ATECtrl->fgTxPowerBFBackoffEn  = FALSE;
+    ATECtrl->PercentageLevel       = 100;
+
+#ifdef DBDC_MODE
+    /* Tx Power related Status Initialization */
+    Info->fgTxPowerSKUEn        = FALSE;
+    Info->fgTxPowerPercentageEn = FALSE;
+    Info->fgTxPowerBFBackoffEn  = FALSE;
+    Info->PercentageLevel       = 100;
+#endif /* DBDC_MODE */
+
 	MT_ATEUpdateRxStatistic(pAd, TESTMODE_RESET_CNT, NULL);
-	/* RTS Threshold need change to 1 for Test Mode */
-	MtTestModeBkCr(pAd, AGG_PCR1, TEST_MAC_BKCR);
-	MAC_IO_READ32(pAd, AGG_PCR1, &val);
-	//val &= 0x0FFFFFFF;
-	//val |= 0x10000000;
-	/* Setting RTS Threshold to max value to aviod send RTS in Testmode */
-	val = 0xFE0FFFFF;
-	MAC_IO_WRITE32(pAd, AGG_PCR1, val);
-	NdisZeroMemory(&ATECtrl->bk_cr, sizeof(TESTMODE_BK_CR)*MAX_TEST_BKCR_NUM);
-	/* Common Part */
+
+    /*
+            Backup original CRs and change to ATE mode specific CR seting, 
+            restore it back when back to normal mode
+        */
+    mt_ate_mac_cr_backup_and_set(pAd);
+
+    /* Common Part */
 	/* ATECtrl->en_log = fATE_LOG_TXDUMP; */
 	ATECtrl->en_log = 0;
 	ATECtrl->verify_mode = HQA_VERIFY;
@@ -2086,20 +2345,26 @@ static INT32 MT_ATEStart(RTMP_ADAPTER *pAd)
 	ATECtrl->TxPower0 = pAd->EEPROMImage[TX0_G_BAND_TARGET_PWR];
 	ATECtrl->TxPower1 = pAd->EEPROMImage[TX1_G_BAND_TARGET_PWR];
 	NdisZeroMemory(ATECtrl->log_dump, sizeof(ATECtrl->log_dump[0])*ATE_LOG_TYPE_NUM);
+    
 	MT_ATEMPSInit(pAd);
+
 	NdisZeroMemory(ATECtrl->pfmu_info, sizeof(ATECtrl->pfmu_info[0])*ATE_BFMU_NUM);
+
 #ifdef CONFIG_QA
 	MtAsicGetRxStat(pAd, HQA_RX_RESET_PHY_COUNT);
 	MtAsicGetRxStat(pAd, HQA_RX_RESET_MAC_COUNT);
 #endif
+
 #ifdef ATE_TXTHREAD
 	Ret = TESTMODE_TXTHREAD_INIT(pAd, 0, band_idx);
 	if (Ret)
 		goto err3;
 #endif /* ATE_TXTHREAD */
+
 	MtATESetMacTxRx(pAd, ASIC_MAC_RX, FALSE, TESTMODE_BAND0);
 	if (IS_ATE_DBDC(pAd))
 		MtATESetMacTxRx(pAd, ASIC_MAC_RX, FALSE, TESTMODE_BAND1);
+    
 	/* Rx filter */
 	os_zero_mem(&rx_filter, sizeof(rx_filter));
 	rx_filter.bPromiscuous = FALSE;
@@ -2151,7 +2416,8 @@ static INT32 MT_ATEStart(RTMP_ADAPTER *pAd)
 	}
 #endif
 
-	HwCtrlSetFlag(pAd, HWFLAG_ID_UPDATE_PROTECT);
+    /* Mark it for not sending protection command again, the protection already disabled by CR */
+	//HwCtrlSetFlag(pAd, HWFLAG_ID_UPDATE_PROTECT);
 	MtAsicSetWPDMA(pAd, PDMA_TX_RX, TRUE, WPDMABurstSize);
 
 #ifdef CONFIG_AP_SUPPORT
@@ -2209,8 +2475,8 @@ static INT32 MT_ATEStop(RTMP_ADAPTER *pAd)
 
 	if ((ATECtrl->Mode & ATE_STOP) || !(ATECtrl->Mode& ATE_START))
 		goto err2;
-	/* RTS Threshold CR Recover */
-	MtTestModeRestoreCr(pAd, AGG_PCR1);
+    
+    mt_ate_mac_cr_restore(pAd);
 
 	if (ATECtrl->Mode & ATE_FFT) {
 		ATE_OPERATION *ATEOp = ATECtrl->ATEOp;
@@ -2262,6 +2528,7 @@ static INT32 MT_ATEStop(RTMP_ADAPTER *pAd)
                 RELEASE_NDIS_PACKET(pAd, *pkt_skb, NDIS_STATUS_SUCCESS);
 		*pkt_skb = NULL;
 	}
+#ifdef DBDC_MODE
 	if (IS_ATE_DBDC(pAd)) {
 		pkt_skb = &ATECtrl->band_ext[TESTMODE_BAND1 - 1].pkt_skb;
 		if (*pkt_skb) {
@@ -2269,15 +2536,18 @@ static INT32 MT_ATEStop(RTMP_ADAPTER *pAd)
 			*pkt_skb = NULL;
 		}
 	}
-
+#endif /*DBDC_MODE*/
 #ifdef ATE_TXTHREAD
 	Ret = TESTMODE_TXTHREAD_RELEASE(pAd, 0);
 	msleep(2);
 #endif /* ATE_TXTHREAD */
 	if (if_ops->clean_trx_q)
 		Ret = if_ops->clean_trx_q(pAd);
+	if (Ret)
+		goto err1;
+
 	if (if_ops->ate_leave)
-		Ret += if_ops->ate_leave(pAd);
+		Ret = if_ops->ate_leave(pAd);
 	if (Ret)
 		goto err1;
 
@@ -2427,13 +2697,15 @@ static INT32 MT_ATEStop(RTMP_ADAPTER *pAd)
 
 	return Ret;
 }
-UINT8 MT_ATEGetBandIdxByIf(RTMP_ADAPTER *pAd)
+INT8 MT_ATEGetBandIdxByIf(RTMP_ADAPTER *pAd)
 {
 	// todo:
 	return 0;
 }
 
 #endif
+
+
 INT MtSetTestFrame(RTMP_ADAPTER *pAd, UCHAR *packet, UINT32 band_idx)
 {
 	INT32 Ret = 0;
@@ -2448,43 +2720,90 @@ INT MtSetTestFrame(RTMP_ADAPTER *pAd, UCHAR *packet, UINT32 band_idx)
 	UINT32 ant_sel = 0;
 	INT wdev_idx = 0;
 #if !defined(COMPOS_WIN) && !defined(COMPOS_TESTMODE_WIN)
-	struct wifi_dev *pWdev=NULL;
+	struct wifi_dev *pWdev = NULL;
 #if defined(MT7615) || defined(MT7622)
 	UCHAR WmmIdx;
 #endif
+    UINT8 need_qos = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_need_qos);
+    UINT8 need_amsdu = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_need_amsdu);
+    UINT8 need_ampdu = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_need_ampdu);
+    UINT32 pkt_tx_time = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_tx_time);
+
+#ifdef SINGLE_SKU_V2
+    BOOLEAN fgSPE;
+#endif /* SINGLE_SKU_V2 */
+
 	wdev_idx = TESTMODE_GET_PARAM(ATECtrl, band_idx, wdev_idx);
 	pWdev = pAd->wdev_list[wdev_idx];
+
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, 
+            ("%s(): wdev_idx=%d \n", __FUNCTION__, wdev_idx));
+
 	if(!pWdev)
 		goto err0;
 #endif
 	TESTMODE_SET_PARAM(ATECtrl, band_idx, HLen, LENGTH_802_11);
 	addr1 = TESTMODE_GET_PARAM(ATECtrl, band_idx, Addr1);
+
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+            ("%s():: addr1: %02x:%02x:%02x:%02x:%02x:%02x \n",
+            __FUNCTION__, PRINT_MAC(addr1)));
+
 	ant_sel = TESTMODE_GET_PARAM(ATECtrl, band_idx, TxAntennaSel);
 	phy_mode = TESTMODE_GET_PARAM(ATECtrl, band_idx, PhyMode);
 	mcs = TESTMODE_GET_PARAM(ATECtrl, band_idx, Mcs);
 	vht_nss = TESTMODE_GET_PARAM(ATECtrl, band_idx, Nss);
+    
 	/* Fill TMAC_INFO */
 	NdisZeroMemory(&TxInfo, sizeof(TxInfo));
 	NdisZeroMemory(&TxD, sizeof(TxD));
 	TxInfo.LongFmt = TRUE;
-	/* LMAC queue index (AC0) */
-	TxInfo.WifiHdrLen = (UINT8)TESTMODE_GET_PARAM(ATECtrl, band_idx, HLen);
-	TxInfo.HdrPad = 0;
-	TxInfo.BmcPkt= IS_BM_MAC_ADDR(addr1);
+    if (pkt_tx_time > 0) {        
+        TxInfo.WifiHdrLen = (UINT8)TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_hdr_len);
+        TxInfo.PktLen = (UINT16)TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_msdu_len);
+        TxInfo.NeedTrans = FALSE;
+        if(need_qos | need_amsdu | need_ampdu) {
+            TxInfo.HdrPad = 2;
+            TxInfo.BmcPkt= FALSE;
+            TxInfo.UserPriority = 0;
+            TxInfo.FrmType = FC_TYPE_DATA;
+            TxInfo.SubType = SUBTYPE_QDATA;
+        } else {
+            TxInfo.HdrPad = 0;
+            TxInfo.BmcPkt= IS_BM_MAC_ADDR(addr1);
+            TxInfo.UserPriority = 0;
+            TxInfo.FrmType = FC_TYPE_DATA;
+            TxInfo.SubType = SUBTYPE_QDATA;
+        }
+    } else {
+        TxInfo.WifiHdrLen = (UINT8)TESTMODE_GET_PARAM(ATECtrl, band_idx, HLen);
+        TxInfo.HdrPad = 0;
+        TxInfo.PktLen = (UINT16)TESTMODE_GET_PARAM(ATECtrl, band_idx, TxLength);
+        TxInfo.BmcPkt= IS_BM_MAC_ADDR(addr1);
+    }
+
 	/* no ack */
-	TxInfo.bAckRequired = 0;
+    if ((pkt_tx_time > 0) && (need_ampdu))
+        TxInfo.bAckRequired = 1;
+    else
+	    TxInfo.bAckRequired = 0;
+
 #if !defined(COMPOS_WIN) && !defined(COMPOS_TESTMODE_WIN)
 	TxInfo.OwnMacIdx = pWdev->OmacIdx;
 #else
 	TxInfo.OwnMacIdx = 0;
 #endif
+
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+            ("%s(): TxInfo.OwnMacIdx=%d \n", __FUNCTION__, TxInfo.OwnMacIdx));
+
 	/*  no frag */
 	TxInfo.FragIdx = 0;
 	/* no protection */
 	TxInfo.CipherAlg = 0;
-	TxInfo.PktLen = (UINT16)TESTMODE_GET_PARAM(ATECtrl, band_idx, TxLength);
+
 	/* TX Path setting */
-	TxInfo.VhtNss = vht_nss?vht_nss:1;
+	TxInfo.VhtNss = vht_nss ? vht_nss : 1;
 	TxInfo.AntPri = 0;
 	TxInfo.SpeEn = 0;
     /* Timing Measure setting */
@@ -2516,20 +2835,24 @@ INT MtSetTestFrame(RTMP_ADAPTER *pAd, UCHAR *packet, UINT32 band_idx)
 			TxInfo.AntPri = ant_sel;
 		} else {
 			INT map_idx = 0;
-			for (map_idx=0;map_idx<sizeof(ant_to_spe_idx_map);map_idx++) {
+			UINT32 array_cnt = 0;
+
+			array_cnt = sizeof(ant_to_spe_idx_map) / sizeof(ATE_ANT_MAP);
+
+			for (map_idx=0;map_idx<array_cnt;map_idx++) {
 				if(ant_sel == ant_to_spe_idx_map[map_idx].ant_sel)
 					break;
 			}
-			if (map_idx == sizeof(ant_to_spe_idx_map))
+			if (map_idx == array_cnt)
 				TxInfo.AntPri = 0;
 			else
 				TxInfo.AntPri = ant_to_spe_idx_map[map_idx].spe_idx;
 		}
 
 #if defined(TXBF_SUPPORT) && defined(MT_MAC)
-    if (g_EBF_certification)
+    if (pAd->fgEBFCertification)
     {
-    	if (BF_ON_certification)
+    	if (pAd->fgEBFCertOn)
     	{
     		TxInfo.AntPri = 0;
     		MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("TxInfo.AntPri = 0 \n"));
@@ -2543,22 +2866,32 @@ INT MtSetTestFrame(RTMP_ADAPTER *pAd, UCHAR *packet, UINT32 band_idx)
 #endif /* defined(TXBF_SUPPORT) && defined(MT_MAC) */
 
 		MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
-				("%s, ant_sel:%x, ant_pri:%u, vht_nss:%x, TxD.VhtNss:%x\n"
+				("%s():: ant_sel:%x, ant_pri:%u, vht_nss:%x, TxD.VhtNss:%x\n"
 				,__FUNCTION__, ant_sel, TxInfo.AntPri, vht_nss, TxInfo.VhtNss));
 	}
 #endif /* defined(MT7615) || defined(MT7622) */
-	/* Fill Transmit setting */
+
+	/* Fill transmit setting */
 	TxInfo.TxRadioSet.RateCode = mcs;
 	TxInfo.TxRadioSet.CurrentPerPktBW = TESTMODE_GET_PARAM(ATECtrl, band_idx, PerPktBW);
 	TxInfo.TxRadioSet.ShortGI= TESTMODE_GET_PARAM(ATECtrl, band_idx, Sgi) ;
 	TxInfo.TxRadioSet.Stbc = TESTMODE_GET_PARAM(ATECtrl, band_idx, Stbc);
 	TxInfo.TxRadioSet.PhyMode = phy_mode;
 	TxInfo.TxRadioSet.Ldpc = TESTMODE_GET_PARAM(ATECtrl, band_idx, Ldpc);
-	TxInfo.Wcid = 0;
-	TxInfo.QueIdx = TESTMODE_GET_PARAM(ATECtrl, band_idx, QID);
-	TxInfo.FixRate = 1;
-	TxInfo.BaDisable = TRUE;
-	TxInfo.RemainTxCnt = 15;
+    if ((pkt_tx_time > 0) && (need_ampdu)) {
+    	TxInfo.Wcid = ATECtrl->wcid_ref;
+    	TxInfo.QueIdx = WMM_AC_BE;
+    	TxInfo.FixRate = 0;
+    	TxInfo.BaDisable = 0;
+        TxInfo.RemainTxCnt = 1;
+    } else {
+    	TxInfo.Wcid = 0;
+    	TxInfo.QueIdx = TESTMODE_GET_PARAM(ATECtrl, band_idx, QID);
+    	TxInfo.FixRate = 1;
+    	TxInfo.BaDisable = TRUE;
+        TxInfo.RemainTxCnt = 15;
+    }
+
 	if (ATECtrl->txs_enable) {
 		TxInfo.TxS2Host = TRUE;
 		TxInfo.TxS2Mcu = FALSE;
@@ -2567,13 +2900,13 @@ INT MtSetTestFrame(RTMP_ADAPTER *pAd, UCHAR *packet, UINT32 band_idx)
 
 	if (phy_mode == MODE_CCK) {
 		TxInfo.TxRadioSet.Premable = LONG_PREAMBLE;
-		if (mcs == 9) {
+		if (mcs == MCS_9) {
 			TxInfo.TxRadioSet.RateCode = 0;
 			TxInfo.TxRadioSet.Premable = SHORT_PREAMBLE;
-		} else if (mcs == 10) {
+		} else if (mcs == MCS_10) {
 			TxInfo.TxRadioSet.RateCode = 1;
 			TxInfo.TxRadioSet.Premable = SHORT_PREAMBLE;
-		} else if (mcs == 11) {
+		} else if (mcs == MCS_11) {
 			TxInfo.TxRadioSet.RateCode = 2;
 			TxInfo.TxRadioSet.Premable = SHORT_PREAMBLE;
 		}
@@ -2588,14 +2921,823 @@ INT MtSetTestFrame(RTMP_ADAPTER *pAd, UCHAR *packet, UINT32 band_idx)
 		}
 	}
 #endif /* TXBF_SUPPORT */
+
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+            ("%s(): TxInfo.TxRadioSet.EtxBFEnable=%d\n",
+            __FUNCTION__, TxInfo.TxRadioSet.EtxBFEnable));
+
 	TxInfo.Wcid = ATECtrl->wcid_ref;
+
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+            ("%s(): TxInfo.Wcid=%d \n", __FUNCTION__,  TxInfo.Wcid));
+
+#ifdef SINGLE_SKU_V2
+
+    if (TxInfo.AntPri >= 24)
+        fgSPE = TRUE;
+    else
+        fgSPE = FALSE;
+
+    /* Update Power offset according to Band, Phymode, MCS, BW, Nss, SPE */
+    TxInfo.PowerOffset = SKUTxPwrOffsetGet(pAd, band_idx, ATECtrl->PerPktBW, ATECtrl->PhyMode, ATECtrl->Mcs, ATECtrl->Nss, fgSPE);
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("MtSetTestFrame: TxInfo.PowerOffset = 0x%x (%d) \n", TxInfo.PowerOffset, TxInfo.PowerOffset));
+
+#if defined(MT7615)
+
+    if (TxInfo.PowerOffset < -16)
+    {
+        TxInfo.PowerOffset = -16;
+    }
+    else if (TxInfo.PowerOffset > 15)
+    {
+        TxInfo.PowerOffset = 15;
+    }
+#endif /* defined(MT7615) */
+
+#endif /* SINGLE_SKU_V2 */
+    
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("MtSetTestFrame: TxInfo.PowerOffset = 0x%x (%d) \n", TxInfo.PowerOffset, TxInfo.PowerOffset));
+
+    if ((pkt_tx_time > 0) && (need_ampdu)) {
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, 
+                ("%s(): TxInfo.Wcid/Wmmset/QueIdx=%d/%d/%d\n",
+                __FUNCTION__, TxInfo.Wcid, TxInfo.WmmSet, TxInfo.QueIdx)); 
+    }
+
 	MtWriteTMacInfo(pAd, packet, &TxInfo);
 	//dump_tmac_info(pAd, packet);
 	return Ret;
+
 err0:
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
-			("%s::Cannot get Wdev by idx:%d\n", __FUNCTION__, wdev_idx));
+			("%s():: Cannot get Wdev by idx:%d\n", __FUNCTION__, wdev_idx));
 	return -1;
+}
+
+
+UINT32 mt_ate_get_txlen_by_pkt_tx_time(ATE_CTRL *ATECtrl, UINT32 band_idx)
+{
+    UINT32 txlen = 0;
+    UINT32 hlen = 0;
+    UINT32 tx_data_rate = 0;
+    UINT32 pkt_tx_time = 0;
+    UCHAR phy_mode = 0;
+    UCHAR mcs = 0, mcs_1ss, nss = 1;
+    UCHAR bw = 0, bw_fact = 1;
+    UCHAR sgi = 0;
+    
+    /*
+        1. Get the tx data rate
+        2. Get the packet tx time
+        3. Calculate the packet length by tx_data_rate and packet_tx_time
+        4. Return txlen
+        */
+
+    hlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, HLen);
+    pkt_tx_time = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_tx_time);
+    phy_mode = TESTMODE_GET_PARAM(ATECtrl, band_idx, PhyMode);
+    mcs = TESTMODE_GET_PARAM(ATECtrl, band_idx, Mcs);
+    bw = TESTMODE_GET_PARAM(ATECtrl, band_idx, BW);
+    sgi = TESTMODE_GET_PARAM(ATECtrl, band_idx, Sgi);
+    
+    mcs_1ss = mcs;
+
+    if (phy_mode == MODE_CCK) /* Legacy CCK mode */
+    {
+        UINT8 cck_map_idx = 0;
+	UINT32 array_cnt = 0;
+
+	array_cnt = sizeof(cck_mode_mcs_to_data_rate_map) / sizeof(ATE_DATA_RATE_MAP);
+
+        for (cck_map_idx=0; cck_map_idx<array_cnt; cck_map_idx++) {
+            if (mcs_1ss == cck_mode_mcs_to_data_rate_map[cck_map_idx].mcs)
+                break;
+        }
+
+        if (cck_map_idx == array_cnt)
+            tx_data_rate = cck_mode_mcs_to_data_rate_map[0].tx_data_rate;
+        else
+            tx_data_rate = cck_mode_mcs_to_data_rate_map[cck_map_idx].tx_data_rate;
+
+        /* Transfer from bit to byte with expected tx time */
+        txlen = pkt_tx_time * tx_data_rate / 1000 / 8;
+    }
+    else if (phy_mode == MODE_OFDM) /* Legacy OFDM mode */
+    {
+        UINT8 ofdm_map_idx = 0;
+	UINT32 array_cnt = 0;
+
+	array_cnt = sizeof(ofdm_mode_mcs_to_data_rate_map) / sizeof(ATE_DATA_RATE_MAP);
+
+        for (ofdm_map_idx=0; ofdm_map_idx<array_cnt; ofdm_map_idx++) {
+            if (mcs_1ss == ofdm_mode_mcs_to_data_rate_map[ofdm_map_idx].mcs)
+                break;
+        }
+
+        if (ofdm_map_idx == array_cnt)
+            tx_data_rate = ofdm_mode_mcs_to_data_rate_map[0].tx_data_rate;
+        else
+            tx_data_rate = ofdm_mode_mcs_to_data_rate_map[ofdm_map_idx].tx_data_rate;
+
+        /* Transfer from bit to byte with expected tx time */
+        txlen = pkt_tx_time * tx_data_rate / 1000 / 8;
+    }
+    else if (phy_mode == MODE_HTMIX || phy_mode == MODE_HTGREENFIELD) /* HT mode */
+    {
+        UINT8 n_map_idx = 0;
+	UINT32 array_cnt = 0;
+
+	array_cnt = sizeof(n_mode_mcs_to_data_rate_map) / sizeof(ATE_DATA_RATE_MAP);
+
+        if (mcs != MCS_32) {
+            mcs_1ss = mcs % 8;
+            nss = (mcs / 8) + 1;
+            bw_fact = (bw == BW_40) ? 2: 1;
+        } else {
+            bw_fact = 1;
+            nss = 1;
+        }
+
+        for (n_map_idx=0; n_map_idx<array_cnt; n_map_idx++) {
+            if (mcs_1ss == n_mode_mcs_to_data_rate_map[n_map_idx].mcs)
+                break;
+        }
+
+        if (n_map_idx == array_cnt)
+            tx_data_rate = n_mode_mcs_to_data_rate_map[0].tx_data_rate;
+        else
+            tx_data_rate = n_mode_mcs_to_data_rate_map[n_map_idx].tx_data_rate;
+
+        tx_data_rate = tx_data_rate * nss * bw_fact;
+
+    	if (sgi == 1)
+	    	tx_data_rate = (tx_data_rate / 9) * 10;
+
+        /* Transfer from bit to byte with expected tx time */
+        txlen = pkt_tx_time * tx_data_rate / 1000 / 8;
+    }
+    else if (phy_mode == MODE_VHT) /* VHT mode */
+    {
+        UINT8 ac_map_idx = 0;
+        ATE_DATA_RATE_MAP *vht_rate_map;
+        UINT32 array_cnt = 0;
+        
+        if (bw == BW_20) {
+            vht_rate_map = ac_mode_mcs_to_data_rate_map_bw20;
+            array_cnt = sizeof(ac_mode_mcs_to_data_rate_map_bw20);
+        }
+        else if (bw == BW_40) {
+            vht_rate_map = ac_mode_mcs_to_data_rate_map_bw40;
+            array_cnt = sizeof(ac_mode_mcs_to_data_rate_map_bw40);
+        }
+        else if (bw == BW_80) {
+            vht_rate_map = ac_mode_mcs_to_data_rate_map_bw80;
+            array_cnt = sizeof(ac_mode_mcs_to_data_rate_map_bw80);
+        }
+        else if (bw == BW_160) {
+            vht_rate_map = ac_mode_mcs_to_data_rate_map_bw160;
+            array_cnt = sizeof(ac_mode_mcs_to_data_rate_map_bw160);
+        }
+        else {
+            vht_rate_map = ac_mode_mcs_to_data_rate_map_bw20;
+            array_cnt = sizeof(ac_mode_mcs_to_data_rate_map_bw20);
+        }
+        array_cnt = array_cnt / sizeof(ATE_DATA_RATE_MAP);
+
+        for (ac_map_idx=0; ac_map_idx<array_cnt; ac_map_idx++) {
+            if (mcs == vht_rate_map[ac_map_idx].mcs)
+                break;
+        }
+        if (ac_map_idx == array_cnt)
+            tx_data_rate = vht_rate_map[0].tx_data_rate;
+        else
+            tx_data_rate = vht_rate_map[ac_map_idx].tx_data_rate;
+
+        // TODO: Need to check for SGI equation!
+    	if (sgi == 1)
+	    	tx_data_rate = (tx_data_rate / 9) * 10;
+
+        /* Transfer from bit to byte with expected tx time */
+        txlen = pkt_tx_time * tx_data_rate / 10 / 8;
+    }
+
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+            ("%s(): phy_mode=%d, mcs/mcs_1ss=%d/%d, nss=%d, bw/bw_fact=%d/%d, sgi=%d\n", 
+            __FUNCTION__, phy_mode, mcs, mcs_1ss, nss, bw, bw_fact, sgi));
+
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+            ("%s(): txlen=%d, pkt_tx_time=%d, tx_data_rate=%d\n", 
+            __FUNCTION__, txlen, pkt_tx_time, tx_data_rate));
+
+    if (phy_mode == MODE_VHT) {
+         if (txlen >= (VHT_MPDU_MAX_LEN * 64)) {
+            txlen = (VHT_MPDU_MAX_LEN * 64);
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF, 
+                    ("%s(): Expected txlen > VHT mode PPDU max length, reduce the txlen=%d \n",
+                    __FUNCTION__, txlen));
+         }
+    } else if (phy_mode == MODE_HTMIX || phy_mode == MODE_HTGREENFIELD) {
+        if (txlen >= HT_AMPDU_MAX_LEN) {
+            txlen = HT_AMPDU_MAX_LEN;
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF, 
+                    ("%s(): Expected txlen > HT mode PPDU max length, reduce the txlen=%d \n",
+                    __FUNCTION__, txlen));
+        }
+    } else if (phy_mode == MODE_OFDM) {
+        if (txlen >= MSDU_MAX_LEN) {
+            txlen = MSDU_MAX_LEN;
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF, 
+                    ("%s(): Expected txlen > OFDM mode PPDU max length, reduce the txlen=%d \n",
+                    __FUNCTION__, txlen));
+        }
+    } else if (phy_mode == MODE_CCK) {
+        if (txlen >= MSDU_MAX_LEN) {
+            txlen = MSDU_MAX_LEN;
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF, 
+                    ("%s(): Expected txlen > CCK mode PPDU max length, reduce the txlen=%d \n",
+                    __FUNCTION__, txlen));
+        }
+    }
+
+    return txlen;
+}
+
+
+UINT32 mt_ate_get_hlen_by_pkt_tx_time(
+    ATE_CTRL *ATECtrl,
+    UINT32 band_idx,
+    UINT32 txlen,
+    BOOLEAN *need_qos,
+    BOOLEAN *need_amsdu,
+    BOOLEAN *need_ampdu)
+{
+    UINT32 pkt_len = 0;
+    UINT32 hlen = 0;
+    UCHAR phy_mode = 0;
+    UCHAR use_data_frame = 1;
+
+    /*
+        1. Get the tx data rate
+        2. Check if need to send packet with AMPDU format
+        3. Check if need to send packet with AMSDU-in-AMPDU format
+        4. Return the expected packet header length by tx packet type
+                if need to has QoS field and HTC field.
+        */
+    phy_mode = TESTMODE_GET_PARAM(ATECtrl, band_idx, PhyMode);
+    pkt_len = txlen;
+    
+    if (pkt_len <= MSDU_MIN_LEN) {
+        use_data_frame = 0;
+        /* Here we need to go mgmt/ctrl frame mode */
+    } else if (pkt_len <= MSDU_MAX_LEN) {
+        if (phy_mode == MODE_VHT)
+            *need_qos = 1;
+    } else if (pkt_len <= MPDU_DEFAULT_LEN) {
+        if (phy_mode == MODE_HTMIX || phy_mode == MODE_HTGREENFIELD) {
+            *need_amsdu = 1;
+            *need_qos = 1;
+        } else if (phy_mode == MODE_VHT) {
+            *need_qos = 1;
+        } else {
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+                    ("%s(): Can't generate frame with such length for CCK/OFDM mode!! \n", __FUNCTION__));
+        }
+    } else if (pkt_len <= VHT_MPDU_MAX_LEN) {
+        if (phy_mode == MODE_VHT) {
+            *need_qos = 1;
+        } else if (phy_mode == MODE_HTMIX || phy_mode == MODE_HTGREENFIELD) {
+            *need_ampdu = 1;
+            *need_amsdu = 1;
+            *need_qos = 1;
+        } else {
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+                    ("%s(): Can't generate frame with such length for CCK/OFDM mode!! \n", __FUNCTION__));
+        }
+    } else {
+        if ((phy_mode == MODE_VHT)||(phy_mode == MODE_HTMIX || phy_mode == MODE_HTGREENFIELD)) {
+            *need_ampdu = 1;
+            *need_amsdu = 1;
+            *need_qos = 1;
+        } else {
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+                    ("%s(): Can't generate frame with such length for CCK/OFDM mode!! \n", __FUNCTION__));
+        }
+    }
+
+    hlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, HLen);
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+            ("%s(): original header len=%d\n", __FUNCTION__, hlen));
+    
+    if (use_data_frame) {
+        hlen = MAC_HDR_DEFAULT_LEN;
+        if (*need_qos) {
+            hlen = MAC_HDR_QOS_LEN;                
+        }
+    }
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+            ("%s(): pkt_len=%d, need_qos/amsdu/ampdu/dataframe/hlen=%d/%d/%d/%d/%d\n",
+            __FUNCTION__, pkt_len, *need_qos, *need_amsdu, *need_ampdu, use_data_frame, hlen));
+
+    return hlen;
+}
+
+
+INT mt_ate_wtbl_cfg(RTMP_ADAPTER *pAd, UINT32 band_idx)
+{
+    INT ret;
+    ATE_CTRL *ATECtrl = &pAd->ATECtrl;
+    UINT8 need_qos, need_amsdu, need_ampdu;
+    UCHAR phy_mode, mcs , nss, bw, sgi, stbc;
+    struct cmd_wtbl_dw_mask_set dw_set[7];
+    UINT32 wtbl_rate = 0, ant_sel = 0;
+
+
+    need_qos = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_need_qos);
+    need_amsdu = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_need_amsdu);
+    need_ampdu = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_need_ampdu);
+    phy_mode = TESTMODE_GET_PARAM(ATECtrl, band_idx, PhyMode);
+    mcs = TESTMODE_GET_PARAM(ATECtrl, band_idx, Mcs);
+    nss = TESTMODE_GET_PARAM(ATECtrl, band_idx, Nss);
+    bw = TESTMODE_GET_PARAM(ATECtrl, band_idx, BW);
+    sgi = TESTMODE_GET_PARAM(ATECtrl, band_idx, Sgi);
+    stbc = TESTMODE_GET_PARAM(ATECtrl, band_idx, Stbc);
+    ant_sel = TESTMODE_GET_PARAM(ATECtrl, band_idx, TxAntennaSel);
+    NdisZeroMemory((UCHAR *)&dw_set[0], sizeof(dw_set));
+
+    /* Decide TxCap, HT/VHT/LPDC (DW2) */
+    dw_set[0].ucWhichDW = 2;
+    dw_set[0].u4DwMask = 0x9FFFFFFF;
+    switch (phy_mode) {
+        case MODE_HTMIX:
+        case MODE_HTGREENFIELD:
+            dw_set[0].u4DwValue = (0x1 << 29);
+            break;
+        case MODE_VHT:
+            dw_set[0].u4DwValue = (0x3 << 29);
+            break;
+        default:
+            dw_set[0].u4DwValue = 0;
+            break;
+    };
+
+    /* Decide AF/I_PSM (DW3) */
+    dw_set[1].ucWhichDW = 3;
+    dw_set[1].u4DwMask = 0xD8E0F000;
+
+    if (need_ampdu) {
+#if defined(MT7615) || defined(MT7622)
+            if(IS_MT7615(pAd) || IS_MT7622(pAd)) {
+                if (ant_sel & ATE_ANT_USER_SEL) {
+                    ant_sel &= ~ATE_ANT_USER_SEL;
+                } else {
+                    INT map_idx = 0;
+		    UINT32 array_cnt = 0;
+
+		    array_cnt = sizeof(ant_to_spe_idx_map) / sizeof(ATE_ANT_MAP);
+
+                    for (map_idx=0; map_idx<array_cnt; map_idx++) {
+                        if(ant_sel == ant_to_spe_idx_map[map_idx].ant_sel)
+                            break;
+                    }
+                    if (map_idx == array_cnt)
+                        ant_sel = 0;
+                    else
+                        ant_sel = ant_to_spe_idx_map[map_idx].spe_idx;
+                }
+            }
+#endif /* defined(MT7615) || defined(MT7622) */
+        dw_set[1].u4DwValue = (0x1 << 29)
+                            | (0x7 << 24)
+                            | ((ant_sel & 0x1F) << 16)
+                            | ((ant_sel & 0x7) << 9)
+                            | ((ant_sel & 0x7) << 6)
+                            | ((ant_sel & 0x7) << 3)
+                            | ((ant_sel & 0x7) << 0);
+    } else {
+        dw_set[1].u4DwValue = 0;
+    }
+
+    /* Decide BA-enable/BA-winsize/BA-bitmap (DW4) */
+    dw_set[2].ucWhichDW = 4;
+    dw_set[2].u4DwMask = 0x0;
+    if (need_ampdu) {
+        dw_set[2].u4DwValue = 0xFFFFFFFF;
+    } else {
+        dw_set[2].u4DwValue = 0x0;
+    }
+
+    /* Decide FCAP/G2/G4/G8/G16/QoS-enable (DW5 )*/
+    dw_set[3].ucWhichDW = 5;
+    dw_set[3].u4DwMask = 0xFFF7C0FF;
+    switch (bw) {
+        case BW_20:
+            dw_set[3].u4DwValue = (bw << 12) | (sgi << 8);
+            break;
+        case BW_40:
+            dw_set[3].u4DwValue = (bw << 12) | (sgi << 9);
+            break;
+        case BW_80:
+            dw_set[3].u4DwValue = (bw << 12) | (sgi << 10);
+            break;
+        case BW_160:
+            dw_set[3].u4DwValue = (bw << 12) | (sgi << 11);
+            break;
+        default:
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                    ("%s(): Can't find such bw, use default\n", __FUNCTION__));
+            dw_set[3].u4DwValue = (BW_20 << 12) | (sgi << 8);
+            break;
+    }
+
+    if (phy_mode == MODE_HTMIX || phy_mode == MODE_HTGREENFIELD || phy_mode == MODE_VHT)
+    {
+        /* QoS enable by phymode */
+        dw_set[3].u4DwValue |= (1 << 19);
+    }
+
+    /* Use phymode/mcs/nss/STBC decide RateInfo (DW6~8) */
+    /* step 1. depends on ATE command tx rate, convert to 12-bits WTBL-rate value */
+    /* wtbl_rate = ((STBC & 0x1) << 11) | ((Nss & 0x3)<< 9) | ((phy_mode & 0x3)  << 6) |  ((mcs & 0x3f) << 0) */
+    if (phy_mode == MODE_CCK)
+        wtbl_rate = tx_rate_to_tmi_rate(phy_mode, mcs, (nss + 1), stbc, 1);
+    else
+        wtbl_rate = tx_rate_to_tmi_rate(phy_mode, mcs, (nss + 1), stbc, 0);
+
+    /* step 2. set WTBL RAW DW 6: ((rate3 & 0xff)<< 24) | ((rate2 & 0xfff) << 12) | ((rate1 & 0xfff) << 0) */
+    dw_set[4].ucWhichDW = 6;
+    dw_set[4].u4DwMask = 0x0;
+    dw_set[4].u4DwValue = ((wtbl_rate & 0xFF) << 24)
+                        | ((wtbl_rate & 0xFFF) << 12)
+                        | ((wtbl_rate & 0xFFF) << 0);
+    
+    dw_set[5].ucWhichDW = 7;
+    dw_set[5].u4DwMask = 0x0;
+    dw_set[5].u4DwValue = ((wtbl_rate & 0xF) << 28)
+                        | ((wtbl_rate & 0xFFF) << 16)
+                        | ((wtbl_rate & 0xFFF) << 4)
+                        | (((wtbl_rate & 0xF00) >> 8) << 0);
+
+    dw_set[6].ucWhichDW = 8;
+    dw_set[6].u4DwMask = 0x0;
+    dw_set[6].u4DwValue = ((wtbl_rate & 0xFFF) << 20)
+                        | ((wtbl_rate & 0xFFF) << 8)
+                        | (((wtbl_rate & 0xFF0) >> 4) << 0);
+
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+            ("%s(): phy_mode=%d, mcs=%d, nss=%d, stbc=%d, wtbl_rate=0x%x\n",
+            __FUNCTION__, phy_mode, mcs, nss, stbc, wtbl_rate));
+
+	/* Eable PDMA for receiving FW event */
+	AsicSetWPDMA(pAd, PDMA_TX_RX, TRUE);
+
+    ret = WtblResetAndDWsSet(pAd, ATECtrl->wcid_ref, 1,
+                            sizeof(dw_set)/ sizeof(struct cmd_wtbl_dw_mask_set), dw_set);
+
+    return ret;
+}
+
+
+static UINT32 agg_cnt_array[] = {AGG_AALCR0, AGG_AALCR1, AGG_AALCR2, AGG_AALCR3};
+static INT mt_ate_ampdu_ba_limit(RTMP_ADAPTER *pAd, UINT32 band_idx, UINT8 agg_limit)
+{
+	ATE_CTRL *ATECtrl = &pAd->ATECtrl;
+    UINT32 value;
+    INT wdev_idx = 0;
+    UCHAR WmmIdx = 0xFF;
+#if !defined(COMPOS_WIN) && !defined(COMPOS_TESTMODE_WIN)
+    struct wifi_dev *pWdev = NULL;
+
+    wdev_idx = TESTMODE_GET_PARAM(ATECtrl, band_idx, wdev_idx);
+    pWdev = pAd->wdev_list[wdev_idx];
+
+    if(pWdev) {
+        WmmIdx = HcGetWmmIdx(pAd, pWdev);
+        if (WmmIdx > 3) {
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+                    ("%s(): wdev_idx=%d, invalid WmmIdx=%d, reset to 0!\n",
+                    __FUNCTION__, wdev_idx, WmmIdx));
+            WmmIdx = 0xFF;
+        }
+    } else {
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+                ("%s(): invalid WDEV, reset WmmIdx to 0!\n", __FUNCTION__));
+        WmmIdx = 0xFF;
+    }
+#endif
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+            ("%s(): wdev_idx=%d, WmmIdx=%d\n",
+            __FUNCTION__, wdev_idx, WmmIdx));
+
+    value = ((agg_limit & 0x3F) << 24)
+            | ((agg_limit & 0x3F) << 16)
+            | ((agg_limit & 0x3F) << 8)
+            | ((agg_limit & 0x3F) << 0);
+    if (WmmIdx <= 3) {
+        MAC_IO_WRITE32(pAd, agg_cnt_array[WmmIdx], value);
+    } else {
+        MAC_IO_WRITE32(pAd, AGG_AALCR0, value);
+        MAC_IO_WRITE32(pAd, AGG_AALCR1, value);
+        MAC_IO_WRITE32(pAd, AGG_AALCR2, value);
+        MAC_IO_WRITE32(pAd, AGG_AALCR3, value);
+    }
+
+    value = 0x0;
+    MAC_IO_WRITE32(pAd, AGG_AWSCR0, value);
+
+    return 0;
+}
+
+
+INT32 mt_ate_ampdu_frame(RTMP_ADAPTER *pAd, UCHAR *buf, UINT32 band_idx)
+{
+    INT32 ret = 0;
+	ATE_CTRL *ATECtrl = &pAd->ATECtrl;
+    UINT32 value;
+    UCHAR *addr1, *addr2, *addr3;
+    UCHAR phy_mode;
+	UCHAR *tmac_info, *pheader, *payload, *frm_template;
+    UINT32 txlen, hlen;
+	UINT8 tx_hw_hdr_len = pAd->chipCap.TXWISize;
+    UINT32 new_txlen, new_hlen;
+    UINT8 need_qos, need_amsdu, need_ampdu;
+    UINT32 per_mpdu_len = 0;
+    UINT8 ampdu_agg_cnt = 0;
+
+
+    phy_mode = TESTMODE_GET_PARAM(ATECtrl, band_idx, PhyMode);
+    new_txlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_tx_len);
+    new_hlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_hdr_len);
+    need_qos = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_need_qos);
+    need_amsdu = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_need_amsdu);
+    need_ampdu = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_need_ampdu);
+
+    if (phy_mode == MODE_VHT)
+        per_mpdu_len = (VHT_MPDU_MAX_LEN - 100); /* include mac header length */
+    else
+        per_mpdu_len = (MPDU_DEFAULT_LEN - 100); /* include mac header length */    
+    TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_msdu_len, per_mpdu_len);
+
+    ampdu_agg_cnt = new_txlen / per_mpdu_len;
+    if (new_txlen % per_mpdu_len)
+        ampdu_agg_cnt++;
+    TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_ampdu_cnt, ampdu_agg_cnt);
+
+    mt_ate_ampdu_ba_limit(pAd, band_idx, ampdu_agg_cnt);
+
+    /* Set station pause CRs to 0 for TX after reset WTBL */
+    /* The CR meaning in normal mode is that stop to TX packet when STA disconnect */
+    value = 0x0;
+    MAC_IO_WRITE32(pAd, STATION_PAUSE0, value);
+    MAC_IO_WRITE32(pAd, STATION_PAUSE1, value);
+    MAC_IO_WRITE32(pAd, STATION_PAUSE2, value);
+    MAC_IO_WRITE32(pAd, STATION_PAUSE3, value);
+
+    addr1 = TESTMODE_GET_PARAM(ATECtrl, band_idx, Addr1);
+    addr2 = TESTMODE_GET_PARAM(ATECtrl, band_idx, Addr2);
+    addr3 = TESTMODE_GET_PARAM(ATECtrl, band_idx, Addr3);
+    txlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_msdu_len);
+    hlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_hdr_len);
+
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+            ("%s(wcid:%d, txlen/hlen/buf=%d/%d/%p, pkt_tx_len/pkt_msdu_len/pkt_ampdu_cnt=%d/%d/%d)\n"
+                "\tDA: %02x:%02x:%02x:%02x:%02x:%02x\n"
+                "\tSA: %02x:%02x:%02x:%02x:%02x:%02x\n"
+                "\tBSSID: %02x:%02x:%02x:%02x:%02x:%02x\n",
+            __FUNCTION__, ATECtrl->wcid_ref,
+            txlen, hlen, buf,
+            TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_tx_len),
+            TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_msdu_len),
+            TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_ampdu_cnt),
+            PRINT_MAC(addr1), PRINT_MAC(addr2), PRINT_MAC(addr3)));
+
+    tmac_info = buf;
+    pheader = (buf + tx_hw_hdr_len);
+    payload = (pheader + hlen);
+    NdisZeroMemory(buf, ATE_TESTPKT_LEN);
+#ifdef TXBF_SUPPORT
+    {
+        UCHAR iTxBf = TESTMODE_GET_PARAM(ATECtrl, band_idx, iTxBf);
+        UCHAR eTxBf = TESTMODE_GET_PARAM(ATECtrl, band_idx, eTxBf);
+        /* Use wcid 1~4 */
+        if (iTxBf || eTxBf) {
+            if((ATECtrl->wcid_ref > ATE_BFMU_NUM)||(ATECtrl->wcid_ref < 1))
+                ATECtrl->wcid_ref = ATE_BF_WCID;
+            addr1 = ATECtrl->pfmu_info[ATECtrl->wcid_ref-1].addr;
+        }
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("%s():: DA: %02x:%02x:%02x:%02x:%02x:%02x, wcid=%u\n",
+                __FUNCTION__, PRINT_MAC(addr1), ATECtrl->wcid_ref));
+    }
+#endif
+    ret = MtSetTestFrame(pAd, tmac_info, band_idx);
+    if(ret)
+        return ret;
+
+    frm_template = TESTMODE_GET_PARAM(ATECtrl, band_idx, TemplateFrame);
+    NdisMoveMemory(pheader, frm_template, hlen);
+    NdisMoveMemory(pheader + 4, addr1, MAC_ADDR_LEN);
+    NdisMoveMemory(pheader + 10, addr2, MAC_ADDR_LEN);
+    NdisMoveMemory(pheader + 16, addr3, MAC_ADDR_LEN);
+    ret = MtATEPayloadInit(pAd, payload, txlen - hlen, band_idx);
+
+#if !defined(COMPOS_WIN) && !defined(COMPOS_TESTMODE_WIN)
+    if (ATECtrl->en_log & fATE_LOG_TXDUMP) {
+        INT i = 0;
+        PHEADER_802_11 hdr = (HEADER_802_11 *)pheader;
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("[TXCONTENT DUMP START]\n"));
+        dump_tmac_info(pAd, tmac_info);
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("[TXD RAW]: "));
+        for (i=0;i<tx_hw_hdr_len;i++)
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("%04x", tmac_info[i]));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("\nADDR1: %02x:%02x:%02x:%02x:%02x:%02x\n"
+                , PRINT_MAC(hdr->Addr1)));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("ADDR2: %02x:%02x:%02x:%02x:%02x:%02x\n"
+                , PRINT_MAC(hdr->Addr2)));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("ADDR3: %02x:%02x:%02x:%02x:%02x:%02x\n"
+                , PRINT_MAC(hdr->Addr3)));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("FC: %04x\n"
+                , *(UINT16 *)(&hdr->FC)));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("\tFrom DS: %x\n"
+                , hdr->FC.FrDs));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("\tTo DS: %x\n"
+                , hdr->FC.ToDs));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("[CONTENT RAW]: "));
+        for (i=0; i<(txlen-hlen); i++)
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_INFO,
+                    ("%02x", payload[i]));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("\n[TXCONTENT DUMP END]\n"));
+    }
+#endif /* !defined(COMPOS_WIN) && !defined(COMPOS_TESTMODE_WIN) */
+
+    TESTMODE_SET_PARAM(ATECtrl, band_idx, is_alloc_skb, 0);
+
+#ifdef RT_BIG_ENDIAN
+    RTMPFrameEndianChange(pAd, (PUCHAR)pheader, DIR_WRITE, FALSE);
+#ifdef MT_MAC
+    if (pAd->chipCap.hif_type == HIF_MT)
+        MTMacInfoEndianChange(pAd, tmac_info, TYPE_TMACINFO, sizeof(TMAC_TXD_L));
+#endif
+#endif
+
+    return ret;
+}
+
+
+INT32 mt_ate_non_ampdu_frame(RTMP_ADAPTER *pAd, UCHAR *buf, UINT32 band_idx)
+{
+    INT32 ret = 0;
+    ATE_CTRL *ATECtrl = &pAd->ATECtrl;
+    UCHAR *tmac_info, *pheader, *payload, *addr1, *addr2, *addr3, *frm_template;
+    UINT32 txlen, hlen;
+    UINT8 tx_hw_hdr_len = pAd->chipCap.TXWISize;
+
+
+    addr1 = TESTMODE_GET_PARAM(ATECtrl, band_idx, Addr1);
+    addr2 = TESTMODE_GET_PARAM(ATECtrl, band_idx, Addr2);
+    addr3 = TESTMODE_GET_PARAM(ATECtrl, band_idx, Addr3);
+    txlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_msdu_len);
+    hlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_hdr_len);
+
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+            ("%s(wcid:%d, txlen/hlen/buf=%d/%d/%p, pkt_tx_len/pkt_msdu_len=%d/%d)\n"
+                "\tDA: %02x:%02x:%02x:%02x:%02x:%02x\n"
+                "\tSA: %02x:%02x:%02x:%02x:%02x:%02x\n"
+                "\tBSSID: %02x:%02x:%02x:%02x:%02x:%02x\n",
+            __FUNCTION__, ATECtrl->wcid_ref,
+            txlen, hlen, buf,
+            TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_tx_len),
+            TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_msdu_len),
+            PRINT_MAC(addr1), PRINT_MAC(addr2), PRINT_MAC(addr3)));
+
+    tmac_info = buf;
+    pheader = (buf + tx_hw_hdr_len);
+    payload = (pheader + hlen);
+    NdisZeroMemory(buf, ATE_TESTPKT_LEN);
+#ifdef TXBF_SUPPORT
+    {
+        UCHAR iTxBf = TESTMODE_GET_PARAM(ATECtrl, band_idx, iTxBf);
+        UCHAR eTxBf = TESTMODE_GET_PARAM(ATECtrl, band_idx, eTxBf);
+        /* Use wcid 1~4 */
+        if (iTxBf || eTxBf) {
+            if((ATECtrl->wcid_ref > ATE_BFMU_NUM)||(ATECtrl->wcid_ref < 1))
+                ATECtrl->wcid_ref = ATE_BF_WCID;
+            addr1 = ATECtrl->pfmu_info[ATECtrl->wcid_ref-1].addr;
+        }
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("%s():: DA: %02x:%02x:%02x:%02x:%02x:%02x, wcid=%u\n",
+                __FUNCTION__, PRINT_MAC(addr1), ATECtrl->wcid_ref));
+    }
+#endif
+    ret = MtSetTestFrame(pAd, tmac_info, band_idx);
+    if(ret)
+        return ret;
+
+    frm_template = TESTMODE_GET_PARAM(ATECtrl, band_idx, TemplateFrame);
+    NdisMoveMemory(pheader, frm_template, hlen);
+    NdisMoveMemory(pheader + 4, addr1, MAC_ADDR_LEN);
+    NdisMoveMemory(pheader + 10, addr2, MAC_ADDR_LEN);
+    NdisMoveMemory(pheader + 16, addr3, MAC_ADDR_LEN);
+    ret = MtATEPayloadInit(pAd, payload, txlen - hlen, band_idx);
+
+#if !defined(COMPOS_WIN) && !defined(COMPOS_TESTMODE_WIN)
+    if (ATECtrl->en_log & fATE_LOG_TXDUMP) {
+        INT i = 0;
+        PHEADER_802_11 hdr = (HEADER_802_11 *)pheader;
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("[TXCONTENT DUMP START]\n"));
+        dump_tmac_info(pAd, tmac_info);
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("[TXD RAW]: "));
+        for (i=0;i<tx_hw_hdr_len;i++)
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("%04x", tmac_info[i]));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("\nADDR1: %02x:%02x:%02x:%02x:%02x:%02x\n"
+                , PRINT_MAC(hdr->Addr1)));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("ADDR2: %02x:%02x:%02x:%02x:%02x:%02x\n"
+                , PRINT_MAC(hdr->Addr2)));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("ADDR3: %02x:%02x:%02x:%02x:%02x:%02x\n"
+                , PRINT_MAC(hdr->Addr3)));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("FC: %04x\n"
+                , *(UINT16 *)(&hdr->FC)));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("\tFrom DS: %x\n"
+                , hdr->FC.FrDs));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("\tTo DS: %x\n"
+                , hdr->FC.ToDs));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("[CONTENT RAW]: "));
+        for (i=0; i<(txlen-hlen); i++)
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_INFO,
+                    ("%02x", payload[i]));
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                ("\n[TXCONTENT DUMP END]\n"));
+    }
+#endif /* !defined(COMPOS_WIN) && !defined(COMPOS_TESTMODE_WIN) */
+
+    TESTMODE_SET_PARAM(ATECtrl, band_idx, is_alloc_skb, 0);
+
+#ifdef RT_BIG_ENDIAN
+    RTMPFrameEndianChange(pAd, (PUCHAR)pheader, DIR_WRITE, FALSE);
+#ifdef MT_MAC
+    if (pAd->chipCap.hif_type == HIF_MT)
+        MTMacInfoEndianChange(pAd, tmac_info, TYPE_TMACINFO, sizeof(TMAC_TXD_L));
+#endif
+#endif
+
+    return ret;
+}
+
+
+INT32 MT_ATEGenBurstPkt(RTMP_ADAPTER *pAd, UCHAR *buf, UINT32 band_idx)
+{
+    INT32 ret = 0;
+	ATE_CTRL *ATECtrl = &pAd->ATECtrl;
+    UINT32 new_txlen, new_hlen;
+    UINT8 need_qos, need_amsdu, need_ampdu;
+
+
+    new_txlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_tx_len);
+    new_hlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_hdr_len);
+    need_qos = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_need_qos);
+    need_amsdu = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_need_amsdu);
+    need_ampdu = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_need_ampdu);
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+            ("%s(): new_txlen/new_hlen=%d/%d, qos/amsdu/ampdu=%d/%d/%d\n",
+            __FUNCTION__, new_txlen, new_hlen, need_qos, need_amsdu, need_ampdu));
+
+    /* Update WTBL if necessary */
+    if (need_ampdu) {
+        mt_ate_wtbl_cfg(pAd, band_idx);
+    }
+
+    /* Generate tx packet */
+    if (need_ampdu) {
+        ret = mt_ate_ampdu_frame(pAd, buf, band_idx);
+    } else {
+        /* No aggregation, directly go with specific length and through ALTX queue */
+        TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_ampdu_cnt, 1);
+        TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_msdu_len, new_txlen);
+
+        ret= mt_ate_non_ampdu_frame(pAd, buf, band_idx);
+    }
+
+    return ret;
 }
 
 
@@ -2608,21 +3750,75 @@ INT32 MT_ATEGenPkt(RTMP_ADAPTER *pAd, UCHAR *buf, UINT32 band_idx)
 	INT32 ret = 0;
 	ATE_CTRL *ATECtrl = &pAd->ATECtrl;
 	UCHAR *tmac_info, *pheader, *payload, *addr1, *addr2, *addr3, *template;
-	UINT32 txlen, hlen;
+	UINT32 txlen, hlen, pkt_tx_time;
 	UINT8 tx_hw_hdr_len = pAd->chipCap.TXWISize;
 
 	if (!buf) {
-		MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_WARN,
-				("%s::NULL buf, band_idx:%u\n", __FUNCTION__, band_idx));
+		MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+				("%s(): NULL buf, band_idx:%u\n", __FUNCTION__, band_idx));
 		return NDIS_STATUS_FAILURE;
 	}
+
+    /* For long packet implemetation */
+    TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_tx_len, 0);
+    TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_msdu_len, 0);
+    TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_hdr_len, 0);
+    TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_need_qos, 0);
+    TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_need_amsdu, 0);
+    TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_need_ampdu, 0);
+    TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_ampdu_cnt, 0);
+
+    pkt_tx_time = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_tx_time);
+    if (pkt_tx_time > 0)
+    {
+        UINT8 need_qos = 0, need_amsdu = 0, need_ampdu = 0;
+        UINT32 new_txlen = mt_ate_get_txlen_by_pkt_tx_time(ATECtrl, band_idx);
+        UINT32 new_hlen;
+
+	    txlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, TxLength);
+    	hlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, HLen);
+    
+        if (new_txlen > 0) {
+            txlen = new_txlen;
+        } else {
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+                    ("%s(): Can't get txlen by pkt tx time\n", __FUNCTION__));
+        }
+        new_hlen = mt_ate_get_hlen_by_pkt_tx_time(ATECtrl, band_idx, txlen, &need_qos, &need_amsdu, &need_ampdu);
+        if (new_hlen > 0) {
+            hlen = new_hlen;
+        } else {
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+                    ("%s(): Can't get hdrlen by pkt tx time\n", __FUNCTION__));
+        }
+        TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_tx_len, new_txlen);
+        TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_hdr_len, hlen);
+        TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_need_qos, need_qos);
+        TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_need_amsdu, need_amsdu);
+        TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_need_ampdu, need_ampdu);
+            
+        /* New packet generation function */
+        ret = MT_ATEGenBurstPkt(pAd, buf, band_idx);
+
+        return ret;
+    }
 
 	addr1 = TESTMODE_GET_PARAM(ATECtrl, band_idx, Addr1);
 	addr2 = TESTMODE_GET_PARAM(ATECtrl, band_idx, Addr2);
 	addr3 = TESTMODE_GET_PARAM(ATECtrl, band_idx, Addr3);
+
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+            ("%s(wcid:%d)::"
+                "\tDA: %02x:%02x:%02x:%02x:%02x:%02x\n"
+                "\tSA: %02x:%02x:%02x:%02x:%02x:%02x\n"
+                "\tBSSID: %02x:%02x:%02x:%02x:%02x:%02x\n",
+            __FUNCTION__, ATECtrl->wcid_ref, 
+            PRINT_MAC(addr1), PRINT_MAC(addr2), PRINT_MAC(addr3)));
+    
 	template = TESTMODE_GET_PARAM(ATECtrl, band_idx, TemplateFrame);
 	txlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, TxLength);
 	hlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, HLen);
+
 	tmac_info = buf;
 	pheader = (buf + tx_hw_hdr_len);
 	payload = (pheader + hlen);
@@ -2638,13 +3834,14 @@ INT32 MT_ATEGenPkt(RTMP_ADAPTER *pAd, UCHAR *buf, UINT32 band_idx)
 			addr1 = ATECtrl->pfmu_info[ATECtrl->wcid_ref-1].addr;
 		}
 		MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-				("%s::dest: %02x:%02x:%02x:%02x:%02x:%02x, wcid:%u\n",
+				("%s():: DA: %02x:%02x:%02x:%02x:%02x:%02x, wcid=%u\n",
 				__FUNCTION__, PRINT_MAC(addr1), ATECtrl->wcid_ref));
 	}
 #endif
 	ret = MtSetTestFrame(pAd, tmac_info, band_idx);
 	if(ret)
-		goto err0;
+		return ret;
+
 	NdisMoveMemory(pheader, template, hlen);
 	NdisMoveMemory(pheader + 4, addr1, MAC_ADDR_LEN);
 	NdisMoveMemory(pheader + 10, addr2, MAC_ADDR_LEN);
@@ -2683,21 +3880,57 @@ INT32 MT_ATEGenPkt(RTMP_ADAPTER *pAd, UCHAR *buf, UINT32 band_idx)
 				, hdr->FC.ToDs));
 		MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
 				("[CONTENT RAW]: "));
-		for (i=0;i<(txlen-hlen);i++)
-			MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_INFO,
-				("%02x", payload[i]));
+        for (i=0; i<(txlen-hlen); i++)
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_INFO,
+                    ("%02x", payload[i]));
 		MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
 				("\n[TXCONTENT DUMP END]\n"));
 	}
 #endif /* !defined(COMPOS_WIN) && !defined(COMPOS_TESTMODE_WIN) */
+
 	TESTMODE_SET_PARAM(ATECtrl, band_idx, is_alloc_skb, 0);
-	return ret;
-	err0:
-	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_INFO,
-			("%s, buf %p, wcid_ref:%u\n",
-			__FUNCTION__, buf, ATECtrl->wcid_ref));
-	return ret;
+
+#ifdef RT_BIG_ENDIAN
+    RTMPFrameEndianChange(pAd, (PUCHAR)pheader, DIR_WRITE, FALSE);
+#ifdef MT_MAC
+    if (pAd->chipCap.hif_type == HIF_MT)
+        MTMacInfoEndianChange(pAd, tmac_info, TYPE_TMACINFO, sizeof(TMAC_TXD_L));
+#endif
+#endif
+
+    return ret;
 }
+
+
+UINT32 mt_ate_mcs32_handle(RTMP_ADAPTER *pAd, UINT8 wcid_ref, UINT8 bw)
+{
+    INT32 ret = 0;
+    UINT32 DwMask = 0;
+
+#if defined(MT7615) || defined(MT7622)
+    if (IS_MT7615(pAd) || IS_MT7622(pAd)){
+        union WTBL_DW5 wtbl_txcap;
+
+        DwMask = ~(3 << 12); /* only update fcap bit[13:12] */
+        wtbl_txcap.field.fcap = bw;
+        /* WTBLDW5 */
+        WtblDwSet(pAd, wcid_ref, 1, 5, DwMask, wtbl_txcap.word);
+        return ret;
+    }
+#else
+    {
+        union WTBL_2_DW9 wtbl_txcap;
+
+        DwMask = ~(3 << 14); /* only update fcap bit[15:14] */
+        wtbl_txcap.field.fcap = bw;
+        /* WTBL2DW9 */
+        WtblDwSet(pAd, wcid_ref, 2, 9, DwMask, wtbl_txcap.word);
+    }
+#endif
+
+    return ret;
+}
+
 
 #if !defined(COMPOS_WIN) && !defined(COMPOS_TESTMODE_WIN)	//1todo too many OS private functio
 INT32 MT_ATETxPkt(RTMP_ADAPTER *pAd, UINT32 band_idx)
@@ -2716,48 +3949,78 @@ INT32 MT_ATETxPkt(RTMP_ADAPTER *pAd, UINT32 band_idx)
 	USHORT qid =  TESTMODE_GET_PARAM(ATECtrl, band_idx, QID);
 	UINT8 tx_hw_hdr_len = pAd->chipCap.TXWISize;
 	UCHAR wdev_idx = TESTMODE_GET_PARAM(ATECtrl, band_idx, wdev_idx);
+    UINT32 pkt_tx_time = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_tx_time);
 	struct sk_buff *skb = NULL;
 	struct sk_buff *skb2 = NULL;
-	int alloced = TESTMODE_GET_PARAM(ATECtrl, band_idx, is_alloc_skb);
+	int alloced;
 	//ULONG flags = 0;
 
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_INFO,(
-		"%s, band_idx:%u, TxCnt:%u, TxDone:%u, %p, Ring Idx:%u\n"
+		"%s(): band_idx:%u, TxCnt:%u, TxDone:%u, pate_pkt:%p, Ring Idx:%u\n"
 		, __FUNCTION__, band_idx, txcnt, txdone, pate_pkt, qid));
 
-	if(!pate_pkt)
-		goto err0;
+	if(!pate_pkt) {
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,(
+            "%s(): invalid pate_pkt(%p)\n", __FUNCTION__, pate_pkt));
+		goto done;
+    }
+
 	if (band_idx == 0)
 		pkt_skb = &ATECtrl->pkt_skb;
+#ifdef DBDC_MODE
 	else if (IS_ATE_DBDC(pAd) && band_idx == 1)
 		pkt_skb = &ATECtrl->band_ext[band_idx - 1].pkt_skb;
-
+#endif /*DBDC_MODE*/
+    alloced = TESTMODE_GET_PARAM(ATECtrl, band_idx, is_alloc_skb);
 	if (!alloced) {
 		if (*pkt_skb)
-			RELEASE_NDIS_PACKET(pAd, *pkt_skb, NDIS_STATUS_FAILURE);
+			RELEASE_NDIS_PACKET(pAd, *pkt_skb, NDIS_STATUS_SUCCESS);
+
+        if (pkt_tx_time > 0)
+            txlen = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_msdu_len);
+
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+                ("%s():Alloc pkt, txlen=%d, tx_hw_hdr_len=%d, total=%d\n",
+                __FUNCTION__, txlen, tx_hw_hdr_len, txlen + tx_hw_hdr_len));
+        
 		ret = RTMPAllocateNdisPacket(pAd, pkt_skb, NULL, 0, pate_pkt, txlen + tx_hw_hdr_len);
+        if (ret != NDIS_STATUS_SUCCESS) {
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,("%s(): AllocateNdisPacket fail\n",__FUNCTION__));
+            goto done;
+        }
+
 		TESTMODE_SET_PARAM(ATECtrl, band_idx, is_alloc_skb, 1);
 	}
+    
 	skb = (struct sk_buff *)(*pkt_skb);
-	skb2 = skb_clone(skb, GFP_ATOMIC);
+	OS_PKT_CLONE(pAd, skb, skb2, GFP_ATOMIC);
+	if(skb2 == NULL) {
+        RELEASE_NDIS_PACKET(pAd, *pkt_skb, NDIS_STATUS_SUCCESS);
+        pkt_skb = NULL;
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,("%s(): clone pakcet fail\n",__FUNCTION__));
+		goto done;
+    }
 
-	if(skb2 == NULL)
-		goto err0;
 	pkt = (PNDIS_PACKET)skb2;
 	RTMP_SET_PACKET_WDEV(pkt, wdev_idx);
+    if (pkt_tx_time > 0) {
+        UINT8 wcid = ATECtrl->wcid_ref;
+        RTMP_SET_PACKET_WCID(pkt, wcid);
+    }
 	RTMP_QueryPacketInfo(pkt, &PacketInfo, &pSrcBufVA, &SrcBufLen);
+	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,(
+			"%s():: allocate pkt, wdev_idx=%d, q_idx:%x, pkt_va:%p, VA:%p, Len:%u\n"
+			, __FUNCTION__, wdev_idx, qid, pkt,pSrcBufVA, SrcBufLen));
+
+    /* call RtmpPCIMgmtKickOut(); */
 	//RTMP_IRQ_LOCK(&pAd->MgmtRingLock, flags);
 	HAL_KickOutMgmtTx(pAd, qid, pkt, pSrcBufVA, SrcBufLen);
 	//RTMP_IRQ_UNLOCK(&pAd->MgmtRingLock, flags);
-	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_NOISY,(
-			"%s::allocate pkt, q_idx:%x, pkt_va:%p, VA:%p, Len:%u\n"
-			, __FUNCTION__, qid, pkt,pSrcBufVA, SrcBufLen));
 
+done:
 	return ret;
-	err0:
-	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,("%s:AllocateNdisPacket fail\n",__FUNCTION__));
-	return NDIS_STATUS_RESOURCES;
 }
+
 
 static UINT32 MT_ATEGetBandIdx(RTMP_ADAPTER *pAd, PNDIS_PACKET pkt){
 	UINT32 band_idx = 0;
@@ -2771,7 +4034,7 @@ static UINT32 MT_ATEGetBandIdx(RTMP_ADAPTER *pAd, PNDIS_PACKET pkt){
 	if (!wdev)
 		goto err0;
 
-	band_idx = HcGetBandByWdev(wdev);
+	band_idx = HcGetBandByChannel(pAd, wdev->channel);
 
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_INFO,
 						("%s, wdev_idx:%x\n", __FUNCTION__,wdev_idx));
@@ -2783,26 +4046,30 @@ static UINT32 MT_ATEGetBandIdx(RTMP_ADAPTER *pAd, PNDIS_PACKET pkt){
 	return -1;
 }
 
+
 INT32 MT_ATETxControl(RTMP_ADAPTER *pAd, UINT32 band_idx,  PNDIS_PACKET pkt)
 {
 	INT32 ret = 0;
 	ATE_CTRL *ATECtrl = &pAd->ATECtrl;
-	UINT32 txdone_cnt = 0;
-	UINT32 tx_cnt = 0;
-	UINT32 mode = 0;
+	UINT32 txdone_cnt = 0, tx_cnt = 0, mode = 0;
+
+
 	if (ATECtrl->verify_mode == ATE_LOOPBACK) {
 		if(pAd->LbCtrl.LoopBackWaitRx){
-			#ifdef RTMP_PCI_SUPPORT
+#ifdef RTMP_PCI_SUPPORT
 			RTMP_OS_COMPLETE(&pAd->LbCtrl.LoopBackPCITxEvent);
-			#else
+#else
 			MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("Not supported in this interface yet\n"));
-			#endif
+#endif
 		}
 	} else if(ATECtrl->verify_mode == HQA_VERIFY) {
 		if (pkt)
 			band_idx = MT_ATEGetBandIdx(pAd, pkt);
-		if (band_idx == -1)
-			goto err0;
+		if (band_idx == -1) {
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+			        ("%s, Wrong band_idx %u\n", __FUNCTION__, band_idx));
+			goto done;
+        }
 
 		txdone_cnt = TESTMODE_GET_PARAM(ATECtrl, band_idx, TxDoneCount);
 		tx_cnt = TESTMODE_GET_PARAM(ATECtrl, band_idx, TxCount);
@@ -2849,12 +4116,11 @@ INT32 MT_ATETxControl(RTMP_ADAPTER *pAd, UINT32 band_idx,  PNDIS_PACKET pkt)
 		TESTMODE_SET_PARAM(ATECtrl, band_idx, TxDoneCount, txdone_cnt);
 #endif
 	}
-	return ret;
-	err0:
-	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
-			("%s, Wrong band_idx %u\n", __FUNCTION__, band_idx));
+
+done:
 	return ret;
 }
+
 
 #endif
 
@@ -2959,29 +4225,23 @@ static INT32 MT_ATEStartTx(RTMP_ADAPTER *pAd, UINT32 band_idx)
 #ifdef CONFIG_AP_SUPPORT
 	INT32 IdBss, MaxNumBss = pAd->ApCfg.BssidNum;
 #endif
-#if defined(MT7615) || defined(MT7622)
-	union WTBL_DW5 wtbl_txcap;
-#else
-	union WTBL_2_DW9 wtbl_txcap;
-#endif
-	UINT32 DwMask = 0;
-	CMD_WTBL_RAW_DATA_RW_T rWtblRawDataRw = {0};
-	rWtblRawDataRw.u2Tag = WTBL_RAW_DATA_RW;
-	rWtblRawDataRw.u2Length = sizeof(CMD_WTBL_RAW_DATA_RW_T);
+
 
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
-			("%s, band_idx:%u, ch:%x, cntl_ch:%x, wdev_idx:%x\n",
+			("%s(): band_idx:%u, ch:%x, cntl_ch:%x, wdev_idx:%x\n",
 			__FUNCTION__, band_idx, ch, cntl_ch, wdev_idx));
+
 	if (!pate_pkt)
 		goto err0;
 
 	if (wdev_idx == 0xFF) {
 		wdev_idx = MT_ATEGetWDevIdxByBand(pAd, band_idx);
+        if (wdev_idx == 0xFF)
+            goto err0;
+
 		TESTMODE_SET_PARAM(ATECtrl, band_idx, wdev_idx, wdev_idx);
 	}
 
-	if (wdev_idx == 0xFF)
-		goto err0;
 	/* TxRx swtich Recover */
 #if !defined(MT7615) && !defined(MT7622)
 	/* TODO: Need to fixed. it will cause DBDC issue */
@@ -2992,36 +4252,32 @@ static INT32 MT_ATEStartTx(RTMP_ADAPTER *pAd, UINT32 band_idx)
 	}
 #endif
 
-	if (mode & ATE_TXFRAME)
+	if (mode & ATE_TXFRAME) {
+        MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_WARN,
+                ("%s(): already in TXFRAME mode now, tx is on-going!\n",
+                __FUNCTION__));
 		goto err1;
+    }
+    
 	MtATESetMacTxRx(pAd, ASIC_MAC_TX, TRUE, band_idx);
+
 #ifdef ARBITRARY_CCK_OFDM_TX
 	MtATEInitCCK_OFDM_Path(pAd, band_idx);
-#endif
-#ifdef ARBITRARY_CCK_OFDM_TX
 	if (phymode == MODE_CCK || phymode == MODE_OFDM)
 		MtATESetCCK_OFDM_Path(pAd, tx_sel, band_idx);
 #endif
-	if (Rate == 32) {
-#if defined(MT7615) || defined(MT7622)
-		DwMask = ~(3 << 12); /* only update fcap bit[13:12] */
-    		wtbl_txcap.field.fcap = bw;
-		/* WTBLDW5 */
-		WtblDwSet(pAd, ATECtrl->wcid_ref, 1, 5, DwMask, wtbl_txcap.word);
-#else
-		DwMask = ~(3 << 14); /* only update fcap bit[15:14] */
-    		wtbl_txcap.field.fcap = bw;
-		/* WTBL2DW9 */
-		WtblDwSet(pAd, ATECtrl->wcid_ref, 2, 9, DwMask, wtbl_txcap.word);
-#endif
-	}
+
+	if (Rate == 32)
+        mt_ate_mcs32_handle(pAd, ATECtrl->wcid_ref, bw);
+
 #ifdef TMR_VERIFY   /* for receiving TMR report */
 	MtATESetMacTxRx(pAd, ASIC_MAC_RX, TRUE, band_idx);
 #else
     MtATESetMacTxRx(pAd, ASIC_MAC_RX_RXV, FALSE, band_idx);
 #endif
 	msleep(30);
-	/*   Stop send TX packets */
+
+	/*   Stop send TX packets from upper layer */
 	RTMP_OS_NETDEV_STOP_QUEUE(pAd->net_dev);
 #ifdef CONFIG_AP_SUPPORT
 	IF_DEV_CONFIG_OPMODE_ON_AP(pAd) {
@@ -3035,15 +4291,19 @@ static INT32 MT_ATEStartTx(RTMP_ADAPTER *pAd, UINT32 band_idx)
 	}
 #endif
 	RTMP_SET_FLAG(pAd, fRTMP_ADAPTER_DISABLE_DEQUEUEPACKET);
+
 	/*  Disable PDMA */
 	AsicSetWPDMA(pAd, PDMA_TX, 0);
+
 	/* Polling TX/RX path until packets empty */
 	if(if_ops->clean_trx_q)
 		if_ops->clean_trx_q(pAd);
 
 	if (mode & ATE_RXFRAME)
 		MtATESetMacTxRx(pAd, ASIC_MAC_RX_RXV, TRUE, band_idx);
+
 	RTMP_OS_NETDEV_START_QUEUE(pAd->net_dev);
+
 #ifdef CONFIG_AP_SUPPORT
 	IF_DEV_CONFIG_OPMODE_ON_AP(pAd) {
 		if (MaxNumBss > MAX_MBSSID_NUM(pAd))
@@ -3055,7 +4315,9 @@ static INT32 MT_ATEStartTx(RTMP_ADAPTER *pAd, UINT32 band_idx)
 		}
 	}
 #endif
+
 	RTMP_CLEAR_FLAG(pAd, fRTMP_ADAPTER_DISABLE_DEQUEUEPACKET);
+
 	/* Prepare Tx packet */
 	if (if_ops->setup_frame)
 		Ret = if_ops->setup_frame(pAd, QID_AC_BE);
@@ -3070,26 +4332,59 @@ static INT32 MT_ATEStartTx(RTMP_ADAPTER *pAd, UINT32 band_idx)
 #endif
 		TESTMODE_SET_PARAM(ATECtrl, band_idx, TxCount, tx_cnt);
 	}
+
 	/* Tx Frame */
 	mode |= ATE_TXFRAME;
 	TESTMODE_SET_PARAM(ATECtrl, band_idx, Mode, mode);
 	if (if_ops->test_frame_tx) {
 		Ret = if_ops->test_frame_tx(pAd);
 	} else {
-		Ret = MT_ATETxControl(pAd, band_idx, NULL);
-		AsicSetWPDMA(pAd, PDMA_TX_RX, 1);
+        UINT32 pkt_tx_time = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_tx_time);
+
+        if (pkt_tx_time > 0)
+        {
+        	UINT32 pkt_cnt, input_cnt;
+            UINT32 ate_tx_cnt = TESTMODE_GET_PARAM(ATECtrl, band_idx, TxCount);
+            UINT32 pkt_ampdu_cnt = TESTMODE_GET_PARAM(ATECtrl, band_idx, pkt_ampdu_cnt);
+
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
+                    ("%s(): ate_tx_cnt=%d, pkt_tx_time=%d, pkt_ampdu_cnt=%d!\n",
+                    __FUNCTION__, ate_tx_cnt, pkt_tx_time, pkt_ampdu_cnt));
+
+            MtATESetMacTxRx(pAd, ASIC_MAC_TX, FALSE, band_idx);
+            AsicSetWPDMA(pAd, PDMA_TX_RX, 1);
+            if (ate_tx_cnt > pkt_ampdu_cnt)
+                input_cnt = ate_tx_cnt;
+            else
+                input_cnt = pkt_ampdu_cnt;
+            input_cnt = input_cnt > 4000 ? 4000 : input_cnt;
+
+            for(pkt_cnt = 0; pkt_cnt < input_cnt; pkt_cnt++){
+                MT_ATETxPkt(pAd, band_idx);
+            }
+            
+            Ret = MT_ATETxControl(pAd, band_idx, NULL);
+            MtATESetMacTxRx(pAd, ASIC_MAC_TX, TRUE, band_idx);
+        } else {
+    		Ret = MT_ATETxControl(pAd, band_idx, NULL);
+	    	AsicSetWPDMA(pAd, PDMA_TX_RX, 1);
+        }
 	}
 	if (Ret)
 		goto err0;
 
+
 	ATECtrl->did_tx = 1;
-	err1:
+
+err1:
 	return Ret;
-	err0:
+
+err0:
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
 			("%s() Err %d, wdev_idx:%x\n"
 			, __FUNCTION__,Ret, wdev_idx));
-	return Ret;
+
+    return Ret;
 }
 
 static INT32 MT_ATEStopTx(RTMP_ADAPTER *pAd, UINT32 band_idx)
@@ -3198,7 +4493,7 @@ static INT32 MT_ATESetTxAntenna(RTMP_ADAPTER *pAd, UINT32 Ant, UINT32 band_idx)
 	ATE_CTRL *ATECtrl = &pAd->ATECtrl;
 	INT32 Ret = 0;
 
-	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s\n", __FUNCTION__));
+	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s: Ant = 0x%x, band_idx = %d \n", __FUNCTION__, Ant, band_idx));
 
 	TESTMODE_SET_PARAM(ATECtrl, band_idx, TxAntennaSel, Ant);
 	/* 0: All 1:TX0 2:TX1 */
@@ -3212,7 +4507,7 @@ static INT32 MT_ATESetRxAntenna(RTMP_ADAPTER *pAd, UINT32 Ant, UINT32 band_idx)
 	ATE_CTRL *ATECtrl = &pAd->ATECtrl;
 	INT32 Ret = 0;
 
-	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s\n", __FUNCTION__));
+	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s: Ant = 0x%x, band_idx = %d \n", __FUNCTION__, Ant, band_idx));
 	/* In mt7615 its 4 bit mask for Rx0,1,2,3 */
     ATECtrl->RxAntennaSel = Ant;
 	TESTMODE_SET_PARAM(ATECtrl, band_idx, RxAntennaSel, Ant);
@@ -3272,6 +4567,7 @@ static INT32 MT_ATEGetTxFreqOffset(RTMP_ADAPTER *pAd, UINT32 *FreqOffset)
 static INT32 MT_ATESetChannel(RTMP_ADAPTER *pAd, INT16 Value, UINT32 band_idx, UINT32 pri_sel, UINT32 reason, UINT32 Ch_Band)
 {
 	ATE_CTRL *ATECtrl = &pAd->ATECtrl;
+    ATE_OPERATION *ATEOp = ATECtrl->ATEOp;
 	INT32 Ret = 0;
 	UCHAR ctrl_ch = 0;
 	UCHAR ch = TESTMODE_GET_PARAM(ATECtrl, band_idx, Channel);
@@ -3279,6 +4575,7 @@ static INT32 MT_ATESetChannel(RTMP_ADAPTER *pAd, INT16 Value, UINT32 band_idx, U
 	UINT8 phymode = TESTMODE_GET_PARAM(ATECtrl, band_idx, PhyMode);
 	UINT32 tx_sel = TESTMODE_GET_PARAM(ATECtrl, band_idx, TxAntennaSel);
 	UINT32 rx_sel = TESTMODE_GET_PARAM(ATECtrl, band_idx, RxAntennaSel);
+	UINT32 out_band_freq = TESTMODE_GET_PARAM(ATECtrl, band_idx, OutBandFreq);
 #ifdef TXBF_SUPPORT
 	UINT32 iTxBf = TESTMODE_GET_PARAM(ATECtrl, band_idx, iTxBf);
 	UINT32 eTxBf = TESTMODE_GET_PARAM(ATECtrl, band_idx, eTxBf);
@@ -3295,10 +4592,27 @@ static INT32 MT_ATESetChannel(RTMP_ADAPTER *pAd, INT16 Value, UINT32 band_idx, U
 	const INT bw160_sel[] = {-14,-10,-6,-2,2,6,10,14};
 	UCHAR ch2 = TESTMODE_GET_PARAM(ATECtrl, band_idx, Channel_2nd);
 #endif
+
+#ifdef SINGLE_SKU_V2
+#ifdef TXBF_SUPPORT
+#ifdef MT_MAC
+#ifdef DBDC_MODE
+    BAND_INFO   *Info = &(ATECtrl->band_ext[0]);
+#endif /* DBDC_MODE */
+#endif /* MT_MAC */
+#endif /* TXBF_SUPPORT */
+#endif /* SINGLE_SKU_V2 */
+
+#ifdef SINGLE_SKU_V2
+#ifdef TXBF_SUPPORT
+#ifdef MT_MAC
     UINT8 fg5Gband;
     UINT8 BfBoundTable[3];
     UINT8 aucTxPwrFccBfOnCase[10];
     UINT8 aucTxPwrFccBfOffCase[10];
+#endif /*MT_MAC*/
+#endif /*TXBF_SUPPORT*/
+#endif /*SINGLE_SKU_V2*/
 
 	if (IS_ATE_DBDC(pAd))
 		max_stream_num = pAd->chipCap.max_nss / 2 ? pAd->chipCap.max_nss / 2 : 1;
@@ -3456,18 +4770,101 @@ static INT32 MT_ATESetChannel(RTMP_ADAPTER *pAd, INT16 Value, UINT32 band_idx, U
 
 	ch_cfg.BandIdx = band_idx;
 	ch_cfg.Channel_Band = Ch_Band;
+	ch_cfg.OutBandFreq = out_band_freq;
 #if defined(MT7615) || defined(MT7622)
 	MtATESetTxStream(pAd, tx_stream_num, band_idx);
 #endif
 #ifdef MT7615
-#ifdef CAL_TO_FLASH_SUPPORT
-	mt7615_apply_cal_data_from_flash(pAd, ch_cfg);
-#endif /* CAL_TO_FLASH_SUPPORT */
+#ifdef PRE_CAL_TRX_SET1_SUPPORT
+	mt7615_apply_cal_data(pAd, ch_cfg);
+#endif /* PRE_CAL_TRX_SET1_SUPPORT */
 #endif
 	MtCmdChannelSwitch(pAd, ch_cfg);
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF,
 			("%s, band_idx:%u, bw:%x, ch:%u, ctrl_ch:%u, cntl_ch2:%u, pri_sel:%x\n"
 			, __FUNCTION__, band_idx, bw, ch, ctrl_ch, ch_cfg.ControlChannel2, pri_sel));
+
+    /* 160C/160NC TSSI workaround */
+    if (ch_cfg.Bw == BW_8080 || ch_cfg.Bw == BW_160)
+    {
+        /* Check iPA or ePA status */
+        MtEPAcheck(pAd);
+
+        /* TSSI Training only for IPA case */
+        if (pAd->fgEPA == FALSE)
+        {
+            /* Config TSSI Tracking enable */
+            MtATETSSITracking(pAd, TRUE);
+
+            /* Config FCBW ON */
+            MtATEFCBWCfg(pAd, TRUE);
+            
+            /* Config DBW 80MHz */
+            TESTMODE_SET_PARAM(ATECtrl, band_idx, PerPktBW, BW_80);
+
+            /* Config VHT mode */
+            TESTMODE_SET_PARAM(ATECtrl, band_idx, PhyMode, MODE_VHT);
+
+            /* Config MCS rate */
+            TESTMODE_SET_PARAM(ATECtrl, band_idx, Mcs, MCS_9);
+
+            /* Config 4 Nss */
+            TESTMODE_SET_PARAM(ATECtrl, band_idx, Nss, 4);
+
+            /* Config Tx packet length */
+            TESTMODE_SET_PARAM(ATECtrl, band_idx, TxLength, 100);
+
+            /* Start Tx for 25ms */
+            Ret = ATEOp->StartTx(pAd, band_idx);
+            RtmpOsMsDelay(25);
+            
+            /* Stop Tx */
+            Ret = ATEOp->StopTx(pAd, band_idx);
+
+            /* Save compensation value to Global variable (FCBW on case) */
+            MtTSSICompBackup(pAd, TRUE);
+
+            /* Config FCBW OFF */
+            MtATEFCBWCfg(pAd, FALSE);
+            
+            /* Config DBW 160MHz */
+            TESTMODE_SET_PARAM(ATECtrl, band_idx, PerPktBW, BW_160);
+
+            /* Config VHT mode */
+            TESTMODE_SET_PARAM(ATECtrl, band_idx, PhyMode, MODE_VHT);
+
+            /* Config MCS rate */
+            TESTMODE_SET_PARAM(ATECtrl, band_idx, Mcs, MCS_9);
+
+            /* Config 2 Nss */
+            TESTMODE_SET_PARAM(ATECtrl, band_idx, Nss, 2);
+
+            /* Config Tx packet length */
+            TESTMODE_SET_PARAM(ATECtrl, band_idx, TxLength, 100);
+
+            /* Start Tx for 25ms */
+            Ret = ATEOp->StartTx(pAd, band_idx);
+            RtmpOsMsDelay(25);
+            
+            /* Stop Tx */
+            Ret = ATEOp->StopTx(pAd, band_idx);
+
+            /* Save compensation value to Global variable (FCBW off case) */
+            MtTSSICompBackup(pAd, FALSE);
+
+            /* Config Compensation CR */
+            MtTSSICompCfg(pAd);
+
+            /* Config TSSI Tracking disable */
+            MtATETSSITracking(pAd, FALSE);
+
+            /* Config FCBW ON */
+            MtATEFCBWCfg(pAd, TRUE);
+
+            MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s, TSSI Training Done \n", __FUNCTION__));
+        }
+    }
+    
 #ifdef SINGLE_SKU_V2
 #ifdef TXBF_SUPPORT
 #ifdef MT_MAC
@@ -3497,78 +4894,89 @@ static INT32 MT_ATESetChannel(RTMP_ADAPTER *pAd, INT16 Value, UINT32 band_idx, U
         for (i = 0; i < 3; i++)
             MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_INFO,("%s: BfBoundTable[%d]: 0x%x \n", __FUNCTION__, i, BfBoundTable[i]));
 
-        /* TxBF must be 2T for DBDC case */
-        if (pAd->CommonCfg.dbdc_mode == 1)
-        {
-            g_BFBackOffMode = 2;
-        }
 
-        if (g_BFBackOffMode == 4)
+    	if (pAd->CommonCfg.dbdc_mode)
+    	{
+    		if (fg5Gband)
+    			g_BFBackOffMode = pAd->dbdc_5G_tx_stream;
+    		else
+    			g_BFBackOffMode = pAd->dbdc_2G_tx_stream;
+    	} else {
+    		g_BFBackOffMode = pAd->Antenna.field.TxPath;
+    	}
+
+        /* Update BF Backoff value for different Tx Stream case */
+#ifdef DBDC_MODE
+        if (((BAND0 == band_idx) && (ATECtrl->fgTxPowerBFBackoffEn)) || ((BAND1 == band_idx) && (Info->fgTxPowerBFBackoffEn)))
+#else
+        if ((BAND0 == band_idx) && (ATECtrl->fgTxPowerBFBackoffEn))
+#endif
         {
-            
-            aucTxPwrFccBfOnCase[0] = BfBoundTable[0] + 12;   // Entry_1
-            aucTxPwrFccBfOnCase[1] = BfBoundTable[0] +  6;   // Entry_2
-            aucTxPwrFccBfOnCase[2] = BfBoundTable[0] + 12;   // Entry_3
-            aucTxPwrFccBfOnCase[3] = BfBoundTable[0] +  2;   // Entry_4
-            aucTxPwrFccBfOnCase[4] = BfBoundTable[0] +  8;   // Entry_5
-            aucTxPwrFccBfOnCase[5] = BfBoundTable[0] + 12;   // Entry_6
-            aucTxPwrFccBfOnCase[6] = BfBoundTable[0] +  0;   // Entry_7 (reference point)
-            aucTxPwrFccBfOnCase[7] = BfBoundTable[0] +  6;   // Entry_8
-            aucTxPwrFccBfOnCase[8] = BfBoundTable[0] +  9;   // Entry_9
-            aucTxPwrFccBfOnCase[9] = BfBoundTable[0] + 12;   // Entry_10
+            if (g_BFBackOffMode == 4)
+            {
+                aucTxPwrFccBfOnCase[0] = BfBoundTable[0] + 12;   // Entry_1
+                aucTxPwrFccBfOnCase[1] = BfBoundTable[0] +  6;   // Entry_2
+                aucTxPwrFccBfOnCase[2] = BfBoundTable[0] + 12;   // Entry_3
+                aucTxPwrFccBfOnCase[3] = BfBoundTable[0] +  2;   // Entry_4
+                aucTxPwrFccBfOnCase[4] = BfBoundTable[0] +  8;   // Entry_5
+                aucTxPwrFccBfOnCase[5] = BfBoundTable[0] + 12;   // Entry_6
+                aucTxPwrFccBfOnCase[6] = BfBoundTable[0] +  0;   // Entry_7 (reference point)
+                aucTxPwrFccBfOnCase[7] = BfBoundTable[0] +  6;   // Entry_8
+                aucTxPwrFccBfOnCase[8] = BfBoundTable[0] +  9;   // Entry_9
+                aucTxPwrFccBfOnCase[9] = BfBoundTable[0] + 12;   // Entry_10
+            }
+            else if (g_BFBackOffMode == 3)
+            {
+                aucTxPwrFccBfOnCase[0] = BfBoundTable[1] +  9;   // Entry_1
+                aucTxPwrFccBfOnCase[1] = BfBoundTable[1] +  3;   // Entry_2
+                aucTxPwrFccBfOnCase[2] = BfBoundTable[1] +  9;   // Entry_3
+                aucTxPwrFccBfOnCase[3] = BfBoundTable[1] +  0;   // Entry_4 (reference point)
+                aucTxPwrFccBfOnCase[4] = BfBoundTable[1] +  6;   // Entry_5
+                aucTxPwrFccBfOnCase[5] = BfBoundTable[1] +  9;   // Entry_6
+                aucTxPwrFccBfOnCase[6] = BfBoundTable[1] -  3;   // Entry_7 
+                aucTxPwrFccBfOnCase[7] = BfBoundTable[1] +  3;   // Entry_8
+                aucTxPwrFccBfOnCase[8] = BfBoundTable[1] +  7;   // Entry_9
+                aucTxPwrFccBfOnCase[9] = BfBoundTable[1] +  9;   // Entry_10
+            }
+            else if (g_BFBackOffMode == 2)
+            {
+                aucTxPwrFccBfOnCase[0] = BfBoundTable[2] +  6;   // Entry_1
+                aucTxPwrFccBfOnCase[1] = BfBoundTable[2] +  0;   // Entry_2 (reference point)
+                aucTxPwrFccBfOnCase[2] = BfBoundTable[2] +  6;   // Entry_3
+                aucTxPwrFccBfOnCase[3] = BfBoundTable[2] -  4;   // Entry_4
+                aucTxPwrFccBfOnCase[4] = BfBoundTable[2] +  2;   // Entry_5
+                aucTxPwrFccBfOnCase[5] = BfBoundTable[2] +  6;   // Entry_6
+                aucTxPwrFccBfOnCase[6] = BfBoundTable[2] -  6;   // Entry_7
+                aucTxPwrFccBfOnCase[7] = BfBoundTable[2] +  0;   // Entry_8
+                aucTxPwrFccBfOnCase[8] = BfBoundTable[2] +  3;   // Entry_9
+                aucTxPwrFccBfOnCase[9] = BfBoundTable[2] +  6;   // Entry_10
+            }
+            else
+            {
+                for (i = 0; i < BF_GAIN_FINAL_SIZE; i++)
+                {
+                    aucTxPwrFccBfOnCase[i] = 0x3F; 
+                }
+            }
+        }
+        else
+        {
+            for (i = 0; i < BF_GAIN_FINAL_SIZE; i++)
+            {
+                aucTxPwrFccBfOnCase[i] = 0x3F; 
+            }
         }
         
-        else if (g_BFBackOffMode == 3)
-        {
-            
-            aucTxPwrFccBfOnCase[0] = BfBoundTable[1] +  9;   // Entry_1
-            aucTxPwrFccBfOnCase[1] = BfBoundTable[1] +  3;   // Entry_2
-            aucTxPwrFccBfOnCase[2] = BfBoundTable[1] +  9;   // Entry_3
-            aucTxPwrFccBfOnCase[3] = BfBoundTable[1] +  0;   // Entry_4 (reference point)
-            aucTxPwrFccBfOnCase[4] = BfBoundTable[1] +  6;   // Entry_5
-            aucTxPwrFccBfOnCase[5] = BfBoundTable[1] +  9;   // Entry_6
-            aucTxPwrFccBfOnCase[6] = BfBoundTable[1] -  3;   // Entry_7 
-            aucTxPwrFccBfOnCase[7] = BfBoundTable[1] +  3;   // Entry_8
-            aucTxPwrFccBfOnCase[8] = BfBoundTable[1] +  7;   // Entry_9
-            aucTxPwrFccBfOnCase[9] = BfBoundTable[1] +  9;   // Entry_10
-        }
-        
-        else if (g_BFBackOffMode == 2)
-        {
-            
-            aucTxPwrFccBfOnCase[0] = BfBoundTable[2] +  6;   // Entry_1
-            aucTxPwrFccBfOnCase[1] = BfBoundTable[2] +  0;   // Entry_2 (reference point)
-            aucTxPwrFccBfOnCase[2] = BfBoundTable[2] +  6;   // Entry_3
-            aucTxPwrFccBfOnCase[3] = BfBoundTable[2] -  4;   // Entry_4
-            aucTxPwrFccBfOnCase[4] = BfBoundTable[2] +  2;   // Entry_5
-            aucTxPwrFccBfOnCase[5] = BfBoundTable[2] +  6;   // Entry_6
-            aucTxPwrFccBfOnCase[6] = BfBoundTable[2] -  6;   // Entry_7
-            aucTxPwrFccBfOnCase[7] = BfBoundTable[2] +  0;   // Entry_8
-            aucTxPwrFccBfOnCase[8] = BfBoundTable[2] +  3;   // Entry_9
-            aucTxPwrFccBfOnCase[9] = BfBoundTable[2] +  6;   // Entry_10
-        }
-
         /*===============================================================================================*/
-        /* Default BF OFF Table is 0x3f to bypass the backoff mechanism */
+        /* Update BF OFF Table (Default BF OFF Table is 0x3f to bypass the backoff mechanism) */
+        /*===============================================================================================*/
 
-
-        aucTxPwrFccBfOffCase[0] = 0x3f; 
-        aucTxPwrFccBfOffCase[1] = 0x3f;
-        aucTxPwrFccBfOffCase[2] = 0x3f;
-        aucTxPwrFccBfOffCase[3] = 0x3f;
-        aucTxPwrFccBfOffCase[4] = 0x3f;
-        aucTxPwrFccBfOffCase[5] = 0x3f;
-        aucTxPwrFccBfOffCase[6] = 0x3f;
-        aucTxPwrFccBfOffCase[7] = 0x3f;
-        aucTxPwrFccBfOffCase[8] = 0x3f;
-        aucTxPwrFccBfOffCase[9] = 0x3f;
-
-       for (i = 0; i < BF_GAIN_FINAL_SIZE; i++)
-            MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_INFO,("aucTxPwrFccBfOnCase[%d]: 0x%x \n", i, aucTxPwrFccBfOnCase[i]));
-
-       CmdTxBfTxPwrBackOff(pAd, ch_cfg.BandIdx, aucTxPwrFccBfOnCase, aucTxPwrFccBfOffCase);    
-
-
+        for (i = 0; i < BF_GAIN_FINAL_SIZE; i++)
+        {
+            aucTxPwrFccBfOffCase[i] = 0x3F; 
+        }
+        
+		CmdTxBfTxPwrBackOff(pAd, ch_cfg.BandIdx, aucTxPwrFccBfOnCase, aucTxPwrFccBfOffCase);    
 
 #endif /*MT_MAC*/
 #endif /*TXBF_SUPPORT*/
@@ -3593,6 +5001,32 @@ static INT32 MT_ATESetBW(RTMP_ADAPTER *pAd, INT16 Value, UINT32 band_idx)
 	TESTMODE_SET_PARAM(ATECtrl, band_idx, BW, bw);
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s: BW = %d\n", __FUNCTION__, bw));
 	return Ret;
+}
+
+static INT32 mt_ate_set_duty_cycle(RTMP_ADAPTER *pAd, UINT32 value, UINT32 band_idx)
+{
+	INT32 Ret = 0;
+	ATE_CTRL *ATECtrl = &pAd->ATECtrl;
+	UINT32 duty_cycle = value;
+
+	TESTMODE_SET_PARAM(ATECtrl, band_idx, duty_cycle, duty_cycle);
+	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, 
+            ("%s: Duty cycle=%d%%\n", __FUNCTION__, duty_cycle));
+
+	return Ret;
+}
+
+static INT32 mt_ate_set_pkt_tx_time(RTMP_ADAPTER *pAd, UINT32 value, UINT32 band_idx)
+{
+    INT32 Ret = 0;
+    ATE_CTRL *ATECtrl = &pAd->ATECtrl;
+    UINT32 pkt_tx_time = value;
+
+    TESTMODE_SET_PARAM(ATECtrl, band_idx, pkt_tx_time, pkt_tx_time);
+    MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
+            ("%s: Pkt Tx time=%dus\n", __FUNCTION__, pkt_tx_time));
+
+    return Ret;
 }
 
 #if !defined(COMPOS_WIN) && !defined(COMPOS_TESTMODE_WIN)//1       todo RX_BLK
@@ -3641,6 +5075,19 @@ static INT32 MT_ATESetSlotTime(RTMP_ADAPTER *pAd, UINT32 SlotTime, UINT32 SifsTi
 	Ret = MtCmdATESetSlotTime(pAd, (UINT8)SlotTime, (UINT8)SifsTime, RIFS_TIME, EIFS_TIME, (UINT8)BandIdx);
 #endif
 
+	return Ret;
+}
+
+static INT32 MT_ATESetPowerDropLevel(RTMP_ADAPTER *pAd, UINT32 PowerDropLevel, UINT32 BandIdx)
+{
+	INT32 Ret = 0;
+
+	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("%s, PowerDropLevel:%d, Band:%d\n",__FUNCTION__, PowerDropLevel, BandIdx));
+
+#ifdef CONFIG_HW_HAL_OFFLOAD
+	Ret = MtCmdATESetPowerDropLevel(pAd, (UINT8)PowerDropLevel, (UINT8)BandIdx);
+#endif /* CONFIG_HW_HAL_OFFLOAD */
+	
 	return Ret;
 }
 
@@ -3890,7 +5337,7 @@ static INT32 MT_ATEBssInfoUpdate(RTMP_ADAPTER *pAd, UINT32 OwnMacIdx, UINT32 Bss
     bss_info_argument.NetworkType = NETWORK_INFRA;
     bss_info_argument.u4ConnectionType = CONNECTION_INFRA_AP;
     bss_info_argument.CipherSuit = Ndis802_11WEPDisabled;
-    bss_info_argument.Active = TRUE;
+    bss_info_argument.bss_state = BSS_ACTIVE;
     bss_info_argument.u4BssInfoFeature = BSS_INFO_BASIC_FEATURE;
 
     Ret = AsicBssInfoUpdate(pAd, bss_info_argument);
@@ -4939,15 +6386,24 @@ static UINT32 MT_TestModeOpInit(RTMP_ADAPTER *pAd)
 	AteOp->GetTxFreqOffset = MT_ATEGetTxFreqOffset;
 	AteOp->SetChannel = MT_ATESetChannel;
 	AteOp->SetBW = MT_ATESetBW;
-#ifdef CAL_TO_FLASH_SUPPORT
-	AteOp->RxSetlfTest = MtATE_DCOC_Cal_to_Flash_Proc;
-	AteOp->TxDPDTest = MtATE_DPD_Cal_to_Flash_Proc;
-#endif /* CAL_TO_FLASH_SUPPORT */
+	AteOp->SetDutyCycle = mt_ate_set_duty_cycle;
+	AteOp->SetPktTxTime = mt_ate_set_pkt_tx_time;
+#ifdef PRE_CAL_TRX_SET1_SUPPORT
+	AteOp->RxSelfTest = MtATE_DCOC_Cal_Store_Proc;
+	AteOp->TxDPDTest = MtATE_DPD_Cal_Store_Proc;
+#endif /* PRE_CAL_TRX_SET1_SUPPORT */
+#ifdef PRE_CAL_TRX_SET2_SUPPORT
+    AteOp->PreCalTest = MtATE_Pre_Cal_Proc;  
+#endif /* PRE_CAL_TRX_SET2_SUPPORT */
+#ifdef PA_TRIM_SUPPORT
+    AteOp->PATrim = MtATE_PA_Trim_Proc;
+#endif /* PA_TRIM_SUPPORT */
 #if !defined(COMPOS_WIN) && !defined(COMPOS_TESTMODE_WIN)//1       todo RX_BLK
 	AteOp->SampleRssi = MT_ATESampleRssi;
 #endif
 	AteOp->SetAIFS = MT_ATESetAIFS;
 	AteOp->SetSlotTime = MT_ATESetSlotTime;
+    AteOp->SetPowerDropLevel = MT_ATESetPowerDropLevel;
 	AteOp->SetTSSI = MT_ATESetTSSI;
 	AteOp->LowPower = MT_ATELowPower,
 	AteOp->SetDPD = MT_ATESetDPD;
@@ -5127,17 +6583,17 @@ INT32 MtATERSSIOffset(PRTMP_ADAPTER pAd, INT32 rssi_orig, UINT32 ant_idx, INT32 
 
 #endif/*(defined(SUPPORT_QA_TOOL)&&(SUPPORT_QA_TOOL ==1)) || !defined(COMPOS_WIN)*/
 
-#ifdef CAL_TO_FLASH_SUPPORT
-INT MtATE_DPD_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
+#ifdef PRE_CAL_TRX_SET1_SUPPORT
+INT MtATE_DPD_Cal_Store_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 {
 	ULONG x = simple_strtol(arg, 0, 10);
 	TXDPD_RESULT_T TxDpdResult;
-	BOOLEAN DirectionFlashtoCR = FALSE; /* CR to Flash */
+	BOOLEAN toCR = FALSE; /* CR to Flash/Bin file */
 	UINT16 CentralFreq=0;
 	UINT8 BW=0;
 	UINT8 i=0;
 	UINT8 j=0;
-	ULONG CalToFlashOffset = 0;
+	ULONG CalOffset = 0;
 	USHORT doCal1 = 0;
 	UINT8 RetryTimes = 5;
 	BOOLEAN DPDPassOrFail = TRUE;
@@ -5160,28 +6616,28 @@ INT MtATE_DPD_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 		kGBand = TRUE;
 	}
 
-	if(pAd->E2pAccessMode != E2P_FLASH_MODE)
+	if(pAd->E2pAccessMode != E2P_FLASH_MODE && pAd->E2pAccessMode != E2P_BIN_MODE)
 	{
 		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
-		("%s : Currently not in FLASH MODE,return. \n", __FUNCTION__));
+		("%s : Currently not in FLASH or BIN MODE,return. \n", __FUNCTION__));
 		return FALSE;
 	}
 
 	/* TXDPD ABand */
 	if(kABand) 
 	{	
-		RTMPZeroMemory(pAd->CalDPDAPart1ToFlashImage,CAL_TO_FLASH_IMAGE_SIZE);	
+		RTMPZeroMemory(pAd->CalDPDAPart1Image,CAL_IMAGE_SIZE);	
 
 		/* TXDPD A20 Part 1 (0~35) */
 		for(i=0;i<TXDPD_PART1_LIMIT;i++)
 		{
 			BW = BW_20;
-			CentralFreq = DPDtoFlashA20Freq[i];
-			CalToFlashOffset = i * TXDPD_TO_FLASH_SIZE;
+			CentralFreq = DPD_A20Freq[i];
+			CalOffset = i * TXDPD_SIZE;
 			for(j=0;j<RetryTimes;j++)
 			{
 				RTMPZeroMemory(&TxDpdResult,sizeof(TXDPD_RESULT_T));
-				MtCmdGetTXDPDCalResult(pAd,DirectionFlashtoCR,CentralFreq,BW,ABAND,FALSE,FALSE,&TxDpdResult);
+				MtCmdGetTXDPDCalResult(pAd,toCR,CentralFreq,BW,ABAND,FALSE,FALSE,&TxDpdResult);
 				RtmpusecDelay(10);
 				if(TxDpdResult.ResultSuccess)
 					break;			
@@ -5191,9 +6647,9 @@ INT MtATE_DPD_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 			{
 				MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
 				("==========TX A20 P1 freq %d save to flash offset %lx ========\n"
-				,CentralFreq, DPDPART1_TO_FLASH_OFFSET + CalToFlashOffset));
-				ShowDPDDataFromFlash(pAd,TxDpdResult);
-				memcpy(pAd->CalDPDAPart1ToFlashImage + CalToFlashOffset, &TxDpdResult.u4DPDG0_WF0_Prim, TXDPD_TO_FLASH_SIZE);
+				,CentralFreq, DPDPART1_OFFSET + CalOffset));
+				ShowDPDData(pAd,TxDpdResult);
+				memcpy(pAd->CalDPDAPart1Image + CalOffset, &TxDpdResult.u4DPDG0_WF0_Prim, TXDPD_SIZE);
 			}
 			else
 			{			
@@ -5203,20 +6659,27 @@ INT MtATE_DPD_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 				goto exit;
 			}
 		}
-		RtmpFlashWrite(pAd->CalDPDAPart1ToFlashImage, pAd->flash_offset + DPDPART1_TO_FLASH_OFFSET, TXDPD_PART1_LIMIT*TXDPD_TO_FLASH_SIZE);
+
+#ifdef RTMP_FLASH_SUPPORT
+		if (pAd->E2pAccessMode == E2P_FLASH_MODE)
+			RtmpFlashWrite(pAd->CalDPDAPart1Image, pAd->flash_offset + DPDPART1_OFFSET, TXDPD_PART1_LIMIT*TXDPD_SIZE);
+#endif
+		if(pAd->E2pAccessMode == E2P_BIN_MODE)
+			rtmp_cal_write_to_bin(pAd, pAd->CalDPDAPart1Image, DPDPART1_OFFSET, TXDPD_PART1_LIMIT*TXDPD_SIZE);
+
 		RtmpusecDelay(20000);
 
 		/* TXDPD A20 Part 2 (36~44) */
-		RTMPZeroMemory(pAd->CalDPDAPart1ToFlashImage,CAL_TO_FLASH_IMAGE_SIZE);
+		RTMPZeroMemory(pAd->CalDPDAPart1Image,CAL_IMAGE_SIZE);
 		for(i=TXDPD_PART1_LIMIT;i<DPD_A20_SIZE;i++)
 		{
 			BW = BW_20;
-			CentralFreq = DPDtoFlashA20Freq[i];
-			CalToFlashOffset = (i-TXDPD_PART1_LIMIT) * TXDPD_TO_FLASH_SIZE;
+			CentralFreq = DPD_A20Freq[i];
+			CalOffset = (i-TXDPD_PART1_LIMIT) * TXDPD_SIZE;
 			for(j=0;j<RetryTimes;j++)
 			{
 				RTMPZeroMemory(&TxDpdResult,sizeof(TXDPD_RESULT_T));
-				MtCmdGetTXDPDCalResult(pAd,DirectionFlashtoCR,CentralFreq,BW,ABAND,FALSE,FALSE,&TxDpdResult);
+				MtCmdGetTXDPDCalResult(pAd,toCR,CentralFreq,BW,ABAND,FALSE,FALSE,&TxDpdResult);
 				RtmpusecDelay(10);
 				if(TxDpdResult.ResultSuccess)
 					break;			
@@ -5226,9 +6689,9 @@ INT MtATE_DPD_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 			{
 				MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
 				("==========TX A20 P2 freq %d save to flash offset %x========\n"
-				,CentralFreq,DPDPART1_TO_FLASH_OFFSET+i*TXDPD_TO_FLASH_SIZE));
-				ShowDPDDataFromFlash(pAd,TxDpdResult);
-				memcpy(pAd->CalDPDAPart1ToFlashImage + CalToFlashOffset, &TxDpdResult.u4DPDG0_WF0_Prim, TXDPD_TO_FLASH_SIZE);
+				,CentralFreq,DPDPART1_OFFSET+i*TXDPD_SIZE));
+				ShowDPDData(pAd,TxDpdResult);
+				memcpy(pAd->CalDPDAPart1Image + CalOffset, &TxDpdResult.u4DPDG0_WF0_Prim, TXDPD_SIZE);
 			}
 			else
 			{			
@@ -5238,23 +6701,29 @@ INT MtATE_DPD_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 				goto exit;
 			}
 		}
-		RtmpFlashWrite(pAd->CalDPDAPart1ToFlashImage, pAd->flash_offset + DPDPART2_TO_FLASH_OFFSET,(DPD_A20_SIZE-TXDPD_PART1_LIMIT)*TXDPD_TO_FLASH_SIZE);
+
+#ifdef RTMP_FLASH_SUPPORT
+		if (pAd->E2pAccessMode == E2P_FLASH_MODE)
+			RtmpFlashWrite(pAd->CalDPDAPart1Image, pAd->flash_offset + DPDPART2_OFFSET,(DPD_A20_SIZE-TXDPD_PART1_LIMIT)*TXDPD_SIZE);
+#endif
+		if(pAd->E2pAccessMode == E2P_BIN_MODE)
+			rtmp_cal_write_to_bin(pAd, pAd->CalDPDAPart1Image, DPDPART2_OFFSET, (DPD_A20_SIZE-TXDPD_PART1_LIMIT)*TXDPD_SIZE);
 	
 		RtmpusecDelay(20000);
 	}
 	/* TXDPD G20 */
 	if(kGBand)
 	{
-		RTMPZeroMemory(pAd->CalDPDAPart1ToFlashImage,CAL_TO_FLASH_IMAGE_SIZE);
+		RTMPZeroMemory(pAd->CalDPDAPart1Image,CAL_IMAGE_SIZE);
 		for(i=0;i<DPD_G20_SIZE;i++)
 		{
 			BW = BW_20;
-			CentralFreq = DPDtoFlashG20Freq[i];
-			CalToFlashOffset = i * TXDPD_TO_FLASH_SIZE;
+			CentralFreq = DPD_G20Freq[i];
+			CalOffset = i * TXDPD_SIZE;
 			for(j=0;j<RetryTimes;j++)
 			{
 				RTMPZeroMemory(&TxDpdResult,sizeof(TXDPD_RESULT_T));
-				MtCmdGetTXDPDCalResult(pAd,DirectionFlashtoCR,CentralFreq,BW,GBAND,FALSE,FALSE,&TxDpdResult);
+				MtCmdGetTXDPDCalResult(pAd,toCR,CentralFreq,BW,GBAND,FALSE,FALSE,&TxDpdResult);
 				RtmpusecDelay(10);
 				if(TxDpdResult.ResultSuccess)
 					break;			
@@ -5264,9 +6733,9 @@ INT MtATE_DPD_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 			{
 				MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
 				("==========TX G20 freq %d save to flash offset %lx ========\n"
-				,CentralFreq,DPDPART1_TO_FLASH_OFFSET+DPD_A20_SIZE*TXDPD_TO_FLASH_SIZE+CalToFlashOffset));
-				ShowDPDDataFromFlash(pAd,TxDpdResult);
-				memcpy(pAd->CalDPDAPart1ToFlashImage + CalToFlashOffset, &TxDpdResult.u4DPDG0_WF0_Prim, TXDPD_TO_FLASH_SIZE);
+				,CentralFreq,DPDPART1_OFFSET+DPD_A20_SIZE*TXDPD_SIZE+CalOffset));
+				ShowDPDData(pAd,TxDpdResult);
+				memcpy(pAd->CalDPDAPart1Image + CalOffset, &TxDpdResult.u4DPDG0_WF0_Prim, TXDPD_SIZE);
 			}
 			else
 			{			
@@ -5276,44 +6745,77 @@ INT MtATE_DPD_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 				goto exit;
 			}
 		}
-		RtmpFlashWrite(pAd->CalDPDAPart1ToFlashImage,\
-			pAd->flash_offset + DPDPART1_TO_FLASH_OFFSET+DPD_A20_SIZE*TXDPD_TO_FLASH_SIZE, (DPD_G20_SIZE*TXDPD_TO_FLASH_SIZE));
+
+#ifdef RTMP_FLASH_SUPPORT
+		if (pAd->E2pAccessMode == E2P_FLASH_MODE)
+			RtmpFlashWrite(pAd->CalDPDAPart1Image,\
+				pAd->flash_offset + DPDPART1_OFFSET+DPD_A20_SIZE*TXDPD_SIZE, (DPD_G20_SIZE*TXDPD_SIZE));
+#endif
+		if(pAd->E2pAccessMode == E2P_BIN_MODE)
+			rtmp_cal_write_to_bin(pAd, pAd->CalDPDAPart1Image, DPDPART1_OFFSET+DPD_A20_SIZE*TXDPD_SIZE, (DPD_G20_SIZE*TXDPD_SIZE));
+
 	}
-	/* raise efuse bits */
-	rtmp_ee_flash_read(pAd, 0x52, &doCal1);
-	doCal1 |= (1 << 0); 
-	rtmp_ee_flash_write(pAd, 0x52, doCal1);
+	/* raise DoCalibrate bits */
+	if(pAd->E2pAccessMode == E2P_BIN_MODE)
+		rtmp_ee_bin_read16(pAd, 0x52, &doCal1);
+#ifdef RTMP_FLASH_SUPPORT
+	if (pAd->E2pAccessMode == E2P_FLASH_MODE)
+		rtmp_ee_flash_read(pAd, 0x52, &doCal1);	
+#endif
 
+	doCal1 |= (1 << 0);
+	doCal1 |= (1 << 4);   // raise bit 4 to denote 16 entry TXDPD
 
-	/* reload from flash debug */
+	if (pAd->E2pAccessMode == E2P_BIN_MODE) {
+		rtmp_ee_bin_write16(pAd, 0x52, doCal1);
+		rtmp_ee_write_to_bin(pAd);		// writeback to eeprom file
+	}
+#ifdef RTMP_FLASH_SUPPORT
+	if (pAd->E2pAccessMode == E2P_FLASH_MODE)
+		rtmp_ee_flash_write(pAd, 0x52, doCal1);
+#endif
+
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("raised E2P 0x52 = %x\n", doCal1));
+
+	/* reload test -- for debug only */
 	if(pAd->KtoFlashDebug)
 	{
-		ULONG CalToFlashOffset=0;
+		ULONG CalOffset=0;
 		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
-					("\n######################### reload from flash debug ####################################\n"));
+					("\n######################### reload caldata for debug ####################################\n"));
 		RtmpusecDelay(20000);
-		RtmpFlashRead(pAd->CalDPDAPart1ToFlashImage, pAd->flash_offset + DPDPART1_TO_FLASH_OFFSET, CAL_TO_FLASH_IMAGE_SIZE);
-		RtmpFlashRead(pAd->CalDPDAPart2GToFlashImage, pAd->flash_offset + DPDPART2_TO_FLASH_OFFSET, CAL_TO_FLASH_IMAGE_SIZE);
+
+#ifdef RTMP_FLASH_SUPPORT
+		if (pAd->E2pAccessMode == E2P_FLASH_MODE) {
+			RtmpFlashRead(pAd->CalDPDAPart1Image, pAd->flash_offset + DPDPART1_OFFSET, CAL_IMAGE_SIZE);	
+			RtmpFlashRead(pAd->CalDPDAPart2GImage, pAd->flash_offset + DPDPART2_OFFSET, CAL_IMAGE_SIZE);
+		}
+#endif
+		if(pAd->E2pAccessMode == E2P_BIN_MODE) {
+			rtmp_cal_load_from_bin(pAd, pAd->CalDPDAPart1Image, DPDPART1_OFFSET, CAL_IMAGE_SIZE);
+			rtmp_cal_load_from_bin(pAd, pAd->CalDPDAPart2GImage, DPDPART2_OFFSET, CAL_IMAGE_SIZE);
+		}
+
 		/* Find flash offset base on CentralFreq */
 		for(i=0;i<DPD_ALL_SIZE;i++)
 		{
-			CalToFlashOffset = i * TXDPD_TO_FLASH_SIZE;	
+			CalOffset = i * TXDPD_SIZE;	
 
 			MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
 					("%s() : reload flash offset [%lx]  freq [%d]=================\n",
-							__FUNCTION__,CalToFlashOffset + DPDPART1_TO_FLASH_OFFSET,DPDtoFlashAllFreq[i]));
+							__FUNCTION__,CalOffset + DPDPART1_OFFSET,DPD_AllFreq[i]));
 
 			if(i < TXDPD_PART1_LIMIT)
 			{
-				memcpy(&TxDpdResult.u4DPDG0_WF0_Prim,pAd->CalDPDAPart1ToFlashImage + CalToFlashOffset, TXDPD_TO_FLASH_SIZE);
+				memcpy(&TxDpdResult.u4DPDG0_WF0_Prim,pAd->CalDPDAPart1Image + CalOffset, TXDPD_SIZE);
 			}
 			else
 			{
-				CalToFlashOffset = (i-TXDPD_PART1_LIMIT) * TXDPD_TO_FLASH_SIZE;
-				memcpy(&TxDpdResult.u4DPDG0_WF0_Prim,pAd->CalDPDAPart2GToFlashImage + CalToFlashOffset, TXDPD_TO_FLASH_SIZE);
+				CalOffset = (i-TXDPD_PART1_LIMIT) * TXDPD_SIZE;
+				memcpy(&TxDpdResult.u4DPDG0_WF0_Prim,pAd->CalDPDAPart2GImage + CalOffset, TXDPD_SIZE);
 			}
 				
-			ShowDPDDataFromFlash(pAd,TxDpdResult);
+			ShowDPDData(pAd,TxDpdResult);
 		}
 	}
 
@@ -5330,30 +6832,30 @@ exit:
 
 
 
-INT MtATE_DCOC_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
+INT MtATE_DCOC_Cal_Store_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 {	
 	ULONG x = simple_strtol(arg, 0, 10);
 	RXDCOC_RESULT_T RxDcocResult;
-	BOOLEAN DirectionFlashtoCR = FALSE; /* CR to Flash */
+	BOOLEAN toCR = FALSE;
 	UINT16 CentralFreq=0;
 	UINT8 BW=0;
 	UINT8 i=0;
 	UINT8 j=0;
-	ULONG CalToFlashOffset = 0;
+	ULONG CalOffset = 0;
 	USHORT doCal1 = 0;
 	UINT8 RetryTimes = 5;
 	BOOLEAN DCOCPassOrFail = TRUE;
 	BOOLEAN kABand = TRUE;
 	BOOLEAN kGBand = TRUE;
 
-	if(pAd->E2pAccessMode != E2P_FLASH_MODE)
+	if(pAd->E2pAccessMode != E2P_FLASH_MODE && pAd->E2pAccessMode != E2P_BIN_MODE)	
 	{
 		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
-		("%s : Currently not in FLASH MODE,return. \n", __FUNCTION__));
+		("%s : Currently not in FLASH or BIN MODE,return. \n", __FUNCTION__));
 		return FALSE;
 	}
 	
-	RTMPZeroMemory(pAd->CalDCOCToFlashImage,CAL_TO_FLASH_IMAGE_SIZE);
+	RTMPZeroMemory(pAd->CalDCOCImage,CAL_IMAGE_SIZE);
 
 	if(x == 0) /* 2G */
 	{
@@ -5377,12 +6879,12 @@ INT MtATE_DCOC_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 		for(i=0;i<K_A20_SIZE;i++)
 		{
 			BW = BW_20;
-			CentralFreq = KtoFlashA20Freq[i];
-			CalToFlashOffset = i*RXDCOC_TO_FLASH_SIZE;
+			CentralFreq = K_A20Freq[i];
+			CalOffset = i*RXDCOC_SIZE;
 			for(j=0;j<RetryTimes;j++)
 			{
 				RTMPZeroMemory(&RxDcocResult,sizeof(RXDCOC_RESULT_T));
-				MtCmdGetRXDCOCCalResult(pAd,DirectionFlashtoCR,CentralFreq,BW,ABAND,FALSE,FALSE,&RxDcocResult);
+				MtCmdGetRXDCOCCalResult(pAd,toCR,CentralFreq,BW,ABAND,FALSE,FALSE,&RxDcocResult);
 				RtmpusecDelay(10);
 				if(RxDcocResult.ResultSuccess)
 					break;			
@@ -5391,14 +6893,14 @@ INT MtATE_DCOC_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 			if(RxDcocResult.ResultSuccess)
 			{
 				MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
-				("========== A20 freq %d save to flash offset %lx ========\n"
-					, CentralFreq,DCOC_TO_FLASH_OFFSET+CalToFlashOffset));
-				ShowDCOCDataFromFlash(pAd,RxDcocResult);
-				memcpy(pAd->CalDCOCToFlashImage + CalToFlashOffset, &RxDcocResult.ucDCOCTBL_I_WF0_SX0_LNA[0], RXDCOC_TO_FLASH_SIZE);
+				("========== A20 freq %d save to offset %lx ========\n"
+					, CentralFreq,DCOC_OFFSET+CalOffset));
+				ShowDCOCData(pAd,RxDcocResult);
+				memcpy(pAd->CalDCOCImage + CalOffset, &RxDcocResult.ucDCOCTBL_I_WF0_SX0_LNA[0], RXDCOC_SIZE);
 			}
 			else
 			{
-				ShowDCOCDataFromFlash(pAd,RxDcocResult);
+				ShowDCOCData(pAd,RxDcocResult);
 				MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("!!!!!!  A20 freq %d RX still failed after %d retries !!!!!!!!\n"
 					, CentralFreq,RetryTimes));
 				DCOCPassOrFail = FALSE;
@@ -5409,12 +6911,12 @@ INT MtATE_DCOC_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 		for(i=0;i<K_A40_SIZE;i++)
 		{
 			BW = BW_40;
-			CentralFreq = KtoFlashA40Freq[i];
-			CalToFlashOffset = (K_A20_SIZE + i)*RXDCOC_TO_FLASH_SIZE;
+			CentralFreq = K_A40Freq[i];
+			CalOffset = (K_A20_SIZE + i)*RXDCOC_SIZE;
 			for(j=0;j<RetryTimes;j++)
 			{
 				RTMPZeroMemory(&RxDcocResult,sizeof(RXDCOC_RESULT_T));		
-				MtCmdGetRXDCOCCalResult(pAd,DirectionFlashtoCR,CentralFreq,BW,ABAND,FALSE,FALSE,&RxDcocResult);
+				MtCmdGetRXDCOCCalResult(pAd,toCR,CentralFreq,BW,ABAND,FALSE,FALSE,&RxDcocResult);
 				RtmpusecDelay(10);
 				if(RxDcocResult.ResultSuccess)			
 					break;			
@@ -5423,10 +6925,10 @@ INT MtATE_DCOC_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 			if(RxDcocResult.ResultSuccess)
 			{
 				MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
-				("========== A40 freq %d save to flash offset %lx ========\n"
-					, CentralFreq,DCOC_TO_FLASH_OFFSET+CalToFlashOffset));
-				ShowDCOCDataFromFlash(pAd,RxDcocResult);
-				memcpy(pAd->CalDCOCToFlashImage + CalToFlashOffset, &RxDcocResult.ucDCOCTBL_I_WF0_SX0_LNA[0], RXDCOC_TO_FLASH_SIZE);
+				("========== A40 freq %d save to offset %lx ========\n"
+					, CentralFreq,DCOC_OFFSET+CalOffset));
+				ShowDCOCData(pAd,RxDcocResult);
+				memcpy(pAd->CalDCOCImage + CalOffset, &RxDcocResult.ucDCOCTBL_I_WF0_SX0_LNA[0], RXDCOC_SIZE);
 			}
 			else
 			{
@@ -5441,12 +6943,12 @@ INT MtATE_DCOC_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 		for(i=0;i<K_A80_SIZE;i++)
 		{
 			BW = BW_80;
-			CentralFreq = KtoFlashA80Freq[i];
-			CalToFlashOffset = (K_A20_SIZE + K_A40_SIZE + i)*RXDCOC_TO_FLASH_SIZE;
+			CentralFreq = K_A80Freq[i];
+			CalOffset = (K_A20_SIZE + K_A40_SIZE + i)*RXDCOC_SIZE;
 			for(j=0;j<RetryTimes;j++)
 			{
 				RTMPZeroMemory(&RxDcocResult,sizeof(RXDCOC_RESULT_T));		
-				MtCmdGetRXDCOCCalResult(pAd,DirectionFlashtoCR,CentralFreq,BW,ABAND,FALSE,FALSE,&RxDcocResult);
+				MtCmdGetRXDCOCCalResult(pAd,toCR,CentralFreq,BW,ABAND,FALSE,FALSE,&RxDcocResult);
 				RtmpusecDelay(10);
 				if(RxDcocResult.ResultSuccess)
 						break;	
@@ -5454,10 +6956,10 @@ INT MtATE_DCOC_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 			if(RxDcocResult.ResultSuccess)
 			{
 				MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
-				("========== A80 freq %d save to flash offset %lx ========\n"
-					, CentralFreq,DCOC_TO_FLASH_OFFSET+CalToFlashOffset));	
-				ShowDCOCDataFromFlash(pAd,RxDcocResult);
-				memcpy(pAd->CalDCOCToFlashImage + CalToFlashOffset, &RxDcocResult.ucDCOCTBL_I_WF0_SX0_LNA[0], RXDCOC_TO_FLASH_SIZE);
+				("========== A80 freq %d save to offset %lx ========\n"
+					, CentralFreq,DCOC_OFFSET+CalOffset));	
+				ShowDCOCData(pAd,RxDcocResult);
+				memcpy(pAd->CalDCOCImage + CalOffset, &RxDcocResult.ucDCOCTBL_I_WF0_SX0_LNA[0], RXDCOC_SIZE);
 			}
 			else
 			{
@@ -5475,25 +6977,25 @@ INT MtATE_DCOC_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 		for(i=0;i<K_G20_SIZE;i++)
 		{
 			BW = BW_20;
-			CentralFreq = KtoFlashG20Freq[i];
-			CalToFlashOffset = (K_A20_SIZE + K_A40_SIZE + K_A80_SIZE + i)*RXDCOC_TO_FLASH_SIZE;
+			CentralFreq = K_G20Freq[i];
+			CalOffset = (K_A20_SIZE + K_A40_SIZE + K_A80_SIZE + i)*RXDCOC_SIZE;
 			for(j=0;j<RetryTimes;j++)
 			{
 				RTMPZeroMemory(&RxDcocResult,sizeof(RXDCOC_RESULT_T));		
-				MtCmdGetRXDCOCCalResult(pAd,DirectionFlashtoCR,CentralFreq,BW,GBAND,FALSE,FALSE,&RxDcocResult);
+				MtCmdGetRXDCOCCalResult(pAd,toCR,CentralFreq,BW,GBAND,FALSE,FALSE,&RxDcocResult);
 				RtmpusecDelay(10);
 				if(RxDcocResult.ResultSuccess)
 							break;	
 			}
 			
-			//RtmpFlashWrite(&RxDcocResult.ucDCOCTBL_I_WF0_SX0_LNA[0], CalToFlashOffset+i*RXDCOC_TO_FLASH_SIZE, RXDCOC_TO_FLASH_SIZE);
+			//RtmpFlashWrite(&RxDcocResult.ucDCOCTBL_I_WF0_SX0_LNA[0], CalOffset+i*RXDCOC_SIZE, RXDCOC_SIZE);
 			if(RxDcocResult.ResultSuccess)
 			{
 				MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
-				("========== G20 freq %d save to flash offset %lx ========\n"
-					, CentralFreq,DCOC_TO_FLASH_OFFSET+CalToFlashOffset));
-				ShowDCOCDataFromFlash(pAd,RxDcocResult);
-				memcpy(pAd->CalDCOCToFlashImage + CalToFlashOffset, &RxDcocResult.ucDCOCTBL_I_WF0_SX0_LNA[0], RXDCOC_TO_FLASH_SIZE);
+				("========== G20 freq %d save to offset %lx ========\n"
+					, CentralFreq,DCOC_OFFSET+CalOffset));
+				ShowDCOCData(pAd,RxDcocResult);
+				memcpy(pAd->CalDCOCImage + CalOffset, &RxDcocResult.ucDCOCTBL_I_WF0_SX0_LNA[0], RXDCOC_SIZE);
 			}
 			else
 			{
@@ -5505,36 +7007,67 @@ INT MtATE_DCOC_Cal_to_Flash_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 		}
 	}
 	MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
-		("========== save to flash offset %x size %d========\n"
-		, pAd->flash_offset + DCOC_TO_FLASH_OFFSET,(K_ALL_SIZE * RXDCOC_TO_FLASH_SIZE)));
-	RtmpFlashWrite(pAd->CalDCOCToFlashImage, pAd->flash_offset + DCOC_TO_FLASH_OFFSET, (K_ALL_SIZE * RXDCOC_TO_FLASH_SIZE));
+		("========== save to offset %x size %d========\n", 
+#ifdef RTMP_FLASH_SUPPORT
+		pAd->flash_offset + 
+#endif
+		DCOC_OFFSET,(K_ALL_SIZE * RXDCOC_SIZE)));
 
-	/* raise efuse bits */
-	rtmp_ee_flash_read(pAd, 0x52, &doCal1);
+#ifdef RTMP_FLASH_SUPPORT
+	if (pAd->E2pAccessMode == E2P_FLASH_MODE)
+		RtmpFlashWrite(pAd->CalDCOCImage, pAd->flash_offset + DCOC_OFFSET, (K_ALL_SIZE * RXDCOC_SIZE));
+#endif
+	if(pAd->E2pAccessMode == E2P_BIN_MODE)
+		rtmp_cal_write_to_bin(pAd, pAd->CalDCOCImage, DCOC_OFFSET, (K_ALL_SIZE * RXDCOC_SIZE));
+
+	/* raise DoCalibrate bits */
+#ifdef RTMP_FLASH_SUPPORT
+	if (pAd->E2pAccessMode == E2P_FLASH_MODE)
+		rtmp_ee_flash_read(pAd, 0x52, &doCal1);	
+#endif
+	if(pAd->E2pAccessMode == E2P_BIN_MODE)
+		rtmp_ee_bin_read16(pAd, 0x52, &doCal1);
+
 	doCal1 |= (1 << 1); 
-	rtmp_ee_flash_write(pAd, 0x52, doCal1);
+
+#ifdef RTMP_FLASH_SUPPORT
+	if (pAd->E2pAccessMode == E2P_FLASH_MODE)
+		rtmp_ee_flash_write(pAd, 0x52, doCal1);	
+#endif
+	if (pAd->E2pAccessMode == E2P_BIN_MODE) {
+		rtmp_ee_bin_write16(pAd, 0x52, doCal1);
+		rtmp_ee_write_to_bin(pAd);		// XXX: remember to writeback modified eeprom to file
+	}
+
 	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("raised E2P 0x52 = %x\n", doCal1));
 
 
 	
 	if(pAd->KtoFlashDebug)
 	{
-		ULONG CalToFlashOffset=0;
+		ULONG CalOffset=0;
 		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
-					("######################### reload from flash debug ####################################\n"));
+					("######################### reload caldata for debug ####################################\n"));
 		RtmpusecDelay(20000);
-		RtmpFlashRead(pAd->CalDCOCToFlashImage, pAd->flash_offset + DCOC_TO_FLASH_OFFSET, (K_ALL_SIZE * RXDCOC_TO_FLASH_SIZE));
-		/* Find flash offset base on CentralFreq */
+
+#ifdef RTMP_FLASH_SUPPORT
+		if (pAd->E2pAccessMode == E2P_FLASH_MODE)
+			RtmpFlashRead(pAd->CalDCOCImage, pAd->flash_offset + DCOC_OFFSET, (K_ALL_SIZE * RXDCOC_SIZE));
+#endif
+		if(pAd->E2pAccessMode == E2P_BIN_MODE)
+			rtmp_cal_load_from_bin(pAd, pAd->CalDCOCImage, DCOC_OFFSET, (K_ALL_SIZE * RXDCOC_SIZE));
+
+		/* Find offset base on CentralFreq */
 		for(i=0;i<K_ALL_SIZE;i++)
 		{
-			CalToFlashOffset = i * RXDCOC_TO_FLASH_SIZE;	
+			CalOffset = i * RXDCOC_SIZE;	
 
 			MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
-					("%s() : reload flash offset [%lx]  freq [%d]=================\n",
-							__FUNCTION__,CalToFlashOffset + DCOC_TO_FLASH_OFFSET,KtoFlashAllFreq[i]));
+					("%s() : reload from offset [%lx]  freq [%d]=================\n",
+							__FUNCTION__,CalOffset + DCOC_OFFSET,K_AllFreq[i]));
 
-			memcpy(&RxDcocResult.ucDCOCTBL_I_WF0_SX0_LNA[0],pAd->CalDCOCToFlashImage + CalToFlashOffset, RXDCOC_TO_FLASH_SIZE);
-			ShowDCOCDataFromFlash(pAd,RxDcocResult);
+			memcpy(&RxDcocResult.ucDCOCTBL_I_WF0_SX0_LNA[0],pAd->CalDCOCImage + CalOffset, RXDCOC_SIZE);
+			ShowDCOCData(pAd,RxDcocResult);
 		}
 	}
 
@@ -5546,5 +7079,66 @@ exit:
 	
 	return TRUE;
 }
-#endif /* CAL_TO_FLASH_SUPPORT */
+#endif /* PRE_CAL_TRX_SET1_SUPPORT */
 
+#ifdef PRE_CAL_TRX_SET2_SUPPORT
+INT MtATE_Pre_Cal_Proc(RTMP_ADAPTER *pAd, UINT8 CalId, UINT32 ChGrpId)
+{       
+    INT32 ret;
+
+    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_OFF, 
+           ("%s: Cal Id = %d, ChGrpId = %d\n", __FUNCTION__, CalId, ChGrpId));
+        
+    /* Initialization */
+    pAd->PreCalWriteOffSet = 0; 
+    pAd->ChGrpMap = PreCalGroupList[ChGrpId];
+    ret = os_alloc_mem(pAd, &pAd->PreCalStoreBuffer, PRE_CAL_SIZE);
+
+    if(ret != NDIS_STATUS_SUCCESS)
+    {
+        MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
+        ("\x1b[42m %s : Not enough memory for pre-cal stored buffer!!\x1b[m\n", __FUNCTION__));
+    }
+    else
+    {
+        MtCmdGetPreCalResult(pAd, PreCalItemList[CalId], PreCalGroupList[ChGrpId]);
+    }
+    
+    return TRUE;
+}
+#endif/* PRE_CAL_TRX_SET2_SUPPORT */
+#ifdef PA_TRIM_SUPPORT
+INT MtATE_PA_Trim_Proc(RTMP_ADAPTER *pAd, PUINT32 pData)
+{ 
+    //UINT32 Offset; 
+    UINT16 DoPATrim,WriteAddr;
+    //INT32 Status = NDIS_STATUS_FAILURE; 
+	UINT8 idx;
+	USHORT * pStoreData = (USHORT *)pData;
+	USHORT value;
+
+	WriteAddr = PA_TRIM_START_ADDR1;
+	for (idx =0; idx < PA_TRIM_BLOCK_SIZE; idx++)
+	{
+		value = *pStoreData; 
+		RT28xx_EEPROM_WRITE16(pAd, WriteAddr , value);		
+		WriteAddr += 2; 
+		pStoreData++;		
+	}
+	WriteAddr = PA_TRIM_START_ADDR2;	
+	for (idx =0; idx < PA_TRIM_BLOCK_SIZE; idx++)
+	{
+		value = *pStoreData; 
+		RT28xx_EEPROM_WRITE16(pAd, 	WriteAddr, value);
+		WriteAddr += 2;
+		pStoreData++;			
+	}
+
+	/* Raise DoPATrim bits */	
+	RT28xx_EEPROM_READ16(pAd, 0x52, DoPATrim);	
+	DoPATrim |= (1 << 3);
+	RT28xx_EEPROM_WRITE16(pAd, 0x52, DoPATrim);
+
+    	return TRUE;
+}
+#endif/* PA_TRIM_SUPPORT */

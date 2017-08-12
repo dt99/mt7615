@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
     Who         When          What
     --------    ----------    ----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #ifndef __AP_MUMIMO_RA_H__
 #define __AP_MUMIMO_RA_H__
 
@@ -52,9 +54,12 @@ enum {
 	MURA_ALGORITHM_STAT = 1,
 	MURA_ALGORITHM_GROUP_STAT,
 	MURA_ALGORITHM_HWFB_STAT,
-    MURA_FIXED_RATE_ALGORITHM,
-    MURA_FIXED_GROUP_RATE_ALGORITHM,
-    MURA_TEST_ALGORITHM,
+   	MURA_FIXED_RATE_ALGORITHM,
+   	MURA_FIXED_GROUP_RATE_ALGORITHM,
+   	MURA_TEST_ALGORITHM,
+   	MURA_SOUNDING_PERIOD,
+   	MURA_PLATFORM_TYPE,
+   	MURA_DISABLE_CN3_CN4,
 	MURA_MAX_COMMAND,
 };
 
@@ -73,12 +78,26 @@ typedef struct _MURA_CN_ENTRY_T {
 	LINK_ENTRY_T rLinkEntry;
 
     UINT_8  ucBBPCalcState;
-
+#ifdef RT_BIG_ENDIAN
+	UINT_8	ucMU3RateCalcState:2;
+	UINT_8	ucMU2RateCalcState:2;
+	UINT_8	ucMU1RateCalcState:2;
+	UINT_8	ucMU0RateCalcState:2;
+#else
     UINT_8  ucMU0RateCalcState:2;
     UINT_8  ucMU1RateCalcState:2;
     UINT_8  ucMU2RateCalcState:2;
     UINT_8  ucMU3RateCalcState:2;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT_16 u2Reserve1:1;
+	UINT_16 u2U2PreSSN:1;
+	UINT_16 u2U1PreSSN:1;
+	UINT_16 u2U0PreSSN:1;
+	UINT_16 u2U2PreRate:4;
+	UINT_16 u2U1PreRate:4;
+	UINT_16 u2U0PreRate:4;
+#else
     UINT_16 u2U0PreRate:4;
 	UINT_16 u2U1PreRate:4;
     UINT_16 u2U2PreRate:4;
@@ -86,47 +105,96 @@ typedef struct _MURA_CN_ENTRY_T {
 	UINT_16 u2U1PreSSN:1;
 	UINT_16 u2U2PreSSN:1;
 	UINT_16 u2Reserve1:1;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT_16 u2U3Rate:4;
+	UINT_16 u2U2Rate:4;
+	UINT_16 u2U1Rate:4;
+	UINT_16 u2U0Rate:4;
+#else
     UINT_16 u2U0Rate:4;
 	UINT_16 u2U1Rate:4;
     UINT_16 u2U2Rate:4;
     UINT_16 u2U3Rate:4;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT_16 u2U3AutoRate:4;
+	UINT_16 u2U2AutoRate:4;
+	UINT_16 u2U1AutoRate:4;
+	UINT_16 u2U0AutoRate:4;
+#else
     UINT_16 u2U0AutoRate:4;
 	UINT_16 u2U1AutoRate:4;
     UINT_16 u2U2AutoRate:4;
     UINT_16 u2U3AutoRate:4;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT_16 u2U3LastRate:4;
+	UINT_16 u2U2LastRate:4;
+	UINT_16 u2U1LastRate:4;
+	UINT_16 u2U0LastRate:4;
+#else
     UINT_16 u2U0LastRate:4;
 	UINT_16 u2U1LastRate:4;
     UINT_16 u2U2LastRate:4;
     UINT_16 u2U3LastRate:4;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT_16 u2U3DeltaMCS:4;
+	UINT_16 u2U2DeltaMCS:4;
+	UINT_16 u2U1DeltaMCS:4;
+	UINT_16 u2U0DeltaMCS:4;
+#else
 	UINT_16 u2U0DeltaMCS:4;
 	UINT_16 u2U1DeltaMCS:4;
 	UINT_16 u2U2DeltaMCS:4;
     UINT_16 u2U3DeltaMCS:4;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+    UINT_8  ucU3LastSSNReverse:3;
+    UINT_8  ucGroupInit:1;
+    UINT_8  ucU3LastSSN:1;
+    UINT_8  ucU2LastSSN:1;
+	UINT_8  ucU1LastSSN:1;
+    UINT_8  ucU0LastSSN:1;
+#else
     UINT_8  ucU0LastSSN:1;
 	UINT_8  ucU1LastSSN:1;
     UINT_8  ucU2LastSSN:1;
     UINT_8  ucU3LastSSN:1;
     UINT_8  ucGroupInit:1;
     UINT_8  ucU3LastSSNReverse:3;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT_8	ucUserNum:2;
+	UINT_8	ucGPBW:2;
+	UINT_8	ucU3SSN:1;
+	UINT_8	ucU2SSN:1;
+	UINT_8	ucU1SSN:1;
+	UINT_8	ucU0SSN:1;
+#else
 	UINT_8  ucU0SSN:1;
 	UINT_8  ucU1SSN:1;
 	UINT_8  ucU2SSN:1;
 	UINT_8  ucU3SSN:1;
 	UINT_8  ucGPBW:2;
 	UINT_8  ucUserNum:2;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT_32 u4GroupValid:1;
+	UINT_32 u4GroupID:11; // 0 ~ 2047 Group Idx
+	UINT_32 u4U3PFID:5;
+	UINT_32 u4U2PFID:5;
+	UINT_32 u4U1PFID:5;
+	UINT_32 u4U0PFID:5;
+#else
     UINT_32 u4U0PFID:5;
     UINT_32 u4U1PFID:5;
     UINT_32 u4U2PFID:5;
     UINT_32 u4U3PFID:5;
     UINT_32 u4GroupID:11; // 0 ~ 2047 Group Idx
     UINT_32 u4GroupValid:1;
+#endif
 
     UINT_8  ucU0TxPER;
     UINT_8  ucU1TxPER;
@@ -134,47 +202,111 @@ typedef struct _MURA_CN_ENTRY_T {
     UINT_8  ucU3TxPER;
 
     // For Future Used : Smart MU Rate Algorithm with Dynamic Programming Method
+#ifdef RT_BIG_ENDIAN
+	UINT_8	ucU1TxQ_UpSS1:4;
+	UINT_8	ucU0TxQ_UpSS1:4;
+#else
     UINT_8  ucU0TxQ_UpSS1:4;
     UINT_8  ucU1TxQ_UpSS1:4;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT_8	ucU3TxQ_UpSS1:4;
+	UINT_8	ucU2TxQ_UpSS1:4;
+#else
     UINT_8  ucU2TxQ_UpSS1:4;
     UINT_8  ucU3TxQ_UpSS1:4;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT_8	ucU1TxQ_UpSS2:4;
+	UINT_8	ucU0TxQ_UpSS2:4;
+#else
     UINT_8  ucU0TxQ_UpSS2:4;
     UINT_8  ucU1TxQ_UpSS2:4;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT_8	ucU3TxQ_UpSS2:4;
+	UINT_8	ucU2TxQ_UpSS2:4;
+#else
     UINT_8  ucU2TxQ_UpSS2:4;
     UINT_8  ucU3TxQ_UpSS2:4;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT_8	ucU1TxQ_Down:4;
+	UINT_8	ucU0TxQ_Down:4;
+#else
     UINT_8  ucU0TxQ_Down:4;
     UINT_8  ucU1TxQ_Down:4;
-
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT_8	ucU3TxQ_Down:4;
+	UINT_8	ucU2TxQ_Down:4;
+#else
     UINT_8  ucU2TxQ_Down:4;
     UINT_8  ucU3TxQ_Down:4;
-
+#endif
 } MURA_CN_ENTRY_INFO_T, *P_MURA_CN_ENTRY_INFO_T;
 
 
 typedef struct _CMD_MURGA_SET_GROUP_TBL_ENTRY {
-	UINT_8       numUser:2;
-	UINT_8       BW:2;
-	UINT_8       NS0:1;
-	UINT_8       NS1:1;
-	UINT_8       NS2:1;
-	UINT_8       NS3:1;
+#ifdef RT_BIG_ENDIAN
+	UINT_8		 NS3:1;
+	UINT_8		 NS2:1;
+	UINT_8		 NS1:1;
+	UINT_8		 NS0:1;
+	UINT_8		 BW:2;
+	UINT_8		 numUser:2;
+#else
+	UINT_8		 numUser:2;
+	UINT_8		 BW:2;
+	UINT_8		 NS0:1;
+	UINT_8		 NS1:1;
+	UINT_8		 NS2:1;
+	UINT_8		 NS3:1;
+#endif
+
 	UINT_8       WLIDUser0; // WLANID0
 	UINT_8       WLIDUser1; // WLANID1
 	UINT_8       WLIDUser2; // WLANID2
 	UINT_8       WLIDUser3; // WLANID3
-	UINT_8       initMcsUser0:4;
-	UINT_8       initMcsUser1:4;
-	UINT_8       initMcsUser2:4;
-	UINT_8       initMcsUser3:4;
+#ifdef RT_BIG_ENDIAN
+	UINT_8		 initMcsUser1:4;
+	UINT_8		 initMcsUser0:4;
+#else
+	UINT_8		 initMcsUser0:4;
+	UINT_8		 initMcsUser1:4;
+#endif
+	
+#ifdef RT_BIG_ENDIAN
+	UINT_8		 initMcsUser3:4;
+	UINT_8		 initMcsUser2:4;
+#else
+	UINT_8		 initMcsUser2:4;
+	UINT_8		 initMcsUser3:4;
+#endif
+
 } CMD_MURGA_SET_GROUP_TBL_ENTRY, *P_CMD_MURGA_SET_GROUP_TBL_ENTRY;
 
 typedef struct _CMD_SET_PERIODIC_SND {
 	UINT16 u2Reserved;
 } CMD_SET_PERIODIC_SND, *P_CMD_SET_PERIODIC_SND;
+
+typedef struct _CMD_SET_SND_PARAMS {
+	UINT_8       ucAllMuUser;
+	UINT_8       ucWLIDUser;
+	UINT_8       ucMaxSoundingPeriod;
+	UINT_8       ucMinSoundingPeriod;
+	UINT_8       ucSoundingPeriodStep;
+} CMD_SET_SND_PARAMS, *P_CMD_SET_SND_PARAMS;
+
+typedef struct _CMD_SET_PLATFORM_TYPE {
+	UINT_8       ucPlatformType;
+	UINT_8       ucReserved[3];
+} CMD_SET_PLATFORM_TYPE, *P_CMD_SET_PLATFORM_TYPE;
+
+typedef struct _CMD_SET_DISABLE_CN3_CN4{
+	UINT_8       ucDisableCn3Cn4;
+	UINT_8       ucReserved[3];
+} CMD_SET_DISABLE_CN3_CN4, *P_CMD_SET_DISABLE_CN3_CN4;
 
 typedef struct _EVENT_SHOW_ALGORITHM_STATE {
 	UINT_32                 u4EventId;
@@ -250,6 +382,8 @@ INT SetMuraTestAlgorithmProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
 INT SetMuraTestAlgorithmInit(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
 INT SetMuraFixedRateProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
 INT SetMuraFixedGroupRateProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
-
+INT SetMuraFixedSndParamProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
+INT SetMuraPlatformTypeProc(RTMP_ADAPTER *pAd);
+INT SetMuraDisableCN3CN4Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg);
 
 #endif  /* __AP_MUMIMO_RA_H__ */

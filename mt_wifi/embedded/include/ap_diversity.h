@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /***************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -24,7 +25,7 @@
 	--------	----------		----------------------------
 	YY Huang	06-10-2008		Init for RT3052.
 */
-
+#endif /* MTK_LICENSE */
 #ifndef _AP_DIVERSITY_H_
 #define _AP_DIVERSITY_H_
 

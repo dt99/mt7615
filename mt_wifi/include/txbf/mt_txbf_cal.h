@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc. 
@@ -13,10 +14,14 @@
 	Module Name:
 	mt_txbf_cal.h
 */
-
+#endif /* MTK_LICENSE */
 
 #ifndef _RT_TXBF_CAL_H_
 #define _RT_TXBF_CAL_H_
+
+#define TX_PATH_2   2
+#define TX_PATH_3   3
+#define TX_PATH_4   4
 
 #define GROUP_0     0
 #define CH_001      1
@@ -126,7 +131,8 @@ typedef enum _IBF_PHASE_E2P_UPDATE_TYPE
 {
     IBF_PHASE_ONE_GROUP_UPDATE,
     IBF_PHASE_ALL_GROUP_UPDATE,
-    IBF_PHASE_ALL_GROUP_ERASE
+    IBF_PHASE_ALL_GROUP_ERASE,
+    IBF_PHASE_ALL_GROUP_READ_FROM_E2P
 } IBF_PHASE_E2P_UPDATE_TYPE;
 
 typedef enum _IBF_PHASE_CAL_TYPE
@@ -222,6 +228,8 @@ typedef struct _IBF_PHASE_Gx_T
     UINT8 ucGx_H_T2_H;
     UINT8 ucGx_H_T2_H_SX2;
 }IBF_PHASE_Gx_T, *P_IBF_PHASE_Gx_T;
+
+VOID iBFPhaseCalE2PInit(IN struct _RTMP_ADAPTER *pAd);
 
 VOID iBFPhaseCalE2PUpdate(IN struct _RTMP_ADAPTER *pAd,
                           IN UCHAR   ucGroup,

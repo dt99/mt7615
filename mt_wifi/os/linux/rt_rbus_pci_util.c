@@ -141,6 +141,46 @@ PNDIS_PACKET RTMP_AllocateRxPacketBuffer(
 	return (PNDIS_PACKET) pkt;
 }
 
+#ifdef  CONFIG_WIFI_BUILD_SKB
+/*
+ * FUNCTION: Allocate a packet buffer only for DMA, not a SKB
+ * ARGUMENTS:
+ *     AdapterHandle:  AdapterHandle
+ *     Length:  Number of bytes to allocate
+ *     Cached:  Whether or not the memory can be cached
+ *     VirtualAddress:  Pointer to memory is returned here
+ *     phy_addr:  Physical address corresponding to virtual address
+ * Notes:
+ *     Cached is ignored: always cached memory
+ */
+PNDIS_PACKET RTMP_AllocateRxPacketBufferOnly(
+	IN VOID *pReserved,
+	IN VOID *pPciDev,
+	IN ULONG Length,
+	IN BOOLEAN Cached,
+	OUT VOID **VirtualAddress,
+	OUT PNDIS_PHYSICAL_ADDRESS	phy_addr)
+{
+	struct sk_buff *pkt;
+	UINT32  tmp_idx;
+
+	tmp_idx = SKB_DATA_ALIGN(Length);
+
+	DEV_ALLOC_FRAG(pkt, tmp_idx);
+
+	if (pkt) {
+		tmp_idx = SKB_BUF_HEADROOM_RSV;
+		*VirtualAddress = ((PVOID)pkt + tmp_idx);
+		*phy_addr = PCI_MAP_SINGLE_DEV(pPciDev, *VirtualAddress, Length,  -1, RTMP_PCI_DMA_FROMDEVICE);
+	} else {
+		*VirtualAddress = (PVOID) NULL;
+		*phy_addr = (NDIS_PHYSICAL_ADDRESS) 0;
+		MTWF_LOG(DBG_CAT_HIF, CATHIF_PCI, DBG_LVL_ERROR, ("can't allocate rx %ld size packet\n",Length));
+	}
+
+	return (PNDIS_PACKET) pkt;
+}
+#endif /* CONFIG_WIFI_BUILD_SKB */
 
 /*
  * invaild or writeback cache 

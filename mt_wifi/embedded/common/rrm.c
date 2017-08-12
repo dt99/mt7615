@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -14,7 +15,7 @@
  * way altering	the	source code	is stricitly prohibited, unless	the	prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
 	Abstract:
 
@@ -252,6 +253,7 @@ INT Set_BeaconReq_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 						("%s: invalid Measure Mode. %d\n", 	__FUNCTION__, BcnReq.MeasureMode));
 					return TRUE;
 				}
+				break;
 			case 7: /* regulatory class. */
 				{
 					RTMP_STRING *RegClassString;
@@ -266,17 +268,33 @@ INT Set_BeaconReq_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 					}
 				}
 				break;
-			
+			case 8: /* Channel Report  List. */
+				{
+					RTMP_STRING *ChIdString;
+					int ChId;
+
+					ChId = 0;
+					while ((ChIdString = strsep((char **)&thisChar, "!")) != NULL)
+					{
+						BcnReq.ChRepList[ChId] =
+							(UINT8) simple_strtol(ChIdString, 0, 10);
+						ChId++;
+					}
+				}			
+				break;
 		}
 		ArgIdx++;
 	}	
 
-	if (ArgIdx < 7 || ArgIdx > 8)
+	if (ArgIdx < 7 || ArgIdx > 9)
 	{
 		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_ERROR,
 			("%s: invalid args (%d).\n", __FUNCTION__, ArgIdx));
 		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_ERROR,
-			("eg: iwpriv ra0 set BcnReq=<Aid>-<Duration>-<RegulatoryClass>-<BSSID>-<SSID>-<MeasureCh>-<MeasureMode>-<ChRegClass>\n"));
+			("eg: iwpriv ra0 set BcnReq=<Aid>-<Duration>-<RegulatoryClass>-<BSSID>-<SSID>-<MeasureCh>-<MeasureMode>-<ChRegClass>-<ChReptList>\n"));
+		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_ERROR,
+			("eg: iwpriv ra0 set BcnReq=1-50-12-FF:FF:FF:FF:FF:FF-WiFi1-255-1-12+1-1!6!36!48\n"));
+		
 		return TRUE;
 	}
 
@@ -479,8 +497,14 @@ INT RRM_InfoDisplay_Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 	}
 	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_OFF, ("\n"));	
 
-	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_OFF, ("Regulator TxPowerPercentage=%ld\n",
-		pAd->CommonCfg.TxPowerPercentage));
+#ifdef DBDC_MODE
+	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_OFF, ("Regulator TxPowerPercentage=(%ld, %ld)\n",
+		pAd->CommonCfg.TxPowerPercentage[BAND0], pAd->CommonCfg.TxPowerPercentage[BAND1]));
+#else
+    MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_OFF, ("Regulator TxPowerPercentage=%ld\n",
+		pAd->CommonCfg.TxPowerPercentage[BAND0]));
+#endif
+
 	return TRUE;
 }
 
@@ -601,13 +625,25 @@ VOID RRM_PeerNeighborReqAction(
 VOID RRM_BeaconReportHandler(
 	IN PRTMP_ADAPTER pAd,
 	IN PRRM_BEACON_REP_INFO pBcnRepInfo,
-	IN LONG Length)
+	IN LONG Length
+#ifdef CUSTOMER_DCC_FEATURE
+		,
+		IN UCHAR	*Snr,
+		IN CHAR 	*rssi
+#endif
+		)
 {
 	CHAR Rssi;
 	USHORT LenVIE = 0;
 	NDIS_802_11_VARIABLE_IEs *pVIE = NULL;
-	UCHAR VarIE[MAX_VIE_LEN];
+	//UCHAR VarIE[MAX_VIE_LEN];
+	UCHAR *VarIE = NULL;		/*Wframe-larger-than=1024 warning  removal*/
 	ULONG Idx = BSS_NOT_FOUND;
+	/*
+	 	if peer response mesurement pilot frame, pVIE->Length should be init.
+	 	Sofar we don't know the mesurement pilot frame format, so we use below flag to avoid call BssTableSetEntry() instead of init. pVIE->Length
+	*/
+	BOOLEAN bFrameBody = FALSE;
 	LONG RemainLen = Length;
 	PRRM_BEACON_REP_INFO pBcnRep;
 	PUINT8 ptr;
@@ -615,9 +651,18 @@ VOID RRM_BeaconReportHandler(
 	UINT32 Ptsf;
 	BCN_IE_LIST *ie_list = NULL;
 
+	os_alloc_mem(NULL, (UCHAR **)&VarIE, 1024);
+	if (VarIE == NULL) {
+		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_ERROR, ("%s(): Alloc VarIE failed!\n", __FUNCTION__));
+		return;
+	}
+	NdisZeroMemory(VarIE, 1024);
 
 	os_alloc_mem(NULL, (UCHAR **)&ie_list, sizeof(BCN_IE_LIST));
 	if (ie_list == NULL) {
+		if (VarIE != NULL) {
+			os_free_mem(VarIE);
+		}
 		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_ERROR, ("%s(): Alloc ie_list failed!\n", __FUNCTION__));
 		return;
 	}
@@ -632,8 +677,8 @@ VOID RRM_BeaconReportHandler(
 	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_TRACE, ("%s:: ReqClass=%d, Channel=%d\n",
 		__FUNCTION__, pBcnRep->RegulatoryClass, pBcnRep->ChNumber));
 
-	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_TRACE, ("Bssid=%02x:%02x:%02x:%02x:%02x:%02x\n",
-						PRINT_MAC(pBcnRep->Bssid)));
+	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_TRACE, ("Bssid=%02x:%02x:%02x:%02x:%02x:%02x, FrameType=%s\n",
+						PRINT_MAC(pBcnRep->Bssid), (BcnReqInfoField.field.ReportFrameType == 0) ?"beacon, probe resp" :"measurement pilot" ));
 
 	Rssi = pBcnRep->RCPI + pAd->BbpRssiToDbmDelta;
 
@@ -649,20 +694,24 @@ VOID RRM_BeaconReportHandler(
 		switch(pRrmSubFrame->SubId)
 		{
 			case 1:
-				if (BcnReqInfoField.field.ReportFrameType == 0)
+				if (BcnReqInfoField.field.ReportFrameType == 0) // 0 ==> beacon or probe response frame , 1 ==> Measurement Pilot frame
 				{
 					/* Init Variable IE structure */
 					pVIE = (PNDIS_802_11_VARIABLE_IEs) VarIE;
 					pVIE->Length = 0;
 
-					PeerBeaconAndProbeRspSanity(pAd,
+					bFrameBody = PeerBeaconAndProbeRspSanity(pAd,
 								pRrmSubFrame->Oct,
 								pRrmSubFrame->Length,
 								pBcnRep->ChNumber,
 								ie_list,
 								&LenVIE,
 								pVIE,
-								FALSE);
+								FALSE,
+								TRUE);
+
+					MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_TRACE, ("%s:: bFrameBody=%d\n", __FUNCTION__, bFrameBody));
+	
 				}
 				break;
 
@@ -682,19 +731,55 @@ VOID RRM_BeaconReportHandler(
 
 	if (NdisEqualMemory(pBcnRep->Bssid, ie_list->Bssid, MAC_ADDR_LEN) == FALSE)
 	{
-		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_WARN, ("%s():BcnReq->BSSID not equal ie_list->Bssid!\n", __FUNCTION__));
+		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_TRACE, ("%s():BcnReq->BSSID=%02x:%02x:%02x:%02x:%02x:%02x not equal ie_list->Bssid=%02x:%02x:%02x:%02x:%02x:%02x!\n",
+			__FUNCTION__,PRINT_MAC(pBcnRep->Bssid),PRINT_MAC(ie_list->Bssid)));
+
+		if (NdisEqualMemory(ie_list->Bssid, ZERO_MAC_ADDR, MAC_ADDR_LEN))
+		{
+			COPY_MAC_ADDR(&ie_list->Addr2[0], pBcnRep->Bssid);
+			COPY_MAC_ADDR(&ie_list->Bssid[0], pBcnRep->Bssid);	
+		}
+
 	}
+
+	if (ie_list->Channel == 0)
+		ie_list->Channel = pBcnRep->ChNumber;
+
+	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_TRACE, ("%s():ie_list->Channel=%d\n",
+			__FUNCTION__,ie_list->Channel));
+
 #ifdef AP_SCAN_SUPPORT
-	Idx = BssTableSetEntry(pAd, &pAd->ScanTab, ie_list, Rssi, LenVIE, pVIE);
-	if (Idx != BSS_NOT_FOUND)
+	if (bFrameBody)
 	{
-		BSS_ENTRY *pBssEntry = &pAd->ScanTab.BssEntry[Idx];
-		NdisMoveMemory(pBssEntry->PTSF, (PUCHAR)&Ptsf, 4);
-		pBssEntry->RegulatoryClass = pBcnRep->RegulatoryClass;
-		pBssEntry->CondensedPhyType = BcnReqInfoField.field.CondensePhyType;
-		pBssEntry->RSNI = pBcnRep->RSNI;
+
+		ie_list->FromBcnReport = TRUE;
+	
+		Idx = BssTableSetEntry(pAd, &pAd->ScanTab, ie_list, Rssi, LenVIE, pVIE
+#ifdef CUSTOMER_DCC_FEATURE
+							,Snr, rssi							
+#endif /* CONFIG_AP_SUPPORT */
+							);			
+
+		if (Idx != BSS_NOT_FOUND)
+		{
+			BSS_ENTRY *pBssEntry = &pAd->ScanTab.BssEntry[Idx];
+			NdisMoveMemory(pBssEntry->PTSF, (PUCHAR)&Ptsf, 4);
+			pBssEntry->RegulatoryClass = pBcnRep->RegulatoryClass;
+			pBssEntry->CondensedPhyType = BcnReqInfoField.field.CondensePhyType;
+			pBssEntry->RSNI = pBcnRep->RSNI;
+		}
 	}
 #endif /* AP_SCAN_SUPPORT */
+	
+	if (ie_list != NULL)
+	{
+		os_free_mem(ie_list);
+	}
+
+	if (VarIE != NULL) {
+		os_free_mem(VarIE);
+	}
+
 	return;
 }
 
@@ -708,6 +793,19 @@ VOID RRM_PeerMeasureRepAction(
 	PMEASURE_REQ_ENTRY pDialogEntry;
 	PMAC_TABLE_ENTRY pEntry;
 	UINT8 DialogToken;
+#ifdef CUSTOMER_DCC_FEATURE
+	UCHAR Snr[4] = {0};
+	CHAR  rssi[4] = {0};
+	Snr[0] = ConvertToSnr(pAd, Elem->rssi_info.raw_Snr[0]);
+	Snr[1] = ConvertToSnr(pAd, Elem->rssi_info.raw_Snr[1]);
+	Snr[2] = ConvertToSnr(pAd, Elem->rssi_info.raw_Snr[2]);
+	Snr[3] = ConvertToSnr(pAd, Elem->rssi_info.raw_Snr[3]);
+
+	rssi[0] = ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_0);
+	rssi[1] = ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_1);
+	rssi[2] = ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_2);
+	rssi[3] = ConvertToRssi(pAd, &Elem->rssi_info, RSSI_IDX_3);
+#endif
 
 	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_RRM, DBG_LVL_TRACE, ("%s::\n", __FUNCTION__));
 
@@ -758,8 +856,11 @@ VOID RRM_PeerMeasureRepAction(
 						NdisMoveMemory(&ReportType, eid_ptr->Octet + 2, 1);
 						pMeasureRep = (PVOID)(eid_ptr->Octet + 3);
 						if (ReportType == RRM_MEASURE_SUBTYPE_BEACON)
-							RRM_BeaconReportHandler(pAd, pMeasureRep,
-								BcnRepLen);
+							RRM_BeaconReportHandler(pAd, pMeasureRep,BcnRepLen
+#ifdef CUSTOMER_DCC_FEATURE
+													, Snr, rssi 
+#endif 	
+													);
 					}
 					break;
 

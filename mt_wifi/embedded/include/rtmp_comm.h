@@ -213,8 +213,11 @@
 #define MIN_RSSI_TRIGGER                -200   /* dBm */
 #define MAX_FRAG_THRESHOLD              2346  /* byte count */
 #define MIN_FRAG_THRESHOLD              256   /* byte count */
-#define MAX_RTS_PKT_THRESHOLD   0x100   /* max. pkt count */
+#define DEFAULT_FRAG_THLD	(MAX_FRAG_THRESHOLD)
+#define MAX_RTS_PKT_THRESHOLD   0xFF   /* max. pkt count */
 #define MAX_RTS_THRESHOLD               0xfffff  /* max. byte count */
+#define DEFAULT_RTS_PKT_THLD	0x2 /*2*/
+#define DEFAULT_RTS_LEN_THLD	0x92b /*2347*/
 
 typedef enum _NDIS_802_11_NETWORK_INFRASTRUCTURE
  {
@@ -435,5 +438,13 @@ typedef struct  _PACKET_INFO    {
 #endif
 
 #define MAX_NUM_OF_INF		3
+
+#ifdef INTELP6_SUPPORT
+#ifdef MULTI_INF_SUPPORT
+/* Index 0 for 2.4G, 1 for 5Ghz Card */
+extern VOID* adapt_list[MAX_NUM_OF_INF];
+#endif /* MULTI_INF_SUPPORT */
+#define MAX_MBSS_NUM 8	
+#endif
 
 #endif /* __RT_COMM_H__ */

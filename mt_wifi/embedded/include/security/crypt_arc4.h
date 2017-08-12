@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * Taiwan, R.O.C.
@@ -11,7 +12,7 @@
  * way altering the source code is stricitly prohibited, unless the prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
     Module Name:
     RC4
@@ -27,7 +28,16 @@
 #ifndef __CRYPT_ARC4_H__
 #define __CRYPT_ARC4_H__
 
-#include "rt_config.h"
+#include "rtmp_type.h"
+#ifndef IN
+#define IN
+#endif
+#ifndef OUT
+#define OUT
+#endif
+#ifndef INOUT
+#define INOUT
+#endif
 
 /* ARC4 definition & structure */
 #define ARC4_KEY_BLOCK_SIZE 256

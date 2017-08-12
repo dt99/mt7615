@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,7 +14,7 @@
 	Module Name:
 	trace.h
 */
-
+#endif /* MTK_LICENSE */
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM mtk_wifi

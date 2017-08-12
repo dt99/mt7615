@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	--------	----------		----------------------------------------------
 	Paul Wu		02-25-02		Initial
 */
-
+#endif /* MTK_LICENSE */
 #include	"rt_config.h"
 
 #define MCAST_WCID_TO_REMOVE 0 //Pat: TODO

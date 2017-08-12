@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * Taiwan, R.O.C.
@@ -11,7 +12,7 @@
  * way altering the source code is stricitly prohibited, unless the prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
 
 	Abstract:
@@ -876,7 +877,11 @@ static VOID FT_OverDs_SimReq(
 		&FtInfoBuf);
 
 	/* enqueue it into FT action state machine. */
-	REPORT_MGMT_FRAME_TO_MLME(pAd, FtEntry->wcid, pOutBuffer, FrameLen, 0, 0, 0, 0, 0, OPMODE_AP, &pAd->ApCfg.MBSSID[FtEntry->apidx].wdev);
+#ifdef CUSTOMER_DCC_FEATURE
+	REPORT_MGMT_FRAME_TO_MLME(pAd, FtEntry->wcid, pOutBuffer, FrameLen, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, OPMODE_AP, &pAd->ApCfg.MBSSID[FtEntry->apidx].wdev, FtEntry->HTPhyMode.field.MODE);
+#else	
+	REPORT_MGMT_FRAME_TO_MLME(pAd, FtEntry->wcid, pOutBuffer, FrameLen, 0, 0, 0, 0, 0, 0, OPMODE_AP, &pAd->ApCfg.MBSSID[FtEntry->apidx].wdev, FtEntry->HTPhyMode.field.MODE);
+#endif
 
 	if (pOutBuffer)
 		os_free_mem(pOutBuffer);

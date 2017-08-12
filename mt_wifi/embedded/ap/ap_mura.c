@@ -6,7 +6,7 @@
 /*
      This file contains IOCTL for MU-MIMO specfic commands
  */
-
+#ifdef MTK_LICENSE
 /*******************************************************************************
  * Copyright (c) 2014 MediaTek Inc.
  *
@@ -48,7 +48,7 @@
  * (ICC).
  * ******************************************************************************
  */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 #ifdef CFG_SUPPORT_MU_MIMO_RA
@@ -106,6 +106,10 @@ INT SetMuraPeriodicSndProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+		cmd = cpu2le32(cmd);
+		param.u2Reserved = cpu2le16(param.u2Reserved); 
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -142,8 +146,7 @@ INT SetMuraTestAlgorithmInit(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     }
 
     index = simple_strtol(pIdx, 0, 10);
-    index = cpu2le32(index);
-
+	
     //4  E3 RF /BBP  Script
     //TBD
 
@@ -172,7 +175,7 @@ INT SetMuraTestAlgorithmProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 {
 
     INT32 Ret = TRUE;
-    INT32 value = 0;
+    INT16 value = 0;
     // prepare command message
     struct cmd_msg *msg = NULL;
     UINT32 cmd = MURA_TEST_ALGORITHM;
@@ -186,8 +189,7 @@ INT SetMuraTestAlgorithmProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     }
 
     value = simple_strtol(arg, 0, 10);
-    value = cpu2le32(value);
-    param.u2Reserved = value;
+    param.u2Reserved = cpu2le16(value);
 
     SET_CMD_ATTR_MCU_DEST(attr, HOST2N9);
     SET_CMD_ATTR_TYPE(attr, EXT_CID);
@@ -198,6 +200,10 @@ INT SetMuraTestAlgorithmProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+		cmd = cpu2le32(cmd);
+#endif
+
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -234,7 +240,6 @@ INT GetMuraMonitorStateProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     pch = arg;
     if (pch != NULL) {
         index = simple_strtol(pch, 0, 10);
-        index = cpu2le32(index);
     }
     else {
         Ret = 0;
@@ -259,6 +264,9 @@ INT GetMuraMonitorStateProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
         SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &stat_result);
         SET_CMD_ATTR_RSP_HANDLER(attr, MuraEventDispatcher);
         AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+		cmd = cpu2le32(cmd);
+#endif
         AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
         AndesSendCmdMsg(pAd, msg);
     }
@@ -276,11 +284,13 @@ INT GetMuraMonitorStateProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
             if (pch != NULL)
             {
                 index2 = simple_strtol(pch, 0, 10);
-                index2 = cpu2le32(index2);
                 if (index2 >= MAX_MURA_GRP) {
                     Ret = 0;
                     goto error;
                 }
+#ifdef RT_BIG_ENDIAN
+				index2 = cpu2le32(index2);
+#endif
             }
             else
             {
@@ -295,7 +305,9 @@ INT GetMuraMonitorStateProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
             Ret = 0;
             goto error;
         }
-
+#ifdef RT_BIG_ENDIAN
+		cmd = cpu2le32(cmd);
+#endif
         SET_CMD_ATTR_MCU_DEST(attr, HOST2N9);
         SET_CMD_ATTR_TYPE(attr, EXT_CID);
         SET_CMD_ATTR_EXT_TYPE(attr, EXT_CMD_ID_MU_MIMO_RA);
@@ -329,6 +341,9 @@ INT GetMuraMonitorStateProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
         SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, &hwfb_stat_result);
         SET_CMD_ATTR_RSP_HANDLER(attr, MuraEventDispatcher);
         AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+			cmd = cpu2le32(cmd);
+#endif
         AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
         AndesSendCmdMsg(pAd, msg);
 
@@ -366,7 +381,6 @@ INT SetMuraFixedRateProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     UINT8 value = 0;
     struct _CMD_ATTRIBUTE attr = {0};
     value = simple_strtol(arg, 0, 10);
-    value = cpu2le32(value);
 
     /* 2: MU-RGA Stop, 1:MU-RGA Fixed Rate, 0:MU-RGA Auto Rate */
     param = value;
@@ -386,6 +400,10 @@ INT SetMuraFixedRateProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+		cmd = cpu2le32(cmd);
+#endif
+
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -573,6 +591,9 @@ INT SetMuraFixedGroupRateProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
     SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
     SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
     AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+		cmd = cpu2le32(cmd);
+#endif
     AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
     AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
     AndesSendCmdMsg(pAd, msg);
@@ -582,6 +603,224 @@ error:
                 ("%s:(Ret = %d_\n", __FUNCTION__, Ret));
 
     return Ret;
+}
+
+/*
+==========================================================================
+Description:
+	Set MU_RGA algorithm with Fixed Group Entry
+
+Parameters:
+	Standard MU-RGA  Paramter
+
+==========================================================================
+ */
+INT SetMuraFixedSndParamProc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
+{
+    PCHAR pch = NULL;
+    INT32 Ret = TRUE;
+
+    // prepare command message
+    struct _CMD_ATTRIBUTE attr = {0};
+    struct cmd_msg *msg = NULL;
+    UINT32 cmd = MURA_SOUNDING_PERIOD;
+    CMD_SET_SND_PARAMS param = {0};
+
+    pch = strsep(&arg, "-");
+    if (pch != NULL)
+    {
+		param.ucWLIDUser = simple_strtol(pch, 0, 10);
+		if (param.ucWLIDUser == 0) 
+		{
+	 		param.ucAllMuUser = 1;
+		}	
+    }
+    else 
+    {
+        Ret = 0;
+        goto error;
+    }
+
+    pch = strsep(&arg, "-");
+    if (pch != NULL)
+    {
+        param.ucMaxSoundingPeriod = simple_strtol(pch, 0, 10);
+    }
+    else
+    {
+        Ret = 0;
+        goto error;
+    }
+
+    pch = strsep(&arg, "-");
+    if (pch != NULL)
+    {
+        param.ucMinSoundingPeriod = simple_strtol(pch, 0, 10);
+    }
+    else
+    {
+        Ret = 0;
+        goto error;
+    }
+
+    pch = strsep(&arg, "");
+    if (pch != NULL)
+    {
+        param.ucSoundingPeriodStep = simple_strtol(pch, 0, 10);
+    }
+    else
+    {
+        Ret = 0;
+        goto error;
+    }
+
+    msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
+    if (!msg)
+    {
+        Ret = FALSE;
+        goto error;
+    }
+    SET_CMD_ATTR_MCU_DEST(attr, HOST2N9);
+    SET_CMD_ATTR_TYPE(attr, EXT_CID);
+    SET_CMD_ATTR_EXT_TYPE(attr, EXT_CMD_ID_MU_MIMO_RA);
+    SET_CMD_ATTR_CTRL_FLAGS(attr, INIT_CMD_SET_AND_RETRY);
+    SET_CMD_ATTR_RSP_WAIT_MS_TIME(attr, 0);
+    SET_CMD_ATTR_RSP_EXPECT_SIZE(attr, 0);
+    SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
+    SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
+    AndesInitCmdMsg(msg, attr);
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
+    AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
+    AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
+    AndesSendCmdMsg(pAd, msg);
+
+error:
+    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_INFO,
+                ("%s:(Ret = %d_\n", __FUNCTION__, Ret));
+
+    return Ret;
+}
+
+/*
+==========================================================================
+Description:
+	Set MU_RGA algorithm with Fixed Group Entry
+
+Parameters:
+	Standard MU-RGA  Paramter
+
+==========================================================================
+ */
+INT SetMuraPlatformTypeProc(RTMP_ADAPTER *pAd)
+{
+    INT32 Ret = TRUE;
+
+    // prepare command message
+    struct _CMD_ATTRIBUTE attr = {0};
+    struct cmd_msg *msg = NULL;
+    UINT32 cmd = MURA_PLATFORM_TYPE;
+    CMD_SET_PLATFORM_TYPE param = {0};
+
+    msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
+    if (!msg)
+    {
+        Ret = FALSE;
+        goto error;
+    }
+
+#if defined (CONFIG_RALINK_MT7621)
+    param.ucPlatformType = 1;  /*MT7621*/
+#endif
+
+#if defined (CONFIG_ARCH_MT7623)
+    param.ucPlatformType = 2;  /*MT7623*/		
+#endif
+
+#if defined (CONFIG_RALINK_MT7620)||defined (CONFIG_RALINK_MT7628)
+    param.ucPlatformType = 3;  /*MT7620/MT7628*/
+#endif
+
+    SET_CMD_ATTR_MCU_DEST(attr, HOST2N9);
+    SET_CMD_ATTR_TYPE(attr, EXT_CID);
+    SET_CMD_ATTR_EXT_TYPE(attr, EXT_CMD_ID_MU_MIMO_RA);
+    SET_CMD_ATTR_CTRL_FLAGS(attr, INIT_CMD_SET_AND_RETRY);
+    SET_CMD_ATTR_RSP_WAIT_MS_TIME(attr, 0);
+    SET_CMD_ATTR_RSP_EXPECT_SIZE(attr, 0);
+    SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
+    SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
+    AndesInitCmdMsg(msg, attr);
+
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
+
+    AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
+    AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
+    AndesSendCmdMsg(pAd, msg);
+
+error:
+    MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_INFO,
+                ("%s:(Ret = %d_\n", __FUNCTION__, Ret));
+
+    return Ret;
+}
+
+
+/*
+==========================================================================
+Description:
+	Set MU_RGA Disable CN3, CN4 Group Entry
+
+Parameters:
+	Standard MU-RGA  Paramter
+
+==========================================================================
+ */
+INT SetMuraDisableCN3CN4Proc(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
+{
+	INT32 Ret = TRUE;
+
+	// prepare command message
+	struct _CMD_ATTRIBUTE attr = {0};
+	struct cmd_msg *msg = NULL;
+	UINT32 cmd = MURA_DISABLE_CN3_CN4;
+	CMD_SET_DISABLE_CN3_CN4 param = {0};
+
+	msg = AndesAllocCmdMsg(pAd, sizeof(cmd) + sizeof(param));
+	if (!msg)
+	{
+		Ret = FALSE;
+		goto error;
+	}
+
+	param.ucDisableCn3Cn4 = simple_strtol(arg, 0, 10);
+
+	SET_CMD_ATTR_MCU_DEST(attr, HOST2N9);
+	SET_CMD_ATTR_TYPE(attr, EXT_CID);
+	SET_CMD_ATTR_EXT_TYPE(attr, EXT_CMD_ID_MU_MIMO_RA);
+	SET_CMD_ATTR_CTRL_FLAGS(attr, INIT_CMD_SET_AND_RETRY);
+	SET_CMD_ATTR_RSP_WAIT_MS_TIME(attr, 0);
+	SET_CMD_ATTR_RSP_EXPECT_SIZE(attr, 0);
+	SET_CMD_ATTR_RSP_WB_BUF_IN_CALBK(attr, NULL);
+	SET_CMD_ATTR_RSP_HANDLER(attr, NULL);
+	AndesInitCmdMsg(msg, attr);
+
+#ifdef RT_BIG_ENDIAN
+	cmd = cpu2le32(cmd);
+#endif
+
+	AndesAppendCmdMsg(msg, (char *)&cmd, sizeof(cmd));
+	AndesAppendCmdMsg(msg, (char *)&param, sizeof(param));
+	AndesSendCmdMsg(pAd, msg);
+
+error:
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_INFO,
+				("%s:(Ret = %d_\n", __FUNCTION__, Ret));
+
+	return Ret;
+
 }
 
 /*
@@ -602,7 +841,9 @@ static VOID MuraEventDispatcher(
     UINT32 u4EventId = (*(UINT32 *) rsp_payload);
     char *pData = (rsp_payload);
     UINT16 len = (rsp_payload_len);
-
+#ifdef RT_BIG_ENDIAN
+	u4EventId = cpu2le32(u4EventId);
+#endif
     MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
         ("%s: u4EventId = %u, len = %u\n", __FUNCTION__, u4EventId, len));
 
@@ -653,6 +894,7 @@ static VOID mura_algorithm_state_callback(
     {
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("%s: error !! event fill null!!\n", __FUNCTION__));
+		return;
     }
 
     //if (msg->rsp_payload == NULL)
@@ -730,6 +972,9 @@ static VOID mura_algorithm_state_callback(
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("\n MU-RGA Cn2 Tx Succ Counter :\n"));
         for(ucPFIDList_Idx = 0; ucPFIDList_Idx < MAX_MURA_NUM; ucPFIDList_Idx++) {
+#ifdef RT_BIG_ENDIAN
+			pEntry->u4TxSuccCnt[ucPFIDList_Idx] = le2cpu32(pEntry->u4TxSuccCnt[ucPFIDList_Idx]);
+#endif
             MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
                 (" %2d,", pEntry->u4TxSuccCnt[ucPFIDList_Idx]));
         }
@@ -739,6 +984,9 @@ static VOID mura_algorithm_state_callback(
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("\n MU-RGA Cn2 Tx Fail Counter :\n"));
         for(ucPFIDList_Idx = 0; ucPFIDList_Idx < MAX_MURA_NUM; ucPFIDList_Idx++) {
+#ifdef RT_BIG_ENDIAN
+			pEntry->u4TxFailCnt[ucPFIDList_Idx] = le2cpu32(pEntry->u4TxFailCnt[ucPFIDList_Idx]);
+#endif
             MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
                 (" %2d,", pEntry->u4TxFailCnt[ucPFIDList_Idx]));
         }
@@ -748,6 +996,9 @@ static VOID mura_algorithm_state_callback(
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("\n MU-RGA Cn3 Tx Succ Counter :\n"));
         for(ucPFIDList_Idx = 0; ucPFIDList_Idx < MAX_MURA_NUM; ucPFIDList_Idx++) {
+#ifdef RT_BIG_ENDIAN
+		pEntry->u4TxCn3SuccCnt[ucPFIDList_Idx] = le2cpu32(pEntry->u4TxCn3SuccCnt[ucPFIDList_Idx]);
+#endif
             MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
                 (" %2d,", pEntry->u4TxCn3SuccCnt[ucPFIDList_Idx]));
         }
@@ -757,6 +1008,9 @@ static VOID mura_algorithm_state_callback(
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("\n MU-RGA Cn3 Tx Fail Counter :\n"));
         for(ucPFIDList_Idx = 0; ucPFIDList_Idx < MAX_MURA_NUM; ucPFIDList_Idx++) {
+#ifdef RT_BIG_ENDIAN
+			pEntry->u4TxCn3FailCnt[ucPFIDList_Idx] = le2cpu32(pEntry->u4TxCn3FailCnt[ucPFIDList_Idx]);
+#endif
             MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
                 (" %2d,", pEntry->u4TxCn3FailCnt[ucPFIDList_Idx]));
         }
@@ -766,6 +1020,9 @@ static VOID mura_algorithm_state_callback(
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("\n MU-RGA Cn4 Tx Succ Counter :\n"));
         for(ucPFIDList_Idx = 0; ucPFIDList_Idx < MAX_MURA_NUM; ucPFIDList_Idx++) {
+#ifdef RT_BIG_ENDIAN
+			pEntry->u4TxCn4SuccCnt[ucPFIDList_Idx] = le2cpu32(pEntry->u4TxCn4SuccCnt[ucPFIDList_Idx]);
+#endif
             MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
                 (" %2d,", pEntry->u4TxCn4SuccCnt[ucPFIDList_Idx]));
         }
@@ -775,6 +1032,9 @@ static VOID mura_algorithm_state_callback(
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("\n MU-RGA Cn4 Tx Fail Counter :\n"));
         for(ucPFIDList_Idx = 0; ucPFIDList_Idx < MAX_MURA_NUM; ucPFIDList_Idx++) {
+#ifdef RT_BIG_ENDIAN
+			pEntry->u4TxCn4FailCnt[ucPFIDList_Idx] = le2cpu32(pEntry->u4TxCn4FailCnt[ucPFIDList_Idx]);
+#endif
             MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
                 (" %2d,", pEntry->u4TxCn4FailCnt[ucPFIDList_Idx]));
         }
@@ -829,6 +1089,9 @@ static VOID mura_algorithm_state_callback(
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("\n MU-RGA MU Succ Sounding Counter :\n"));
         for(ucPFIDList_Idx = 0; ucPFIDList_Idx < MAX_MURA_NUM; ucPFIDList_Idx++) {
+#ifdef RT_BIG_ENDIAN
+			pEntry->au2SuccSounding[ucPFIDList_Idx] = le2cpu16(pEntry->au2SuccSounding[ucPFIDList_Idx]);
+#endif
             MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
                 (" %2d,", pEntry->au2SuccSounding[ucPFIDList_Idx]));
         }
@@ -838,6 +1101,9 @@ static VOID mura_algorithm_state_callback(
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("\n MU-RGA MU Fail Sounding Counter :\n"));
         for(ucPFIDList_Idx = 0; ucPFIDList_Idx < MAX_MURA_NUM; ucPFIDList_Idx++) {
+#ifdef RT_BIG_ENDIAN
+			pEntry->au2FailSounding[ucPFIDList_Idx] = le2cpu16(pEntry->au2FailSounding[ucPFIDList_Idx]);
+#endif
             MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
                 (" %2d,", pEntry->au2FailSounding[ucPFIDList_Idx]));
         }
@@ -852,7 +1118,12 @@ static VOID mura_algorithm_state_callback(
         }
 
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,("\n\n"));
-
+#ifdef RT_BIG_ENDIAN
+		pEntry->u4CalculateSoundingEnd = le2cpu32(pEntry->u4CalculateSoundingEnd);
+		pEntry->u4CalculateSoundingStart = le2cpu32(pEntry->u4CalculateSoundingStart);
+		pEntry->u4CalculateGroupMcsRateEnd = le2cpu32(pEntry->u4CalculateGroupMcsRateEnd);
+		pEntry->u4CalculateGroupMcsRateStart = le2cpu32(pEntry->u4CalculateGroupMcsRateStart);
+#endif
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,(" Sounding Period : %d ms\n",
             pEntry->u4CalculateSoundingEnd - pEntry->u4CalculateSoundingStart));
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,(" Group Period : %d ms\n",
@@ -881,6 +1152,7 @@ static VOID mura_algorithm_group_state_callback(
     {
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("%s: error !! event fill null!!\n", __FUNCTION__));
+		return;
     }
 
     //if (msg->rsp_payload == NULL)
@@ -951,6 +1223,7 @@ static VOID mura_algorithm_hwfb_state_callback(
     {
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
             ("%s: error !! event fill null!!\n", __FUNCTION__));
+		return;
     }
 
     //if (msg->rsp_payload == NULL)

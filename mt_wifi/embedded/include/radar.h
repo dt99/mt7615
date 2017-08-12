@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
     Who       When            What
     --------  ----------      ----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #ifndef __RADAR_H__
 #define __RADAR_H__
 
@@ -32,16 +34,57 @@
 #define DEFAULT_CAL_BUF_TIME_MAX	0x10000
 
 /* RESTRICTION_BAND_1: 5600MHz ~ 5650MHz */
-#define RESTRICTION_BAND_1(_pAd,__Channel)												\
-	(_pAd->CommonCfg.RegTransmitSetting.field.BW == BW_40 ? 						\
+#define RESTRICTION_BAND_1(_pAd,__Channel,_BW)												\
+	(_BW >= BW_40 ? 						\
 	((__Channel>= 116) && (__Channel <= 128)) :	\
 	((__Channel >= 120) && (__Channel<= 128)))
+
+#define RESTRICTION_BAND_KOREA(_pAd,__Channel,_BW)												\
+	(_BW >= BW_80 ? 						\
+	((__Channel>= 116) && (__Channel <= 128)) :	\
+	(_BW >= BW_40 ? 						\
+	((__Channel>= 124) && (__Channel <= 128)) :	\
+	(__Channel == 128)))
 
 #define IS_DOT11_H_RADAR_STATE(_pAd, _RadarState,__Channel)		\
 		( (__Channel > 14)	\
 		&& (_pAd->CommonCfg.bIEEE80211H == 1)	\
 		&& RadarChannelCheck(_pAd,__Channel)	\
 		&& _pAd->Dot11_H.RDMode == _RadarState)
+
+#ifdef MT_DFS_SUPPORT
+#define IS_SUPPORT_MT_DFS(_pAd) \
+    (_pAd->CommonCfg.DfsParameter.bDfsEnable == TRUE) 
+
+#define UPDATE_MT_ZEROWAIT_DFS_STATE(_pAd, _State) \
+{                                         \
+    _pAd->CommonCfg.DfsParameter.ZeroWaitDfsState = _State; \
+}
+
+#define UPDATE_MT_ZEROWAIT_DFS_Support(_pAd, _Enable) \
+{                                         \
+    _pAd->CommonCfg.DfsParameter.bZeroWaitSupport = _Enable; \
+}
+
+#define IS_SUPPORT_MT_ZEROWAIT_DFS(_pAd) \
+    (_pAd->CommonCfg.DfsParameter.bZeroWaitSupport == TRUE) 
+
+
+#define CHK_MT_ZEROWAIT_DFS_STATE(_pAd, __STATE) \
+    ((_pAd->CommonCfg.DfsParameter.ZeroWaitDfsState == __STATE)) 
+
+#define GET_MT_ZEROWAIT_DFS_STATE(_pAd) \
+    ((_pAd->CommonCfg.DfsParameter.ZeroWaitDfsState))
+
+#define UPDATE_MT_INIT_ZEROWAIT_MBSS(_pAd, _Enable) \
+{                                         \
+    _pAd->CommonCfg.DfsParameter.bInitMbssZeroWait = _Enable; \
+}
+
+#define GET_MT_MT_INIT_ZEROWAIT_MBSS(_pAd) \
+    ((_pAd->CommonCfg.DfsParameter.bInitMbssZeroWait))
+
+#endif /* MT_DFS_SUPPORT */
 
 /* 802.11H */
 typedef struct _DOT11_H {
@@ -53,12 +96,12 @@ typedef struct _DOT11_H {
 	UCHAR org_ch;
 	UCHAR new_channel;
 	USHORT ChMovingTime;
+    USHORT DfsZeroWaitChMovingTime;
 	BOOLEAN bDFSIndoor;
 	ULONG InServiceMonitorCount;	/* unit: sec */
 	ULONG CalBufTime;	/* A Timing buffer for befroe calibrations which generates Tx signals */
     UINT16 wdev_count;
-	STATE_MACHINE Dot11HState;	
-	STATE_MACHINE_FUNC Dot11HStateFunc[RD_FUNC_SIZE];
+
 } DOT11_H, *PDOT11_H;
 
 BOOLEAN RadarChannelCheck(
@@ -66,12 +109,16 @@ BOOLEAN RadarChannelCheck(
 	IN UCHAR			Ch);
 
 VOID RadarStateCheck(
-	IN PRTMP_ADAPTER	pAd);
+	IN PRTMP_ADAPTER	pAd,
+	struct wifi_dev *wdev);
 
 BOOLEAN CheckNonOccupancyChannel(
     IN PRTMP_ADAPTER pAd,
     IN UCHAR channel);
 
+USHORT CheckLargestNOP( 
+    IN PRTMP_ADAPTER pAd);
+	
 ULONG JapRadarType(
 	IN PRTMP_ADAPTER pAd);
 
@@ -82,7 +129,13 @@ UCHAR get_channel_by_reference(
 #ifdef CONFIG_AP_SUPPORT
 VOID ChannelSwitchingCountDownProc(
 	IN PRTMP_ADAPTER	pAd);
+NTSTATUS Dot11HCntDownTimeoutAction(RTMP_ADAPTER *pAd, PCmdQElmt CMDQelmt);
+#ifdef CUSTOMER_DCC_FEATURE
+VOID ChannelSwitchingCountDownProcNew(
+	IN PRTMP_ADAPTER	pAd);
+#endif
 #endif /* CONFIG_AP_SUPPORT */
+
 
 VOID RadarDetectPeriodic(
 	IN PRTMP_ADAPTER	pAd,
@@ -104,8 +157,5 @@ VOID RadarGLRTCompensate(
 	IN PRTMP_ADAPTER pAd);
 
 #endif /*defined(DFS_SUPPORT) || defined(CARRIER_DETECTION_SUPPORT)*/
-
-VOID ApDot11HMlmeInit(RTMP_ADAPTER *pAd);
-
 
 #endif /* __RADAR_H__ */

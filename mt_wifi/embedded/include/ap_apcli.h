@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -26,7 +27,7 @@
     --------------    ----------      ----------------------------------------------
     Shiang, Fonchi    02-13-2007      created
 */
-
+#endif /* MTK_LICENSE */
 #ifndef _AP_APCLI_H_
 #define _AP_APCLI_H_
 
@@ -40,12 +41,12 @@
 #define TRIAL_TIMEOUT	400	/* unit: msec */
 #endif /* APCLI_CONNECTION_TRIAL */
 
-#define TOLERANCE_OF_TP_THRESHOLD 30
+#define TOLERANCE_OF_TP_THRESHOLD 50
 #define TP_PEEK_BOUND_THRESHOLD	830
 //#define BYTES_PER_SEC_TO_MBPS	17
 //#define TX_MODE_RATIO_THRESHOLD	70
 #define TX_MODE_TP_CHECK	250
-
+#define NUM_OF_APCLI_TXOP_COND 5
 
 #define APCLI_WAIT_TIMEOUT RTMPMsecsToJiffies(300)
 #define REPT_WAIT_TIMEOUT RTMPMsecsToJiffies(5000)
@@ -139,6 +140,13 @@ BOOLEAN ApCliCheckHt(
 	IN OUT	ADD_HT_INFO_IE 		*pAddHtInfo);
 #endif /* DOT11_N_SUPPORT */
 
+#ifdef APCLI_CERT_SUPPORT
+void ApCliCertEDCAAdjust(
+	IN PRTMP_ADAPTER pAd, 
+	IN struct wifi_dev *wdev,
+	IN PEDCA_PARM pEdcaParm);
+#endif
+
 BOOLEAN ApCliLinkUp(
 	IN PRTMP_ADAPTER pAd,
 	IN UCHAR ifIndex);
@@ -149,6 +157,11 @@ VOID ApCliLinkDown(
 
 VOID ApCliIfUp(
 	IN PRTMP_ADAPTER pAd);
+
+VOID ApCliIfDownByIdx(
+	RTMP_ADAPTER *pAd,
+	UCHAR ifIndex);
+
 
 VOID ApCliIfDown(
 	IN PRTMP_ADAPTER pAd);
@@ -238,7 +251,7 @@ VOID ApCliCheckPeerExistence(
 	IN UCHAR SsidLen,
 	IN UCHAR Channel);
 
-VOID ApCliPeerCsaAction(RTMP_ADAPTER *pAd, BCN_IE_LIST *ie_list);
+VOID ApCliPeerCsaAction(RTMP_ADAPTER *pAd, struct wifi_dev *wdev, BCN_IE_LIST *ie_list);
 
 VOID APCli_Init(
 	IN RTMP_ADAPTER *pAd,
@@ -266,6 +279,13 @@ BOOLEAN ApCliAutoConnectExec(
 VOID ApCliSwitchCandidateAP(
 	IN PRTMP_ADAPTER pAd,
 	IN struct wifi_dev *wdev);
+
+#ifdef APCLI_AUTO_BW_TMP /* should be removed after apcli auto-bw is applied */
+BOOLEAN ApCliAutoConnectBWAdjust(
+	IN RTMP_ADAPTER	*pAd,
+	IN struct wifi_dev	*wdev,
+	IN BSS_ENTRY		*bss_entry);
+#endif /* APCLI_AUTO_BW_TMP */
 #endif /* APCLI_AUTO_CONNECT_SUPPORT */
 
 #ifdef DOT11W_PMF_SUPPORT

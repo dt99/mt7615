@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -23,7 +24,7 @@
 	Who 		When			What
 	--------	----------		----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #ifdef COMPOS_WIN
 #include "MtConfig.h"
 #if defined(EVENT_TRACING)
@@ -313,6 +314,41 @@ VOID dump_rmac_info_normal(RTMP_ADAPTER *pAd, UCHAR *rmac_info)
 		// TODO: dump group info!!
 	}
 }
+
+VOID dump_rmac_info_for_ICVERR(RTMP_ADAPTER *pAd, UCHAR *rmac_info)
+{
+	RXD_BASE_STRUCT *rxd_base = (RXD_BASE_STRUCT *)rmac_info;
+	union _RMAC_RXD_0_UNION *rxd_0;
+	UINT32 pkt_type;
+
+	if (pAd->chipCap.hif_type != HIF_MT) {
+		return;
+	}
+
+	rxd_0 = (union _RMAC_RXD_0_UNION *)rmac_info;
+	pkt_type = RMAC_RX_PKT_TYPE(rxd_0->word);
+
+	if (pkt_type != RMAC_RX_PKT_TYPE_RX_NORMAL)
+	{
+		return;
+	}
+
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("\tHTC/UC2ME/MC/BC=%d/%d/%d/%d",
+				rxd_base->RxD1.HTC, rxd_base->RxD1.UcastToMe,
+				rxd_base->RxD1.Mcast, rxd_base->RxD1.Bcast));
+
+
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, (", WlanIndex=%d", rxd_base->RxD2.RxDWlanIdx));
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, (", SEC Mode=%d\n", rxd_base->RxD2.SecMode));
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("\tFCE Error(FC)=%d", rxd_base->RxD2.FcsErr));
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, (", CM=%d", rxd_base->RxD2.CipherMis));
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, (", CLM=%d", rxd_base->RxD2.CipherLenMis));
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, (", I=%d", rxd_base->RxD2.IcvErr));
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, (", T=%d", rxd_base->RxD2.TkipMicErr));
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, (", LM=%d\n", rxd_base->RxD2.LenMis));
+	MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("\tFragment Frame(FRAG)=%d\n", rxd_base->RxD2.FragFrm));
+}
+
 
 
 VOID dump_rmac_info_txs(RTMP_ADAPTER *pAd, UCHAR *rmac_info)
@@ -896,7 +932,7 @@ VOID NICUpdateRawCounters(RTMP_ADAPTER *pAd)
 	UINT32 AmpduTxSuccessCount = 0;
 
 
-	if (OPSTATUS_TEST_FLAG(pAd, fOP_STATUS_DOZE))
+	if (pAd->StaCfg[0].PwrMgmt.bDoze)
 	{
 		MTWF_LOG(DBG_CAT_PS, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s(%d): H/W in PM4, return\n", __FUNCTION__, __LINE__));
 		return;
@@ -1259,7 +1295,7 @@ VOID MtWriteTMacInfo(
 		mcs = pTxRadioSet->RateCode;
 		sgi = pTxRadioSet->ShortGI;
 
-    if ((pAd->CommonCfg.TxStream == 1) && (TxInfo->FixRate))
+    if ((pAd->Antenna.field.TxPath == 1) && (TxInfo->FixRate))
     {
         stbc = 0;
     }
@@ -1492,18 +1528,6 @@ VOID write_tmac_info(
 	stbc = pTransmit->field.STBC;
 	phy_mode = pTransmit->field.MODE;
 	bw = (phy_mode <= MODE_OFDM) ? (BW_20) : (pTransmit->field.BW);
-
-#ifdef DOT11_N_SUPPORT
-#ifdef DOT11N_DRAFT3
-#ifdef CONFIG_ATE
-	if (!ATE_ON(pAd))
-#endif
-	{
-		if (bw)
-			bw = (pAd->CommonCfg.AddHTInfo.AddHtInfo.RecomWidth == 0) ? (BW_20) : (pTransmit->field.BW);
-	}
-#endif /* DOT11N_DRAFT3 */
-#endif /* DOT11_N_SUPPORT */
 
 #ifdef DOT11_N_SUPPORT
 #ifdef CONFIG_ATE
@@ -2000,6 +2024,7 @@ VOID mt_write_tmac_info_beacon(RTMP_ADAPTER *pAd, struct wifi_dev *wdev, UCHAR *
 	mac_info.OmacIdx = wdev->OmacIdx;
 #endif
 	mac_info.Preamble = LONG_PREAMBLE;
+	mac_info.IsAutoRate = FALSE;
 	NdisZeroMemory(tmac_buf, sizeof(TMAC_TXD_L));
 	write_tmac_info(pAd, tmac_buf, &mac_info, BeaconTransmit);
 }

@@ -374,6 +374,7 @@ typedef struct  GNU_PACKED _HQA_EXT_SET_CH{
 	UINT32 pri_sel;
 	UINT32 reason;
 	UINT32 ch_band;
+    UINT32 out_band_freq;	
 } HQA_EXT_SET_CH;
 
 typedef struct GNU_PACKED _HQA_EXT_TX_CONTENT{

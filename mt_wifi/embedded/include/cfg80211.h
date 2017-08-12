@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * Taiwan, R.O.C.
@@ -11,7 +12,7 @@
  * way altering the source code is stricitly prohibited, unless the prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
 
 	Abstract:
@@ -57,8 +58,7 @@ typedef struct __CFG80211_CB {
 		
 } CFG80211_CB;
 
-
-
+#define WDEV_NOT_FOUND  -1
 
 /*
 ========================================================================

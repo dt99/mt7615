@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -24,7 +25,7 @@
 	Who         When          What
 	--------    ----------    ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __WNM_H__
 #define __WNM_H__
 
@@ -138,6 +139,7 @@ typedef struct _WNM_CTRL {
 	RTMP_OS_SEM WNMNotifyPeerListLock;
 	BOOLEAN ProxyARPEnable;
 	BOOLEAN WNMNotifyEnable;
+	BOOLEAN WNMBTMEnable;
 	RTMP_OS_SEM ProxyARPListLock;
 	RTMP_OS_SEM ProxyARPIPv6ListLock;
 	DL_LIST IPv4ProxyARPList;

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * Taiwan, R.O.C.
@@ -11,7 +12,7 @@
  * way altering the source code is stricitly prohibited, unless the prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
     Module Name:
     HMAC
@@ -28,11 +29,19 @@
 #ifndef __CRYPT_HMAC_H__
 #define __CRYPT_HMAC_H__
 
-#include "rt_config.h"
+#include "rtmp_type.h"
+#ifndef IN
+#define IN
+#endif
+#ifndef OUT
+#define OUT
+#endif
+#ifndef INOUT
+#define INOUT
+#endif
 
 
 #ifdef SHA1_SUPPORT
-#define HMAC_SHA1_SUPPORT
 VOID RT_HMAC_SHA1(
 	IN const UINT8 Key[],
 	IN UINT KeyLen,
@@ -43,7 +52,6 @@ VOID RT_HMAC_SHA1(
 #endif /* SHA1_SUPPORT */
 
 #ifdef SHA256_SUPPORT
-#define HMAC_SHA256_SUPPORT
 VOID RT_HMAC_SHA256(
 	IN const UINT8 Key[],
 	IN UINT KeyLen,
@@ -54,7 +62,6 @@ VOID RT_HMAC_SHA256(
 #endif /* SHA256_SUPPORT */
 
 #ifdef MD5_SUPPORT
-#define HMAC_MD5_SUPPORT
 VOID RT_HMAC_MD5(
 	IN const UINT8 Key[],
 	IN UINT KeyLen,

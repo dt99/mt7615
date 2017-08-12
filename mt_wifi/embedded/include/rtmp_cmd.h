@@ -67,10 +67,15 @@ enum {
     SHOW_WIFI_INT_CNT = 45,
     SHOW_EFUSE_INFO = 46,
   	SHOW_PLE_INFO = 47,
+#ifdef REDUCE_TCP_ACK_SUPPORT
+    SHOW_TCP_RACK_INFO = 48,
+#endif
     SHOW_TXOP_INFO = 49,
     SHOW_TXD_INFO = 50,
     DUMP_MEM_INFO = 51,
     SHOW_TP_INFO = 52,
+    SHOW_E2P_INFO = 53,
+    SHOW_PROTECT_INFO = 54,
 };
 
 
@@ -224,6 +229,8 @@ typedef enum _CMD_RTPRIV_IOCTL_COMMON {
 	/* wds */
 	CMD_RTPRIV_IOCTL_WDS_INIT,
 	CMD_RTPRIV_IOCTL_WDS_REMOVE,
+	CMD_RTPRIV_IOCTL_WDS_OPEN,
+	CMD_RTPRIV_IOCTL_WDS_CLOSE,
 	CMD_RTPRIV_IOCTL_WDS_STATS_GET,
 
 	CMD_RTPRIV_IOCTL_MAC_ADDR_GET,
@@ -342,7 +349,9 @@ typedef struct __CMD_RTPRIV_IOCTL_80211_BEACON {
         UCHAR *beacon_head;
 		UCHAR *beacon_tail;
         UINT32 beacon_head_len; /* Before TIM IE */
-		UINT32 beacon_tail_len; /* After TIM IE */
+		UINT32 beacon_tail_len; /* After TIM IE */	
+		UINT32 apidx;
+		PNET_DEV pNetDev;
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0))
 	UCHAR *beacon_ies;
@@ -354,6 +363,7 @@ typedef struct __CMD_RTPRIV_IOCTL_80211_BEACON {
 	UCHAR *probe_resp;
 	UINT32 probe_resp_len;
 	ULONG ssid_len;
+	CHAR ssid[32];
 	UCHAR hidden_ssid;
 	struct cfg80211_crypto_settings crypto;
 	BOOLEAN privacy;
@@ -376,11 +386,14 @@ typedef struct __CMD_RTPRIV_IOCTL_80211_BEACON {
 /* Must sync with nl80211_channel_type@nl80211.h */
 #define RT_CMD_80211_CHANTYPE_NOHT		0x00
 #define RT_CMD_80211_CHANTYPE_HT20		0x01
-#define RT_CMD_80211_CHANTYPE_HT40MINUS	0X02
-#define RT_CMD_80211_CHANTYPE_HT40PLUS	0X03
+#define RT_CMD_80211_CHANTYPE_HT40MINUS	0x02
+#define RT_CMD_80211_CHANTYPE_HT40PLUS	0x03
+#define RT_CMD_80211_CHANTYPE_VHT80		0x04
+
 
 typedef struct __CMD_RTPRIV_IOCTL_80211_CHAN {
-	UINT8 ChanId;
+	UINT8 ChanId;	
+	UINT8 CenterChanId;
 	UINT8 IfType;
 	UINT8 ChanType;
 
@@ -433,6 +446,8 @@ typedef struct __CMD_RTPRIV_IOCTL_80211_STA {
 
 	UINT32 rx_packets;
 	UINT32 tx_packets;
+	UINT64 rx_bytes;		/*for radius accounting*/
+	UINT64 tx_bytes;
 	UINT32 tx_retries;
 	UINT32 tx_failed;	
 } CMD_RTPRIV_IOCTL_80211_STA;
@@ -476,6 +491,9 @@ typedef struct __CMD_RTPRIV_IOCTL_80211_CONNECT {
 	
 	BOOLEAN bWpsConnection;
 	PNET_DEV pNetDev;
+#ifdef DOT11W_PMF_SUPPORT
+	BOOLEAN mfp;
+#endif /* DOT11W_PMF_SUPPORT */
 } CMD_RTPRIV_IOCTL_80211_CONNECT;
 
 typedef struct __CMD_RTPRIV_IOCTL_80211_ASSOC_IE {
@@ -556,6 +574,8 @@ typedef struct __RT_CMD_INF_UP_DOWN {
 
 	IN	int (*mt_wifi_open)(VOID *net_dev);
 	IN	int (*mt_wifi_close)(VOID *net_dev);
+	IN	int (*virtual_if_up_handler)(VOID *net_dev);	
+	IN	int (*virtual_if_down_handler)(VOID *net_dev);	
     PNET_DEV operation_dev_p;
 } RT_CMD_INF_UP_DOWN;
 
@@ -597,6 +617,7 @@ typedef struct __RT_CMD_PCIE_INIT {
 	UINT32 ConfigDeviceID;
 	UINT32 ConfigSubsystemVendorID;
 	UINT32 ConfigSubsystemID;
+	BOOLEAN pci_init_succeed;
 } RT_CMD_PCIE_INIT;
 
 typedef struct __RT_CMD_AP_IOCTL_CONFIG {

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
     Who         When          What
     --------    ----------    ----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #ifndef __AP_MUMIMO_H__
 #define __AP_MUMIMO_H__
 
@@ -127,19 +129,33 @@ typedef struct _CMD_MU_SET_ENABLE{
 typedef struct _CMD_MU_SET_MUPROFILE_ENTRY{
     UINT8 index;
     BOOLEAN valid;
+#ifdef RT_BIG_ENDIAN
+	UINT8 reserved:4;
+	UINT8 baMask:4;
+#else
     UINT8 baMask:4;
     UINT8 reserved:4;
+#endif
     UINT8 wlanIdx;
 } CMD_MU_SET_MUPROFILE_ENTRY, *P_CMD_MU_SET_MUPROFILE_ENTRY;
 
 typedef struct _CMD_MU_SET_GROUP_TBL_ENTRY {
     UINT32      index;
+#ifdef RT_BIG_ENDIAN
+	UINT8		NS3:1;
+	UINT8		NS2:1;
+	UINT8		NS1:1;
+	UINT8		NS0:1;
+	UINT8		BW:2;
+	UINT8		numUser:2;
+#else
     UINT8       numUser:2;
     UINT8       BW:2;
     UINT8       NS0:1;
     UINT8       NS1:1;
     UINT8       NS2:1;
     UINT8       NS3:1;
+#endif
     UINT8       PFIDUser0;
     UINT8       PFIDUser1;
     UINT8       PFIDUser2;
@@ -147,6 +163,16 @@ typedef struct _CMD_MU_SET_GROUP_TBL_ENTRY {
     BOOLEAN     fgIsShortGI;
     BOOLEAN     fgIsUsed;
     BOOLEAN     fgIsDisable;
+#ifdef RT_BIG_ENDIAN
+	UINT8		dMcsUser3:4;
+	UINT8		dMcsUser2:4;
+	UINT8		dMcsUser1:4;
+	UINT8		dMcsUser0:4;
+	UINT8		initMcsUser3:4;
+	UINT8		initMcsUser2:4;
+	UINT8		initMcsUser1:4;
+	UINT8		initMcsUser0:4;
+#else
     UINT8       initMcsUser0:4;
     UINT8       initMcsUser1:4;
     UINT8       initMcsUser2:4;
@@ -155,6 +181,7 @@ typedef struct _CMD_MU_SET_GROUP_TBL_ENTRY {
     UINT8       dMcsUser1:4;
     UINT8       dMcsUser2:4;
     UINT8       dMcsUser3:4;
+#endif
 } CMD_MU_SET_GROUP_TBL_ENTRY, *P_CMD_MU_SET_GROUP_TBL_ENTRY;
 
 typedef struct _CMD_MU_SET_CLUSTER_TBL_ENTRY {
@@ -229,8 +256,13 @@ typedef struct _EVENT_SHOW_MUPROFILE_ENTRY {
     UINT32 u4EventId;
     UINT8 index;
     BOOLEAN valid;
+#ifdef RT_BIG_ENDIAN
+    UINT8 reserved:4;
+    UINT8 baMask:4;
+#else
     UINT8 baMask:4;
     UINT8 reserved:4;
+#endif
     UINT8 wlanIdx;
 } EVENT_SHOW_MUPROFILE_ENTRY, *P_EVENT_SHOW_MUPROFILE_ENTRY;
 
@@ -242,12 +274,21 @@ typedef struct _EVENT_GET_TXOP_DEFAULT {
 typedef struct _EVENT_SHOW_GROUP_TBL_ENTRY {
     UINT32 u4EventId;
     UINT32      index;
+#ifdef RT_BIG_ENDIAN
+	UINT8		NS3:1;
+	UINT8		NS2:1;
+	UINT8		NS1:1;
+	UINT8		NS0:1;
+	UINT8		BW:2;
+	UINT8		numUser:2;
+#else
     UINT8       numUser:2;
     UINT8       BW:2;
     UINT8       NS0:1;
     UINT8       NS1:1;
     UINT8       NS2:1;
     UINT8       NS3:1;
+#endif
     UINT8       PFIDUser0;
     UINT8       PFIDUser1;
     UINT8       PFIDUser2;
@@ -255,14 +296,34 @@ typedef struct _EVENT_SHOW_GROUP_TBL_ENTRY {
     BOOLEAN     fgIsShortGI;
     BOOLEAN     fgIsUsed;
     BOOLEAN     fgIsDisable;
+#ifdef RT_BIG_ENDIAN
+	UINT8		initMcsUser1:4;
+	UINT8		initMcsUser0:4;
+#else
     UINT8       initMcsUser0:4;
     UINT8       initMcsUser1:4;
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT8		initMcsUser3:4;
+	UINT8		initMcsUser2:4;
+#else
     UINT8       initMcsUser2:4;
     UINT8       initMcsUser3:4;
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT8		dMcsUser1:4;
+	UINT8		dMcsUser0:4;
+#else
     UINT8       dMcsUser0:4;
     UINT8       dMcsUser1:4;
+#endif
+#ifdef RT_BIG_ENDIAN
+	UINT8		dMcsUser3:4;
+	UINT8		dMcsUser2:4;
+#else
     UINT8       dMcsUser2:4;
     UINT8       dMcsUser3:4;
+#endif
 } EVENT_SHOW_GROUP_TBL_ENTRY, *P_EVENT_SHOW_GROUP_TBL_ENTRY;
 
 typedef struct _EVENT_MU_GET_ENABLE {
@@ -828,6 +889,9 @@ hqa_wifi_test_mu_set_sta_gid_and_up (
     P_MU_STRUCT_MU_STA_PARAM ptr
     );
 
-
+INT SetMuEnableProc(
+	RTMP_ADAPTER *pAd, 
+	RTMP_STRING *arg
+	);
 
 #endif  /* __AP_MUMIMO_H__ */

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,6 +14,7 @@
 	Module Name:
 	hw_ctrl.c
 */
+#endif /* MTK_LICENSE */
 #include	"rt_config.h"
 
 extern NDIS_STATUS HwCtrlEnqueueCmd(
@@ -37,6 +39,10 @@ static INT32 HW_CTRL_BASIC_ENQ(RTMP_ADAPTER *pAd,INT32 CmdType,INT32 CmdId,UINT3
 	HwCtrlTxd.CallbackFun = NULL;
 	HwCtrlTxd.CallbackArgs = NULL;
 	ret = HwCtrlEnqueueCmd(pAd,HwCtrlTxd);
+
+	if (ret != NDIS_STATUS_SUCCESS)
+		MTWF_LOG(DBG_CAT_PS, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s::Failed Ret(%d) CmdId(%d)\n", __FUNCTION__, ret, CmdId));
+
 	return ret;
 }
 
@@ -73,16 +79,6 @@ static INT32 HW_CTRL_BASIC_ENQ(RTMP_ADAPTER *pAd,INT32 CmdType,INT32 CmdId,UINT3
 /*CMD Definition Start*/
 #if defined(RTMP_PCI_SUPPORT) || defined(RTMP_RBUS_SUPPORT)
 #else
-VOID RTMP_UPDATE_RTS_THRESHOLD(PRTMP_ADAPTER pAd, UINT32 PktNumThrd, UINT32 PpduLengthThrd)
-{
-	RT_ASIC_RTS_INFO AsicRtsInfo;
-	INT32 ret;
-
-	AsicRtsInfo.PktNumThrd = PktNumThrd;
-	AsicRtsInfo.PpduLengthThrd = PpduLengthThrd;
-	ret = -1;
-}
-
 /*Define Export API for common part usage.*/
 VOID RTMP_UPDATE_PROTECT(PRTMP_ADAPTER pAd, USHORT OperationMode, UCHAR SetMask, BOOLEAN bDisableBGProtect, BOOLEAN bNonGFExist)
 {
@@ -165,6 +161,36 @@ VOID RTMP_GET_TEMPERATURE(RTMP_ADAPTER *pAd,UINT32 *pTemperature)
 	ret = HwCtrlEnqueueCmd(pAd,HwCtrlTxd);
 }
 
+VOID RTMP_RADIO_ON_OFF_CTRL(RTMP_ADAPTER *pAd, UINT8 ucDbdcIdx, UINT8 ucRadio)
+{
+	HW_CTRL_TXD HwCtrlTxd;
+	RADIO_ON_OFF_T RadioOffOn = {0};
+
+	os_zero_mem(&HwCtrlTxd,sizeof(HW_CTRL_TXD));
+	
+	RadioOffOn.ucDbdcIdx = ucDbdcIdx;
+	RadioOffOn.ucRadio = ucRadio;
+
+	HW_CTRL_TXD_BASIC(pAd, HWCMD_TYPE_RADIO, HWCMD_ID_RADIO_ON_OFF, sizeof(RADIO_ON_OFF_T), &RadioOffOn, HwCtrlTxd);
+	HW_CTRL_TXD_RSP(pAd, 0, NULL, HWCTRL_CMD_WAITTIME, HwCtrlTxd);
+	
+	HwCtrlEnqueueCmd(pAd, HwCtrlTxd);
+}
+
+#ifdef GREENAP_SUPPORT
+VOID RTMP_GREENAP_ON_OFF_CTRL(RTMP_ADAPTER *pAd, UINT8 ucDbdcIdx, BOOLEAN ucGreenAP)
+{
+	GREENAP_ON_OFF_T GreenAPCtrl = {0};
+
+	GreenAPCtrl.ucDbdcIdx = ucDbdcIdx;
+	GreenAPCtrl.ucGreenAPOn = ucGreenAP;
+
+	if (HW_CTRL_BASIC_ENQ(pAd, HWCMD_TYPE_RADIO, HWCMD_ID_GREENAP_ON_OFF, sizeof(GREENAP_ON_OFF_T), &GreenAPCtrl) != NDIS_STATUS_SUCCESS)
+	{
+		MTWF_LOG(DBG_CAT_PS, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s::Failed to enqueue cmd\n", __FUNCTION__));
+	}	
+}
+#endif /* GREENAP_SUPPORT */
 
 VOID RTMP_UPDATE_RAW_COUNTER(PRTMP_ADAPTER pAd)
 {
@@ -204,13 +230,27 @@ VOID HW_SET_DEL_ASIC_WCID(PRTMP_ADAPTER pAd, ULONG Wcid)
 	HW_CTRL_BASIC_ENQ(pAd,HWCMD_TYPE_HT_CAP,HWCMD_ID_DEL_ASIC_WCID,sizeof(RT_SET_ASIC_WCID),&SetAsicWcid);
 }
 
+
+#ifdef HTC_DECRYPT_IOT
+VOID HW_SET_ASIC_WCID_AAD_OM(PRTMP_ADAPTER pAd, ULONG Wcid, UCHAR value)
+{
+	RT_SET_ASIC_AAD_OM SetAsicAAD_OM;
+	SetAsicAAD_OM.WCID = Wcid;
+	SetAsicAAD_OM.Value = value;
+	HW_CTRL_BASIC_ENQ(pAd,HWCMD_TYPE_HT_CAP,HWCMD_ID_SET_ASIC_AAD_OM,sizeof(RT_SET_ASIC_AAD_OM),&SetAsicAAD_OM);
+}
+#endif /* HTC_DECRYPT_IOT */
+
+
+
 #ifdef BCN_OFFLOAD_SUPPORT
 VOID HW_SET_BCN_OFFLOAD(RTMP_ADAPTER *pAd,
     UINT8 WdevIdx,
     ULONG WholeLength,
     BOOLEAN Enable,
     UCHAR OffloadPktType,
-    ULONG TimIePos)
+    ULONG TimIePos,
+    ULONG CsaIePos)
 {
     UINT32 ret;
     MT_SET_BCN_OFFLOAD rMtSetBcnOffload;
@@ -222,6 +262,7 @@ VOID HW_SET_BCN_OFFLOAD(RTMP_ADAPTER *pAd,
     rMtSetBcnOffload.Enable = Enable;
     rMtSetBcnOffload.OffloadPktType = OffloadPktType;
     rMtSetBcnOffload.TimIePos = TimIePos;
+    rMtSetBcnOffload.CsaIePos = CsaIePos;
 
     ret = HW_CTRL_BASIC_ENQ(pAd,
                             HWCMD_TYPE_RADIO,
@@ -341,6 +382,21 @@ VOID RTMP_SET_STA_DWRR(PRTMP_ADAPTER pAd, MAC_TABLE_ENTRY *pEntry)
 	HW_CTRL_TXD_BASIC(pAd, HWCMD_TYPE_RADIO, HWCMD_ID_SET_STA_DWRR, sizeof(MT_VOW_STA_GROUP), &VoW, HwCtrlTxd);
 	ret = HwCtrlEnqueueCmd(pAd, HwCtrlTxd);
 }
+
+VOID RTMP_SET_STA_DWRR_QUANTUM(PRTMP_ADAPTER pAd, BOOLEAN restore, UCHAR quantum)
+{
+    UINT32 ret;
+	MT_VOW_STA_QUANTUM VoW;
+	HW_CTRL_TXD HwCtrlTxd;
+
+	os_zero_mem(&HwCtrlTxd,sizeof(HW_CTRL_TXD));
+	os_zero_mem(&VoW, sizeof(MT_VOW_STA_QUANTUM));
+
+	VoW.restore = restore;
+	VoW.quantum = quantum;
+	HW_CTRL_TXD_BASIC(pAd, HWCMD_TYPE_RADIO, HWCMD_ID_SET_STA_DWRR_QUANTUM, sizeof(MT_VOW_STA_GROUP), &VoW, HwCtrlTxd);
+	ret = HwCtrlEnqueueCmd(pAd, HwCtrlTxd);
+}
 #endif /* VOW_SUPPORT */
 
 #ifdef THERMAL_PROTECT_SUPPORT
@@ -355,6 +411,30 @@ VOID RTMP_SET_THERMAL_RADIO_OFF(PRTMP_ADAPTER pAd)
 	ret = HwCtrlEnqueueCmd(pAd, HwCtrlTxd);
 }
 #endif /* THERMAL_PROTECT_SUPPORT */
+
+#ifdef NR_PD_DETECTION
+VOID RTMP_NR_PD_DETECTION(PRTMP_ADAPTER pAd)
+{
+    UINT32 ret;
+	HW_CTRL_TXD HwCtrlTxd;
+
+	os_zero_mem(&HwCtrlTxd,sizeof(HW_CTRL_TXD));
+
+	HW_CTRL_TXD_BASIC(pAd, HWCMD_TYPE_RADIO, HWCMD_ID_NR_PD_DETECTION, 0, NULL, HwCtrlTxd);
+	ret = HwCtrlEnqueueCmd(pAd, HwCtrlTxd);
+}
+
+VOID RTMP_CMW_LINK_CTRL(PRTMP_ADAPTER pAd)
+{
+    UINT32 ret;
+	HW_CTRL_TXD HwCtrlTxd;
+
+	os_zero_mem(&HwCtrlTxd,sizeof(HW_CTRL_TXD));
+
+	HW_CTRL_TXD_BASIC(pAd, HWCMD_TYPE_RADIO, HWCMD_ID_CMW_LINK_CTRL, 0, NULL, HwCtrlTxd);
+	ret = HwCtrlEnqueueCmd(pAd, HwCtrlTxd);
+}
+#endif /* NR_PD_DETECTION */
 
 VOID RTMP_SET_UPDATE_RSSI(PRTMP_ADAPTER pAd)
 {
@@ -487,7 +567,7 @@ VOID HW_SET_TX_BURST(struct _RTMP_ADAPTER *pAd, struct wifi_dev *wdev,
 			sizeof(struct _tx_burst_cfg), (VOID *)&txop_cfg);
 }
 
-
+#ifdef MAC_REPEATER_SUPPORT	
 VOID HW_ADD_REPT_ENTRY(
         PRTMP_ADAPTER pAd,
         struct wifi_dev *wdev,
@@ -495,6 +575,8 @@ VOID HW_ADD_REPT_ENTRY(
 {
     UINT32 ret;
     ADD_REPT_ENTRY_STRUC add_rept_entry;
+	APCLI_STRUCT *pApCliEntry = wdev->func_dev;
+
     os_zero_mem(&add_rept_entry, sizeof(ADD_REPT_ENTRY_STRUC));
     add_rept_entry.wdev = wdev;
     os_move_mem(add_rept_entry.arAddr, pAddr, MAC_ADDR_LEN);
@@ -504,6 +586,14 @@ VOID HW_ADD_REPT_ENTRY(
 		HWCMD_ID_ADD_REPT_ENTRY,
 		sizeof(ADD_REPT_ENTRY_STRUC),
 		&add_rept_entry);
+
+	if (ret == NDIS_STATUS_SUCCESS)
+	{
+		NdisAcquireSpinLock(&pAd->ApCfg.InsertReptCmdLock);
+		pApCliEntry->InsRepCmdCount++;
+		NdisReleaseSpinLock(&pAd->ApCfg.InsertReptCmdLock);
+	}
+	
 }
 
 VOID HW_REMOVE_REPT_ENTRY(
@@ -523,6 +613,7 @@ VOID HW_REMOVE_REPT_ENTRY(
         sizeof(REMOVE_REPT_ENTRY_STRUC),
         &remove_rept_entry);
 }
+#endif /* MAC_REPEATER_SUPPORT */
 
 
 VOID HW_BECON_UPDATE(
@@ -537,14 +628,78 @@ VOID HW_BECON_UPDATE(
 	    &rMtUpdateBeacon);
 }
 
-VOID RTMP_STA_ENTRY_ADD(PRTMP_ADAPTER pAd, ULONG Wcid,UCHAR *pAddr,BOOLEAN IsBMC)
+VOID RTMP_STA_ENTRY_ADD(PRTMP_ADAPTER pAd, ULONG Wcid,UCHAR *pAddr,BOOLEAN IsBMC, BOOLEAN IsReset)
 {
 	RT_SET_ASIC_WCID Info;
-	INT32 ret;
+	UINT32 ret;
+
+#ifdef FAST_EAPOL_WAR
+	UINT32 wait_time = 2000;
+	HW_CTRL_TXD HwCtrlTxd;
+	MAC_TABLE_ENTRY *pEntry = NULL;
+	pEntry = &pAd->MacTab.Content[Wcid];
+#endif /* FAST_EAPOL_WAR */
+
 	Info.WCID = Wcid;
 	Info.IsBMC = IsBMC;
+	Info.IsReset = IsReset;
 	NdisMoveMemory(Info.Addr, pAddr, MAC_ADDR_LEN);
-	ret = HW_CTRL_BASIC_ENQ(pAd, HWCMD_TYPE_RADIO,HWCMD_ID_SET_CLIENT_MAC_ENTRY,sizeof(RT_SET_ASIC_WCID),&Info);
+
+#ifdef FAST_EAPOL_WAR
+	if (IS_ENTRY_CLIENT(pEntry) || IS_ENTRY_REPEATER(pEntry) || IS_ENTRY_APCLI(pEntry))
+	{
+		HW_CTRL_TXD_BASIC(
+			pAd,
+			HWCMD_TYPE_RADIO,
+			HWCMD_ID_SET_CLIENT_MAC_ENTRY,
+			sizeof(RT_SET_ASIC_WCID),
+			&Info,
+			HwCtrlTxd
+		);
+		HW_CTRL_TXD_RSP(pAd,0,NULL,wait_time,HwCtrlTxd);	
+		ret = HwCtrlEnqueueCmd(pAd,HwCtrlTxd);
+	}
+	else
+#endif /* FAST_EAPOL_WAR */
+	{
+		ret = HW_CTRL_BASIC_ENQ(pAd, HWCMD_TYPE_RADIO,HWCMD_ID_SET_CLIENT_MAC_ENTRY,sizeof(RT_SET_ASIC_WCID),&Info);
+	}
+	return;
+
+}
+
+#ifdef PKT_BUDGET_CTRL_SUPPORT
+VOID HW_SET_PBC_CTRL(struct _RTMP_ADAPTER *pAd, struct wifi_dev *wdev, struct _MAC_TABLE_ENTRY *entry, UCHAR type)
+{
+	struct pbc_ctrl pbc;
+	UINT32 ret;
+
+	pbc.entry = entry;
+	pbc.wdev = wdev;
+	pbc.type = type;
+	
+	ret = HW_CTRL_BASIC_ENQ(pAd, HWCMD_TYPE_WMM, HWCMD_ID_PBC_CTRL,
+			sizeof(struct pbc_ctrl), (VOID *)&pbc);
+}
+#endif
+
+/*
+ * set RTS Threshold per wdev
+ */
+VOID HW_SET_RTS_THLD(
+		struct _RTMP_ADAPTER *pAd,
+		struct wifi_dev *wdev,
+		UCHAR pkt_num, UINT32 length)
+{
+	struct rts_thld rts;
+	UINT32 ret;
+
+	rts.wdev = wdev;
+	rts.pkt_thld = pkt_num;
+	rts.len_thld = length;
+
+	ret = HW_CTRL_BASIC_ENQ(pAd, HWCMD_TYPE_PROTECT,
+			HWCMD_ID_RTS_THLD, sizeof(rts), (VOID *)&rts);
 }
 
 
@@ -561,6 +716,53 @@ VOID HW_APCLI_BF_CAP_CONFIG(PRTMP_ADAPTER pAd, PMAC_TABLE_ENTRY pMacEntry)
 	                        sizeof(MAC_TABLE_ENTRY),
 	                        pMacEntry);
 }
+
+/*
+*
+*/
+VOID HW_APCLI_BF_REPEATER_CONFIG(PRTMP_ADAPTER pAd, PMAC_TABLE_ENTRY pMacEntry)
+{
+	INT32 ret;
+	ret = HW_CTRL_BASIC_ENQ(pAd, 
+	                        HWCMD_TYPE_RADIO,
+	                        HWCMD_ID_SET_APCLI_BF_REPEATER,
+	                        sizeof(MAC_TABLE_ENTRY),
+	                        pMacEntry);
+}
+
+VOID HW_STA_BF_SOUNDING_ADJUST(PRTMP_ADAPTER pAd, UCHAR connState,struct wifi_dev *wdev)
+{
+        INT32 ret;
+	MT_STA_BF_ADJ rMtStaBfAdj;
+
+	os_zero_mem(&rMtStaBfAdj, sizeof(MT_STA_BF_ADJ));
+
+	rMtStaBfAdj.wdev = wdev;
+	rMtStaBfAdj.ConnectionState = connState;
+
+        ret = HW_CTRL_BASIC_ENQ(pAd, 
+	                        HWCMD_TYPE_RADIO,
+	                        HWCMD_ID_ADJUST_STA_BF_SOUNDING,
+	                        sizeof(MT_STA_BF_ADJ),
+	                        &rMtStaBfAdj);	
+}
+
+VOID HW_AP_TXBF_TX_APPLY(struct _RTMP_ADAPTER *pAd,UCHAR enable)
+{
+    INT32 ret;
+    UCHAR BfApply;
+    
+
+    BfApply = enable;
+    ret = HW_CTRL_BASIC_ENQ(pAd, 
+	                        HWCMD_TYPE_RADIO,
+	                        HWCMD_ID_TXBF_TX_APPLY_CTRL,
+	                        sizeof(UCHAR),
+	                        &BfApply);	    
+}
+
+
+
 #endif /* TXBF_SUPPORT */
 
 
@@ -570,7 +772,7 @@ VOID HW_APCLI_BF_CAP_CONFIG(PRTMP_ADAPTER pAd, PMAC_TABLE_ENTRY pMacEntry)
 */
 VOID HW_WIFISYS_OPEN(
     RTMP_ADAPTER *pAd,
-    WIFI_SYS_CTRL wifi_sys_ctrl)
+    WIFI_SYS_CTRL *wifi_sys_ctrl)
 {
     UINT32 ret;
 	UINT32 wait_time = 2000;
@@ -580,7 +782,7 @@ VOID HW_WIFISYS_OPEN(
 		HWCMD_TYPE_WIFISYS,
 		HWCMD_ID_WIFISYS_OPEN,
 		sizeof(WIFI_SYS_CTRL),
-		&wifi_sys_ctrl,
+		wifi_sys_ctrl,
 		HwCtrlTxd
 	);
 	HW_CTRL_TXD_RSP(pAd,0,NULL,wait_time,HwCtrlTxd);	
@@ -593,7 +795,7 @@ VOID HW_WIFISYS_OPEN(
 */
 VOID HW_WIFISYS_CLOSE(
     RTMP_ADAPTER *pAd,
-    WIFI_SYS_CTRL wifi_sys_ctrl)
+    WIFI_SYS_CTRL *wifi_sys_ctrl)
 {
     UINT32 ret;
 	UINT32 wait_time = 2000;
@@ -603,7 +805,8 @@ VOID HW_WIFISYS_CLOSE(
 		HWCMD_TYPE_WIFISYS,
 		HWCMD_ID_WIFISYS_CLOSE,
 		sizeof(WIFI_SYS_CTRL),
-		&wifi_sys_ctrl,HwCtrlTxd
+		wifi_sys_ctrl,
+		HwCtrlTxd
 	);
 	HW_CTRL_TXD_RSP(pAd,0,NULL,wait_time,HwCtrlTxd);	
 	ret = HwCtrlEnqueueCmd(pAd,HwCtrlTxd);
@@ -615,14 +818,14 @@ VOID HW_WIFISYS_CLOSE(
 */
 VOID HW_WIFISYS_LINKDOWN(
     RTMP_ADAPTER *pAd,
-    WIFI_SYS_CTRL wifi_sys_ctrl)
+    WIFI_SYS_CTRL *wifi_sys_ctrl)
 {
     UINT32 ret;
     ret = HW_CTRL_BASIC_ENQ(pAd,
         HWCMD_TYPE_WIFISYS,
         HWCMD_ID_WIFISYS_LINKDOWN,
         sizeof(WIFI_SYS_CTRL),
-        &wifi_sys_ctrl);
+        wifi_sys_ctrl);
 }
 
 
@@ -631,14 +834,14 @@ VOID HW_WIFISYS_LINKDOWN(
 */
 VOID HW_WIFISYS_LINKUP(
     RTMP_ADAPTER *pAd,
-    WIFI_SYS_CTRL wifi_sys_ctrl)
+    WIFI_SYS_CTRL *wifi_sys_ctrl)
 {
     UINT32 ret;
     ret = HW_CTRL_BASIC_ENQ(pAd,
         HWCMD_TYPE_WIFISYS,
         HWCMD_ID_WIFISYS_LINKUP,
         sizeof(WIFI_SYS_CTRL),
-        &wifi_sys_ctrl);
+        wifi_sys_ctrl);
 }
 
 
@@ -647,14 +850,14 @@ VOID HW_WIFISYS_LINKUP(
 */
 VOID HW_WIFISYS_PEER_LINKUP(
     RTMP_ADAPTER *pAd,
-    WIFI_SYS_CTRL wifi_sys_ctrl)
+    WIFI_SYS_CTRL *wifi_sys_ctrl)
 {
     UINT32 ret;
     ret = HW_CTRL_BASIC_ENQ(pAd,
         HWCMD_TYPE_WIFISYS,
         HWCMD_ID_WIFISYS_PEER_LINKUP,
         sizeof(WIFI_SYS_CTRL),
-        &wifi_sys_ctrl);
+        wifi_sys_ctrl);
 }
 
 
@@ -663,14 +866,14 @@ VOID HW_WIFISYS_PEER_LINKUP(
 */
 VOID HW_WIFISYS_PEER_LINKDOWN(
     RTMP_ADAPTER *pAd,
-    WIFI_SYS_CTRL wifi_sys_ctrl)
+    WIFI_SYS_CTRL *wifi_sys_ctrl)
 {
     UINT32 ret;
     ret = HW_CTRL_BASIC_ENQ(pAd,
         HWCMD_TYPE_WIFISYS,
         HWCMD_ID_WIFISYS_PEER_LINKDOWN,
         sizeof(WIFI_SYS_CTRL),
-        &wifi_sys_ctrl);
+        wifi_sys_ctrl);
 }
 
 
@@ -679,13 +882,54 @@ VOID HW_WIFISYS_PEER_LINKDOWN(
 */
 VOID HW_WIFISYS_PEER_UPDATE(
     RTMP_ADAPTER *pAd,
-    WIFI_SYS_CTRL wifi_sys_ctrl)
+    WIFI_SYS_CTRL *wifi_sys_ctrl)
 {
-    UINT32 ret;
-    ret = HW_CTRL_BASIC_ENQ(pAd,
-        HWCMD_TYPE_WIFISYS,
-        HWCMD_ID_WIFISYS_PEER_UPDATE,
-        sizeof(WIFI_SYS_CTRL),
-        &wifi_sys_ctrl);
+	UINT32 ret;
+
+#ifdef FAST_EAPOL_WAR
+	UINT32 wait_time = 2000;
+	HW_CTRL_TXD HwCtrlTxd;
+#endif /* FAST_EAPOL_WAR */
+
+#ifdef FAST_EAPOL_WAR
+	HW_CTRL_TXD_BASIC(
+		pAd,
+		HWCMD_TYPE_WIFISYS,
+		HWCMD_ID_WIFISYS_PEER_UPDATE,
+		sizeof(WIFI_SYS_CTRL),
+		wifi_sys_ctrl,
+		HwCtrlTxd);
+
+	HW_CTRL_TXD_RSP(pAd,0,NULL,wait_time,HwCtrlTxd);
+	ret = HwCtrlEnqueueCmd(pAd,HwCtrlTxd);
+#else /* FAST_EAPOL_WAR */
+	ret = HW_CTRL_BASIC_ENQ(pAd,
+		HWCMD_TYPE_WIFISYS,
+		HWCMD_ID_WIFISYS_PEER_UPDATE,
+		sizeof(WIFI_SYS_CTRL),
+		wifi_sys_ctrl);
+#endif /* !FAST_EAPOL_WAR */
+
+}
+
+VOID HW_GET_TX_STATISTIC(
+	RTMP_ADAPTER *pAd, 
+	UINT32 Field,
+    UINT8 Wcid)
+{
+	UINT32 ret;
+	HW_CTRL_TXD HwCtrlTxd;
+	TX_STAT_STRUC TxStat;
+
+	MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE,("%s(): Field = 0x%x, Wcid = %d\n", 
+		__FUNCTION__, Field, Wcid));
+
+	os_zero_mem(&HwCtrlTxd,sizeof(HW_CTRL_TXD));
+	os_zero_mem(&TxStat,sizeof(TX_STAT_STRUC));
+
+	TxStat.Field = Field;
+	TxStat.Wcid = Wcid;
+
+	ret = HW_CTRL_BASIC_ENQ(pAd,HWCMD_TYPE_WIFISYS, HWCMD_ID_GET_TX_STATISTIC, sizeof(TX_STAT_STRUC), (VOID *)&TxStat);
 }
 

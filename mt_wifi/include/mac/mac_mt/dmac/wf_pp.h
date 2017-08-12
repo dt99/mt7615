@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __WF_PP_H__
 #define __WF_PP_H__
 
@@ -48,6 +49,12 @@
 /* */
 #define PP_PAGECTL_2					(PP_BASE + 0x60)
 #define PAGECTL_2_CUT_PG_CNT_MASK	(0xfff)
+
+/* PP spare dummy CR */
+#define PP_SPARE_DUMMY_CR5				(PP_BASE + 0x64)
+#define PP_SPARE_DUMMY_CR6				(PP_BASE + 0x68)
+#define PP_SPARE_DUMMY_CR7				(PP_BASE + 0x6c)
+#define PP_SPARE_DUMMY_CR8				(PP_BASE + 0x70)
 
 #endif /* __WF_PP_H__ */
 

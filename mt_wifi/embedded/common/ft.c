@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -23,6 +24,7 @@
     --------    ----------    ----------------------------------------------
     Fonchi Wu   12-19-2008    
  */
+#endif /* MTK_LICENSE */
 #ifdef DOT11R_FT_SUPPORT
 
 #include "rt_config.h"
@@ -168,7 +170,7 @@ VOID FT_EnqueueAuthReply(
 	}
 
 	/* Calculate MIC in authentication-ACK frame */	
-	if (pFtIeInfo->MICCtr.field.IECnt)
+	if (pFtIeInfo && pFtIeInfo->MICCtr.field.IECnt)
 	{
 		PMAC_TABLE_ENTRY pEntry;
 		
@@ -247,6 +249,8 @@ static VOID FT_ReqActionParse(
 					pFtInfo->RicInfo.Len = ((UCHAR*)Ptr + Len)
 											- (UCHAR*)eid_ptr + 1;
 				}
+				break;
+
 			case IE_FT_RIC_DESCRIPTOR:
 				if ((pFtInfo->RicInfo.RicIEsLen + eid_ptr->Len + 2) < MAX_RICIES_LEN)
 				{
@@ -1333,8 +1337,27 @@ VOID FT_RrbHandler(
 					END_OF_ARGS);
 
 	/* enqueue it into FT action state machine. */
-	REPORT_MGMT_FRAME_TO_MLME(pAd, Wcid, pOutBuffer, FrameLen, 
-		0, 0, 0, 0, 0, OPMODE_AP, wdev);
+	if (pEntry)
+	{
+#ifdef CUSTOMER_DCC_FEATURE
+		REPORT_MGMT_FRAME_TO_MLME(pAd, Wcid, pOutBuffer, FrameLen, 
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, OPMODE_AP, wdev, pEntry->HTPhyMode.field.MODE);
+#else	
+		REPORT_MGMT_FRAME_TO_MLME(pAd, Wcid, pOutBuffer, FrameLen, 
+			0, 0, 0, 0, 0, 0, OPMODE_AP, wdev, pEntry->HTPhyMode.field.MODE);
+#endif			
+	}
+	else
+	{
+		/* Report basic phymode if pEntry = NULL  */
+#ifdef CUSTOMER_DCC_FEATURE
+		REPORT_MGMT_FRAME_TO_MLME(pAd, Wcid, pOutBuffer, FrameLen, 
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, OPMODE_AP, wdev, WMODE_CAP_5G(wdev->PhyMode)? MODE_OFDM : MODE_CCK);
+#else		
+		REPORT_MGMT_FRAME_TO_MLME(pAd, Wcid, pOutBuffer, FrameLen, 
+			0, 0, 0, 0, 0, 0, OPMODE_AP, wdev, WMODE_CAP_5G(wdev->PhyMode)? MODE_OFDM : MODE_CCK);
+#endif	
+	}
 
 	if (pOutBuffer)
 		os_free_mem(pOutBuffer);
@@ -1429,50 +1452,35 @@ VOID FT_ConstructGTKSubIe(
 	UINT	e_key_len;
 	UCHAR	apidx;
 	UCHAR	key_idx;
-	UCHAR	cipher_alg;
+	UINT32	cipher_alg;
 	PUINT8	gtk;
 	ULONG	TmpLen = 0;
-	UINT8	remainder;
 	FT_GTK_KEY_INFO KeyInfo;
 	UCHAR 			rsc[8];
-	struct wifi_dev *wdev = &pAd->ApCfg.MBSSID[pEntry->func_tb_idx].wdev;
+	struct wifi_dev *wdev = pEntry->wdev;
 	apidx = pEntry->func_tb_idx;	
-	gtk = pAd->ApCfg.MBSSID[apidx].GTK;	
+	gtk = wdev->SecConfig.GTK;
 	key_idx = wdev->SecConfig.GroupKeyId;
-	cipher_alg = pAd->SharedKey[pEntry->func_tb_idx][key_idx].CipherAlg;
+	cipher_alg = wdev->SecConfig.GroupCipher;
 
 	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_FT, DBG_LVL_TRACE, 
 		("%s : key idx(%d) \n", __FUNCTION__, key_idx));
 	
-	switch (cipher_alg) {
-		case CIPHER_WEP64:
-			gtk_len = 5;
-			break;
-		case CIPHER_WEP128:
-			gtk_len = 13;
-			break;	
-		case CIPHER_TKIP:
-			gtk_len = 32;
-			break;
-		case CIPHER_AES:
-			gtk_len = 16;
-			break;		
-	}
+	if (IS_CIPHER_TKIP(cipher_alg))
+            gtk_len = LEN_TKIP_TK;
+	else if (IS_CIPHER_CCMP128(cipher_alg))
+            gtk_len = LEN_CCMP128_TK;
+	else if (IS_CIPHER_CCMP256(cipher_alg))
+            gtk_len = LEN_CCMP256_TK;
+	else if (IS_CIPHER_GCMP128(cipher_alg))
+            gtk_len = LEN_GCMP128_TK;
+	else if (IS_CIPHER_GCMP256(cipher_alg))
+            gtk_len = LEN_GCMP256_TK;
 
 	/*  The Key field shall be padded before encrypting if the key length 
 		is less than 16 octets or if it is not a multiple of 8. */
 	NdisMoveMemory(key_buf, gtk, gtk_len);
 	key_len = gtk_len;
-	if ((remainder = gtk_len & 0x07) != 0) {
-		INT	i;
-	
-		pad_len = (8 - remainder);
-		key_buf[gtk_len] = 0xDD;
-		for (i = 1; i < pad_len; i++)
-			key_buf[gtk_len + i] = 0;
-
-		key_len += pad_len;
-	}
 	if (key_len < 16) {
 		INT	i;
 		
@@ -1533,16 +1541,16 @@ BOOLEAN FT_QueryKeyInfoForKDP(
 	UCHAR OriPMKR1Name[FT_KDP_WPA_NAME_MAX_SIZE];
 
 	/* Search PMK Cache */
-	CacheIdx = RTMPSearchPMKIDCache(pAd, ApIdx, pEvtKeyReq->MacAddr);
+	CacheIdx = RTMPSearchPMKIDCache(&pAd->ApCfg.PMKIDCache, ApIdx, pEvtKeyReq->MacAddr);
 
-	if (CacheIdx == -1)
+	if (CacheIdx == INVALID_PMKID_IDX)
 	{
 		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_FT, DBG_LVL_ERROR, ("%s : The PMKR0 doesn't exist for %02x:%02x:%02x:%02x:%02x:%02x\n", 
 							__FUNCTION__, PRINT_MAC(pEvtKeyReq->MacAddr)));
 		return FALSE;
 	}
 
-	pkeyInfo = &pAd->ApCfg.MBSSID[ApIdx].PMKIDCache.BSSIDInfo[CacheIdx];
+	pkeyInfo = &pAd->ApCfg.PMKIDCache.BSSIDInfo[CacheIdx];
 
 	/* Derive the PMK-R1 and PMK-R1-Name for this R1KH */
 	FT_DerivePMKR1(pkeyInfo->PMK, 
@@ -2669,7 +2677,7 @@ VOID	FT_CalculateMIC(
 
 	MTWF_LOG(DBG_CAT_PROTO, CATPROTO_FT, DBG_LVL_TRACE, ("%s\n", __FUNCTION__));
 	
-	NdisZeroMemory(mic, sizeof(mic));
+	NdisZeroMemory(mic, 16);
 	
 	/* allocate memory for MIC calculation */
 	os_alloc_mem(NULL, (PUCHAR *)&OutBuffer, 512);
@@ -2851,7 +2859,7 @@ void FT_rtmp_read_parameters_from_file(
 			}
 			else
 			{
-				MTWF_LOG(DBG_CAT_PROTO, CATPROTO_FT, DBG_LVL_TRACE, ("%s: Invalid R0khId(%d)=%s Len=%d\n",
+				MTWF_LOG(DBG_CAT_PROTO, CATPROTO_FT, DBG_LVL_TRACE, ("%s: Invalid R0khId(%d)=%s Len=%zu\n",
 									__FUNCTION__, Loop, tmpbuf, strlen(tmpbuf)));
 			}
 		}
@@ -2915,7 +2923,7 @@ INT Set_FT_R0khid(RTMP_ADAPTER *pAd, RTMP_STRING *arg)
 
 	if (strlen(arg) > FT_ROKH_ID_LEN)
 	{
-		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_FT, DBG_LVL_ERROR, ("%s: Invalid R0KHID Length (%d).\n",
+		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_FT, DBG_LVL_ERROR, ("%s: Invalid R0KHID Length (%zu).\n",
 			__FUNCTION__, strlen(arg)));
 		MTWF_LOG(DBG_CAT_PROTO, CATPROTO_FT, DBG_LVL_ERROR, ("%s: The length shall be in range from 1 to 48 octects.\n",
 			__FUNCTION__));

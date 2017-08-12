@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -26,7 +27,7 @@
     Name        Date            Modification logs
     Paul Lin    1-2-2004
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __RTMP_TYPE_H__
 #define __RTMP_TYPE_H__
 

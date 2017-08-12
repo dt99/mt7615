@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -24,6 +25,7 @@
 	--------	----------		----------------------------------------------
 	John Chang	2004-09-01      modified for rt2561/2661
 */
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 /*BaSizeArray follows the 802.11n definition as MaxRxFactor.  2^(13+factor) bytes. When factor =0, it's about Ba buffer size =8.*/
@@ -55,6 +57,7 @@ static UCHAR BuildChannelListFor2G(RTMP_ADAPTER *pAd, UCHAR index)
 	PUCHAR pChannelListFlag;
 #ifdef RT_CFG80211_SUPPORT
 	UCHAR PhyMode = HcGetPhyModeByRf(pAd, RFIC_24GHZ);
+	UCHAR bw = HcGetBwByRf(pAd,RFIC_24GHZ);
 #endif
 	for (i = 0; i < Country_Region_GroupNum_2GHZ; i++)
 	{
@@ -116,7 +119,7 @@ static UCHAR BuildChannelListFor2G(RTMP_ADAPTER *pAd, UCHAR index)
 				pAd->ChannelList[index + i].Flags |= CHANNEL_40M_CAP;
 #endif /* DOT11_N_SUPPORT */
 
-			pAd->ChannelList[index+i].MaxTxPwr = 20;
+			pAd->ChannelList[index+i].MaxTxPwr = 30;
 
 #ifdef RT_CFG80211_SUPPORT
 			CFG80211OS_ChanInfoInit(
@@ -125,7 +128,7 @@ static UCHAR BuildChannelListFor2G(RTMP_ADAPTER *pAd, UCHAR index)
 						pAd->ChannelList[index+i].Channel,
 						pAd->ChannelList[index+i].MaxTxPwr,
 						WMODE_CAP_N(PhyMode),
-						(pAd->CommonCfg.RegTransmitSetting.field.BW == BW_20));
+						(bw == BW_20));
 #endif /* RT_CFG80211_SUPPORT */
 		}
 		
@@ -150,6 +153,7 @@ static UCHAR BuildChannelListFor5G(RTMP_ADAPTER *pAd, UCHAR index)
 	PUCHAR pChannelListFlag;
 #ifdef RT_CFG80211_SUPPORT
 	UCHAR PhyMode = HcGetPhyModeByRf(pAd, RFIC_5GHZ);
+	UCHAR bw = HcGetBwByRf(pAd,RFIC_5GHZ);
 #endif
 	for (i = 0; i < Country_Region_GroupNum_5GHZ; i++)
 	{
@@ -213,7 +217,7 @@ static UCHAR BuildChannelListFor5G(RTMP_ADAPTER *pAd, UCHAR index)
 					(pAd->CommonCfg.RDDurRegion == FCC) &&
 					(pAd->Dot11_H.bDFSIndoor == 1))
 			{
-				if((GetChannel_5GHZ(pChDesc, i) < 116) || (GetChannel_5GHZ(pChDesc, i) > 128))
+				if((GetChannel_5GHZ(pChDesc, i) < 120) || (GetChannel_5GHZ(pChDesc, i) > 128))
 				{
 					pChannelList[q] = GetChannel_5GHZ(pChDesc, i);
 					pChannelListFlag[q] = GetChannelFlag(pChDesc, i);
@@ -253,6 +257,9 @@ static UCHAR BuildChannelListFor5G(RTMP_ADAPTER *pAd, UCHAR index)
 #ifdef DOT11_VHT_AC
 			if (vht80_channel_group(pAd, pAd->ChannelList[index + i].Channel))
 				pAd->ChannelList[index + i].Flags |= CHANNEL_80M_CAP;
+
+			if (vht160_channel_group(pAd, pAd->ChannelList[index + i].Channel))
+                pAd->ChannelList[index + i].Flags |= CHANNEL_160M_CAP;
 #endif /* DOT11_VHT_AC */
 #endif /* DOT11_N_SUPPORT */
 
@@ -261,7 +268,7 @@ static UCHAR BuildChannelListFor5G(RTMP_ADAPTER *pAd, UCHAR index)
 				if (pChannelList[i] == RadarCh[j])
 					pAd->ChannelList[index+i].DfsReq = TRUE;
 			}
-			pAd->ChannelList[index+i].MaxTxPwr = 20;
+			pAd->ChannelList[index+i].MaxTxPwr = 30;
 #ifdef RT_CFG80211_SUPPORT
 			CFG80211OS_ChanInfoInit(
 					pAd->pCfg80211_CB,
@@ -269,7 +276,7 @@ static UCHAR BuildChannelListFor5G(RTMP_ADAPTER *pAd, UCHAR index)
 					pAd->ChannelList[index+i].Channel,
 					pAd->ChannelList[index+i].MaxTxPwr,
 					WMODE_CAP_N(PhyMode),
-					(pAd->CommonCfg.RegTransmitSetting.field.BW == BW_20));
+					(bw == BW_20));
 #endif /*RT_CFG80211_SUPPORT*/
 		}
 
@@ -340,7 +347,29 @@ VOID BuildChannelList(RTMP_ADAPTER *pAd)
 #endif
 }
 
+#ifdef CONFIG_AP_SUPPORT
+/*
+	==========================================================================
+	Description:
+	    This function is using for searching first channel in case of channel 
+	    list is cascaded by 2G + 5G.
+	Return:
+		ch - the first channel number of current phymode setting
 
+	==========================================================================
+ */
+UCHAR GetFirstChByPhyMode(RTMP_ADAPTER *pAd, UCHAR PhyMode)
+{
+    UCHAR ChListNum;
+
+    if (WMODE_CAP_2G(PhyMode))        
+        return pAd->ChannelList[0].Channel; // Return 2G first channel
+    else {
+        ChListNum = pAd->AutoChSelCtrl.ChannelListNum2G;
+        return pAd->ChannelList[ChListNum].Channel;// Return 5G first channel
+    }  
+}
+#endif/* CONFIG_AP_SUPPORT */
 
 /*
 	==========================================================================
@@ -426,31 +455,68 @@ UCHAR NextChannel(RTMP_ADAPTER *pAd, UCHAR channel)
  */
 VOID ChangeToCellPowerLimit(RTMP_ADAPTER *pAd, UCHAR AironetCellPowerLimit)
 {
-	/*
-		valud 0xFF means that hasn't found power limit information
-		from the AP's Beacon/Probe response
-	*/
-	if (AironetCellPowerLimit == 0xFF)
-		return;
+    /*
+        valud 0xFF means that hasn't found power limit information
+        from the AP's Beacon/Probe response
+    */
+    if (AironetCellPowerLimit == 0xFF)
+        return;
 
-	if (AironetCellPowerLimit < 6) /*Used Lowest Power Percentage.*/
-		pAd->CommonCfg.TxPowerPercentage = 6;
-	else if (AironetCellPowerLimit < 9)
-		pAd->CommonCfg.TxPowerPercentage = 10;
-	else if (AironetCellPowerLimit < 12)
-		pAd->CommonCfg.TxPowerPercentage = 25;
-	else if (AironetCellPowerLimit < 14)
-		pAd->CommonCfg.TxPowerPercentage = 50;
-	else if (AironetCellPowerLimit < 15)
-		pAd->CommonCfg.TxPowerPercentage = 75;
-	else
-		pAd->CommonCfg.TxPowerPercentage = 100; /*else used maximum*/
+    if (AironetCellPowerLimit < 6) /*Used Lowest Power Percentage.*/
+    {   
+        pAd->CommonCfg.TxPowerPercentage[BAND0] = 6;
+#ifdef DBDC_MODE        
+        pAd->CommonCfg.TxPowerPercentage[BAND1] = 6;
+#endif /* DBDC_MODE */
+    }
+    else if (AironetCellPowerLimit < 9)
+    {
+        pAd->CommonCfg.TxPowerPercentage[BAND0] = 10;
+#ifdef DBDC_MODE        
+        pAd->CommonCfg.TxPowerPercentage[BAND1] = 10;
+#endif /* DBDC_MODE */
+    }
+    else if (AironetCellPowerLimit < 12)
+    {
+        pAd->CommonCfg.TxPowerPercentage[BAND0] = 25;
+#ifdef DBDC_MODE
+        pAd->CommonCfg.TxPowerPercentage[BAND1] = 25;
+#endif /* DBDC_MODE */
+    }
+    else if (AironetCellPowerLimit < 14)
+    {
+        pAd->CommonCfg.TxPowerPercentage[BAND0] = 50;
+#ifdef DBDC_MODE        
+        pAd->CommonCfg.TxPowerPercentage[BAND1] = 50;
+#endif /* DBDC_MODE */
+    }
+    else if (AironetCellPowerLimit < 15)
+    {
+        pAd->CommonCfg.TxPowerPercentage[BAND0] = 75;
+#ifdef DBDC_MODE        
+        pAd->CommonCfg.TxPowerPercentage[BAND1] = 75;
+#endif /* DBDC_MODE */
+    }
+    else
+    {
+        pAd->CommonCfg.TxPowerPercentage[BAND0] = 100; /*else used maximum*/
+#ifdef DBDC_MODE        
+        pAd->CommonCfg.TxPowerPercentage[BAND1] = 100;
+#endif /* DBDC_MODE */
+    }
 
-	if (pAd->CommonCfg.TxPowerPercentage > pAd->CommonCfg.TxPowerDefault)
-		pAd->CommonCfg.TxPowerPercentage = pAd->CommonCfg.TxPowerDefault;
+    if (pAd->CommonCfg.TxPowerPercentage[BAND0] > pAd->CommonCfg.TxPowerDefault[BAND0])
+    {   
+        pAd->CommonCfg.TxPowerPercentage[BAND0] = pAd->CommonCfg.TxPowerDefault[BAND0];
+    }
 
+#ifdef DBDC_MODE    
+    if (pAd->CommonCfg.TxPowerPercentage[BAND1] > pAd->CommonCfg.TxPowerDefault[BAND1])
+    {   
+        pAd->CommonCfg.TxPowerPercentage[BAND1] = pAd->CommonCfg.TxPowerDefault[BAND1];
+    }    
+#endif /* DBDC_MODE */   
 }
-
 
 CHAR ConvertToRssi(RTMP_ADAPTER *pAd, struct raw_rssi_info *rssi_info, UCHAR rssi_idx)
 {
@@ -489,6 +555,9 @@ CHAR ConvertToRssi(RTMP_ADAPTER *pAd, struct raw_rssi_info *rssi_info, UCHAR rss
 
 CHAR ConvertToSnr(RTMP_ADAPTER *pAd, UCHAR Snr)
 {
+#ifdef CUSTOMER_DCC_FEATURE
+	return Snr;
+#endif
 	if (pAd->chipCap.SnrFormula == SNR_FORMULA2)
 		return (Snr * 3 + 8) >> 4;
 	else if (pAd->chipCap.SnrFormula == SNR_FORMULA3)
@@ -507,24 +576,32 @@ extern int DetectOverlappingPeriodicRound;
 VOID Handle_BSS_Width_Trigger_Events(RTMP_ADAPTER *pAd, UCHAR Channel)
 {
 	ULONG Now32;
+	UCHAR i;
+	UCHAR bw = HcGetBwByRf(pAd,RFIC_24GHZ);
 
 #ifdef DOT11N_DRAFT3
 	if (pAd->CommonCfg.bBssCoexEnable == FALSE)
 		return;
 #endif /* DOT11N_DRAFT3 */
 
-	if ((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth == BW_40) &&
+	if ((bw > BW_20) &&
 		(Channel <=14))
 	{
 		MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("Rcv BSS Width Trigger Event: 40Mhz --> 20Mhz \n"));
         NdisGetSystemUpTime(&Now32);
 		pAd->CommonCfg.LastRcvBSSWidthTriggerEventsTime = Now32;
 		pAd->CommonCfg.bRcvBSSWidthTriggerEvents = TRUE;
-#ifdef RACTRL_FW_OFFLOAD_SUPPORT
 
-#endif /* RACTRL_FW_OFFLOAD_SUPPORT */
-		pAd->CommonCfg.AddHTInfo.AddHtInfo.RecomWidth = 0;
-		pAd->CommonCfg.AddHTInfo.AddHtInfo.ExtChanOffset = 0;
+		for(i=0;i<WDEV_NUM_MAX;i++){
+			struct wifi_dev *wdev;
+
+			wdev = pAd->wdev_list[i];
+			if(!wdev || (wdev->channel !=Channel))
+				continue;
+
+			wlan_operate_set_ht_bw(wdev,HT_BW_20);
+			wlan_operate_set_ext_cha(wdev,EXTCHA_NONE);
+		}
         DetectOverlappingPeriodicRound = 31;
 	}
 }
@@ -538,99 +615,17 @@ VOID BuildEffectedChannelList(
 	IN struct wifi_dev *wdev
 	)
 {
-	UCHAR		EChannel[11];
-	UCHAR		i, j, k;
-	UCHAR		UpperChannel = 0, LowerChannel = 0;
+	UCHAR		k;
 
-	RTMPZeroMemory(EChannel, 11);
+
 
 	/* 802.11n D4 11.14.3.3: If no secondary channel has been selected, all channels in the frequency band shall be scanned. */
+	for (k = 0;k < pAd->ChannelListNum;k++)
 	{
-		for (k = 0;k < pAd->ChannelListNum;k++)
-		{
-			if (pAd->ChannelList[k].Channel <=14 )
-			pAd->ChannelList[k].bEffectedChannel = TRUE;
-		}
-		return;
+		if (pAd->ChannelList[k].Channel <=14 )
+		pAd->ChannelList[k].bEffectedChannel = TRUE;
 	}
-
-	i = 0;
-	/* Find upper and lower channel according to 40MHz current operation. */
-	if (pAd->CommonCfg.CentralChannel < wdev->channel)
-	{
-		UpperChannel = wdev->channel;
-		LowerChannel = pAd->CommonCfg.CentralChannel-2;
-	}
-	else if (pAd->CommonCfg.CentralChannel > wdev->channel)
-	{
-		UpperChannel = pAd->CommonCfg.CentralChannel+2;
-		LowerChannel = wdev->channel;
-	}
-	else
-	{
-		MTWF_LOG(DBG_CAT_CLIENT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("LinkUP 20MHz . No Effected Channel \n"));
-		/* Now operating in 20MHz, doesn't find 40MHz effected channels */
-		return;
-	}
-
-	DeleteEffectedChannelList(pAd);
-
-	MTWF_LOG(DBG_CAT_CLIENT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("BuildEffectedChannelList!LowerChannel ~ UpperChannel; %d ~ %d \n", LowerChannel, UpperChannel));
-
-	/* Find all channels that are below lower channel.. */
-	if (LowerChannel > 1)
-	{
-		EChannel[0] = LowerChannel - 1;
-		i = 1;
-		if (LowerChannel > 2)
-		{
-			EChannel[1] = LowerChannel - 2;
-			i = 2;
-			if (LowerChannel > 3)
-			{
-				EChannel[2] = LowerChannel - 3;
-				i = 3;
-			}
-		}
-	}
-	/* Find all channels that are between  lower channel and upper channel. */
-	for (k = LowerChannel;k <= UpperChannel;k++)
-	{
-		EChannel[i] = k;
-		i++;
-	}
-	/* Find all channels that are above upper channel.. */
-	if (UpperChannel < 14)
-	{
-		EChannel[i] = UpperChannel + 1;
-		i++;
-		if (UpperChannel < 13)
-		{
-			EChannel[i] = UpperChannel + 2;
-			i++;
-			if (UpperChannel < 12)
-			{
-				EChannel[i] = UpperChannel + 3;
-				i++;
-			}
-		}
-	}
-	/*
-	    Total i channels are effected channels.
-	    Now find corresponding channel in ChannelList array.  Then set its bEffectedChannel= TRUE
-	*/
-	for (j = 0;j < i;j++)
-	{
-		for (k = 0;k < pAd->ChannelListNum;k++)
-		{
-			if (pAd->ChannelList[k].Channel == EChannel[j])
-			{
-				pAd->ChannelList[k].bEffectedChannel = TRUE;
-				MTWF_LOG(DBG_CAT_CLIENT, DBG_SUBCAT_ALL, DBG_LVL_TRACE,(" EffectedChannel[%d]( =%d)\n", k, EChannel[j]));
-				break;
-			}
-		}
-	}
+	return;
 }
 
 

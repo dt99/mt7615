@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __WF_PLE_H__
 #define __WF_PLE_H__
 
@@ -131,6 +132,14 @@
 #define STATION_PAUSE1			(PLE_BASE + 0x364)
 #define STATION_PAUSE2			(PLE_BASE + 0x368)
 #define STATION_PAUSE3			(PLE_BASE + 0x36c)
+
+/* VOW Ctrl */
+#define VOW_RESET_DISABLE       (1 << 26)
+#define STA_MAX_DEFICIT_MASK    (0x0000FFFF)
+#define VOW_DBDC_BW_GROUP_CTRL  (PLE_BASE + 0x2ec)
+#define VOW_CONTROL             (PLE_BASE + 0x370)
+#define AIRTIME_DRR_SIZE        (PLE_BASE + 0x374)
+
 
 typedef enum _ENUM_UMAC_PORT_T {
 	ENUM_UMAC_HIF_PORT_0         = 0,

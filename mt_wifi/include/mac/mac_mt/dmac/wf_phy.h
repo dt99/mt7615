@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #ifndef __WF_PHY_H__
 #define __WF_PHY_H__
@@ -73,6 +74,7 @@
 #define PHY_RXTD_0				(WF_PHY_BASE + 0x2200) /* 0x82072200 */
 #define PHY_RXTD_12                        (WF_PHY_BASE + 0x2230) /* 0x82072230 */
 #define PHY_MIN_PRI_PWR              (WF_PHY_BASE + 0x229C) /* 0x8207229C */
+#define BAND1_PHY_MIN_PRI_PWR       (WF_PHY_BASE + 0x0084) /* 0x82070084 */
 #define PHY_RXTD2_10                      (WF_PHY_BASE + 0x2a28) /* 0x82072a28 */
 #define PHY_RXTD2_0				(WF_PHY_BASE + 0x2a00) /* 0x82072a00 */
 

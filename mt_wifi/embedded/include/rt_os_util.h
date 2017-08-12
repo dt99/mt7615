@@ -243,6 +243,11 @@ VOID RtmpOsNetQueueWake(PNET_DEV pDev);
 VOID RtmpOsSetPktNetDev(VOID *pPkt, VOID *pDev);
 PNET_DEV RtmpOsPktNetDevGet(VOID *pPkt);
 
+unsigned long RtmpOSGetNetDevQState(VOID *pDev, unsigned int q_idx);
+unsigned int RtmpOSGetNetDevQNum(VOID *pDev);
+unsigned int RtmpOSGetNetDevFlag(VOID *pDev);
+unsigned long RtmpOSGetNetDevState(VOID *pDev);
+
 char *RtmpOsGetNetDevName(VOID *pDev);
 
 UINT32 RtmpOsGetNetIfIndex(IN VOID *pDev);
@@ -578,6 +583,14 @@ PNDIS_PACKET RTMP_AllocateRxPacketBuffer(
 	OUT	PVOID					*VirtualAddress,
 	OUT	PNDIS_PHYSICAL_ADDRESS	PhysicalAddress);
 
+PNDIS_PACKET RTMP_AllocateRxPacketBufferOnly(
+	IN	VOID					*pReserved,
+	IN	VOID					*pPciDev,
+	IN	ULONG					Length,
+	IN	BOOLEAN 				Cached,
+	OUT	PVOID					*VirtualAddress,
+	OUT	PNDIS_PHYSICAL_ADDRESS	PhysicalAddress);
+
 
 
 
@@ -708,7 +721,7 @@ void CFG80211OS_P2pClientConnectResultInform(
 
 BOOLEAN CFG80211OS_RxMgmt(IN PNET_DEV pNetDev, IN INT32 freq, IN PUCHAR frame, IN UINT32 len);
 VOID CFG80211OS_TxStatus(IN PNET_DEV pNetDev, IN INT32 cookie, 	IN PUCHAR frame, IN UINT32 len, IN BOOLEAN ack);
-VOID CFG80211OS_NewSta(IN PNET_DEV pNetDev, IN const PUCHAR mac_addr, IN const PUCHAR assoc_frame, IN UINT32 assoc_len);
+VOID CFG80211OS_NewSta(IN PNET_DEV pNetDev, IN const PUCHAR mac_addr, IN const PUCHAR assoc_frame, IN UINT32 assoc_len, IN BOOLEAN isReassoc);
 VOID CFG80211OS_DelSta(IN PNET_DEV pNetDev, IN const PUCHAR mac_addr);
 VOID CFG80211OS_MICFailReport(IN PNET_DEV pNetDev, IN const PUCHAR src_addr, IN BOOLEAN unicast, IN INT key_id, IN const PUCHAR tsc );
 VOID CFG80211OS_Roamed(
@@ -764,9 +777,9 @@ void RtmpOsSpinLockIrqSave(NDIS_SPIN_LOCK *lock, unsigned long *flags);
 void RtmpOsSpinUnlockIrqRestore(NDIS_SPIN_LOCK *lock, unsigned long *flags);
 void RtmpOsSpinLockIrq(NDIS_SPIN_LOCK *lock);
 void RtmpOsSpinUnlockIrq(NDIS_SPIN_LOCK *lock);
-int OS_TEST_BIT(int bit, unsigned long *flags);
-void OS_SET_BIT(int bit, unsigned long *flags);
-void OS_CLEAR_BIT(int bit, unsigned long *flags);
+int OS_TEST_BIT(int bit, ULONG *flags);
+void OS_SET_BIT(int bit, ULONG *flags);
+void OS_CLEAR_BIT(int bit, ULONG *flags);
 void OS_LOAD_CODE_FROM_BIN(unsigned char **image, char *bin_name, void *inf_dev, UINT32 *code_len);
 #ifdef MEM_ALLOC_INFO_SUPPORT
 VOID MemInfoListInital(VOID);

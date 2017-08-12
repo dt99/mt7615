@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -26,7 +27,7 @@
 	Who          When          What
 	---------    ----------    ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #include "rtmp_comm.h"
 #include "cut_through.h"
 #include "os/rt_linux_cmm.h"
@@ -67,6 +68,7 @@ VOID dump_ct_token_list(PKT_TOKEN_CB *tokenCb, INT type)
     else
     {
         MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_ERROR, ("%s(): Unkown type(%d)\n", __FUNCTION__, type));
+	os_free_mem(token_list);
         return;
     }
 
@@ -138,6 +140,7 @@ static INT cut_through_token_list_destroy(
     INT type)
 {
 	INT idx;
+	RTMP_ADAPTER *pAd = (RTMP_ADAPTER *)(pktTokenCb->pAd);
 
 	if (token_q->token_inited == TRUE)
 	{
@@ -156,7 +159,8 @@ static INT cut_through_token_list_destroy(
 			if (entry->pkt_buf) {
 					
 				if (type == CUT_THROUGH_TYPE_TX) {
-					cut_through_tx_unmap(pktTokenCb, idx);
+					PCI_UNMAP_SINGLE(pAd, entry->pkt_phy_addr, 
+										entry->pkt_len, RTMP_PCI_DMA_TODEVICE);
 				}
 
 				RELEASE_NDIS_PACKET(pktTokenCb->pAd, entry->pkt_buf, NDIS_STATUS_FAILURE);
@@ -250,13 +254,12 @@ static INT cut_through_token_list_init(
 	return TRUE;
 }
 
-
-static PNDIS_PACKET cut_through_deq(
-    PKT_TOKEN_CB *pktTokenCb,
-    PKT_TOKEN_QUEUE *token_q,
-    UINT16 token,
+PNDIS_PACKET cut_through_rx_deq(
+	PKT_TOKEN_CB *pktTokenCb,
+	UINT16 token,
 	UINT8 *Type)
 {
+	PKT_TOKEN_QUEUE *token_q = &pktTokenCb->rx_id_list;
 	PKT_TOKEN_LIST *token_list = token_q->list;
 	PNDIS_PACKET pkt_buf = NULL;
 #ifdef CUT_THROUGH_DBG
@@ -266,8 +269,7 @@ static PNDIS_PACKET cut_through_deq(
 	ASSERT(token < PKT_TX_TOKEN_ID_CNT);
 
 	RTMP_SEM_LOCK(&token_q->token_id_lock);
-	if (token_q->token_inited == TRUE)
-	{
+	if (token_q->token_inited == TRUE) {
 		if (token_list) {
 			if (token < PKT_TX_TOKEN_ID_CNT) {
 				PKT_TOKEN_ENTRY *entry = &token_list->pkt_token[token];
@@ -315,12 +317,12 @@ static PNDIS_PACKET cut_through_deq(
 }
 
 
-static UINT16 cut_through_enq(
-    PKT_TOKEN_CB *pktTokenCb,
-    PKT_TOKEN_QUEUE *token_q,
-    PNDIS_PACKET pkt,
+UINT16 cut_through_rx_enq(
+	PKT_TOKEN_CB *pktTokenCb,
+	PNDIS_PACKET pkt,
 	UINT8 Type)
 {
+	PKT_TOKEN_QUEUE *token_q = &pktTokenCb->rx_id_list;
 	PKT_TOKEN_LIST *token_list = token_q->list;
 	UINT16 idx = 0, token = PKT_TOKEN_ID_INVALID;
 #ifdef CUT_THROUGH_DBG
@@ -363,42 +365,21 @@ static UINT16 cut_through_enq(
 			}
 		}
 	}
-    RTMP_SEM_UNLOCK(&token_q->token_id_lock);
+	RTMP_SEM_UNLOCK(&token_q->token_id_lock);
 
 #ifdef CUT_THROUGH_DBG
 #endif /* CUT_THROUGH_DBG */
 
-//+++Add by shiang for debug
-if (0){
-printk("%s():Dump latest Free TokenList\n", __FUNCTION__);
-	for  (idx =0; idx <PKT_TX_TOKEN_ID_ARAY; idx++)
-	{
-		printk("\ttoken_list->free_id[%d]=%d\n", idx, token_list->free_id[idx]);
-		if (idx < PKT_TX_TOKEN_ID_CNT)
-			printk("\ttoken_list->pkt_token[%d].pkt_buf=0x%p\n", idx, token_list->pkt_token[idx].pkt_buf);
+	if (0) {
+		printk("%s():Dump latest Free TokenList\n", __FUNCTION__);
+		for  (idx =0; idx <PKT_TX_TOKEN_ID_ARAY; idx++) {
+			printk("\ttoken_list->free_id[%d]=%d\n", idx, token_list->free_id[idx]);
+			if (idx < PKT_TX_TOKEN_ID_CNT)
+				printk("\ttoken_list->pkt_token[%d].pkt_buf=0x%p\n", idx, token_list->pkt_token[idx].pkt_buf);
+		}
 	}
-}
-//---Add by shiang for debug
 
 	return token;
-}
-
-
-PNDIS_PACKET cut_through_rx_deq(
-    PKT_TOKEN_CB *pktTokenCb,
-    UINT16 token,
-	UINT8 *Type)
-{
-    return cut_through_deq(pktTokenCb, &pktTokenCb->rx_id_list, token, Type);
-}
-
-
-UINT16 cut_through_rx_enq(
-    PKT_TOKEN_CB *pktTokenCb,
-    PNDIS_PACKET pkt,
-	UINT8 Type)
-{
-    return cut_through_enq(pktTokenCb, &pktTokenCb->rx_id_list, pkt, Type);
 }
 
 
@@ -431,76 +412,6 @@ BOOLEAN cut_through_tx_state(PKT_TOKEN_CB *pktTokenCb, UINT8 State, UINT8 RingId
 	}
 
 	return FALSE;
-}
-
-INT cut_through_tx_unmap(PKT_TOKEN_CB *pktTokenCb, UINT16 token)
-{
-	PKT_TOKEN_QUEUE *token_q = &pktTokenCb->tx_id_list;
-	PKT_TOKEN_LIST *token_list = token_q->list;
-	PKT_TOKEN_ENTRY *entry = NULL;
-	INT32 Ret = FALSE;
-	RTMP_ADAPTER *pAd = (RTMP_ADAPTER *)(pktTokenCb->pAd);
-
-	ASSERT(token < PKT_TX_TOKEN_ID_CNT);
-
-	RTMP_SEM_LOCK(&token_q->token_id_lock);
-	if (token_q->token_inited == TRUE)
-	{
-		if (token_list) {
-			if (token < PKT_TX_TOKEN_ID_CNT) {
-				entry = &token_list->pkt_token[token];
-				PCI_UNMAP_SINGLE(pAd, entry->pkt_phy_addr, entry->pkt_len, RTMP_PCI_DMA_TODEVICE);
-				Ret = TRUE;
-			} else {
-				MTWF_LOG(DBG_CAT_TOKEN, TOKEN_INFO, DBG_LVL_OFF, ("%s(): Invalid token ID(%d)\n", __FUNCTION__, token));
-			}
-		}
-	}
-	RTMP_SEM_UNLOCK(&token_q->token_id_lock);
-
-#ifdef CUT_THROUGH_DBG
-	MTWF_LOG(DBG_CAT_TOKEN, TOKEN_TRACE, DBG_LVL_TRACE, ("%s(): token[%d]->inOrder=%d\n",
-				__FUNCTION__, token, (entry != NULL ? entry->InOrder : 0xffffffff) ));
-#endif /* CUT_THROUGH_DBG */
-	
-	return Ret;
-}
-
-INT cut_through_tx_mark_token_info(
-    PKT_TOKEN_CB *pktTokenCb,
-    UINT16 token,
-    NDIS_PHYSICAL_ADDRESS pkt_phy_addr,
-    size_t pkt_len)
-{
-	PKT_TOKEN_QUEUE *token_q = &pktTokenCb->tx_id_list;
-	PKT_TOKEN_LIST *token_list = token_q->list;
-	PKT_TOKEN_ENTRY *entry = NULL;
-	INT32 Ret = FALSE;
-
-	ASSERT(token < PKT_TX_TOKEN_ID_CNT);
-
-	RTMP_SEM_LOCK(&token_q->token_id_lock);
-	if (token_q->token_inited == TRUE)
-	{
-		if (token_list) {
-			if (token < PKT_TX_TOKEN_ID_CNT) {
-				entry = &token_list->pkt_token[token];
-				entry->pkt_phy_addr = pkt_phy_addr;
-				entry->pkt_len = pkt_len;
-				Ret = TRUE;
-			} else {
-				MTWF_LOG(DBG_CAT_TOKEN, TOKEN_INFO, DBG_LVL_OFF, ("%s(): Invalid token ID(%d)\n", __FUNCTION__, token));
-			}
-		}
-	}
-	RTMP_SEM_UNLOCK(&token_q->token_id_lock);
-
-#ifdef CUT_THROUGH_DBG
-	MTWF_LOG(DBG_CAT_TOKEN, TOKEN_TRACE, DBG_LVL_TRACE, ("%s(): token[%d]->inOrder=%d\n",
-				__FUNCTION__, token, (entry != NULL ? entry->InOrder : 0xffffffff) ));
-#endif /* CUT_THROUGH_DBG */
-	
-	return Ret;
 }
 
 VOID cut_through_rx_pkt_assign(
@@ -632,25 +543,145 @@ INT32 cut_through_tx_flow_block(PKT_TOKEN_CB *pktTokenCb, PNET_DEV NetDev, UINT8
 }
 
 PNDIS_PACKET cut_through_tx_deq(
-    PKT_TOKEN_CB *pktTokenCb,
-    UINT16 token,
+	PKT_TOKEN_CB *pktTokenCb,
+	UINT16 token,
 	UINT8 *Type)
 {
-    return cut_through_deq(pktTokenCb, &pktTokenCb->tx_id_list, token, Type);
+	PKT_TOKEN_QUEUE *token_q = &pktTokenCb->tx_id_list;
+	PKT_TOKEN_LIST *token_list = token_q->list;
+	PNDIS_PACKET pkt_buf = NULL;
+	RTMP_ADAPTER *pAd = (RTMP_ADAPTER *)(pktTokenCb->pAd);
+#ifdef CUT_THROUGH_DBG
+	INT head[2] = {-1, -1}, tail[2] = {-1, -1};
+#endif /* CUT_THROUGH_DBG */
+
+	ASSERT(token < PKT_TX_TOKEN_ID_CNT);
+
+	RTMP_SEM_LOCK(&token_q->token_id_lock);
+	if (token_q->token_inited == TRUE) {
+		if (token_list) {
+			if (token < PKT_TX_TOKEN_ID_CNT) {
+				PKT_TOKEN_ENTRY *entry = &token_list->pkt_token[token];
+
+				pkt_buf = entry->pkt_buf;
+				*Type = entry->Type;
+				if (pkt_buf == NULL) {
+					MTWF_LOG(DBG_CAT_TOKEN, TOKEN_INFO, DBG_LVL_OFF, ("%s(): buggy here? token ID(%d) without pkt!\n",
+								__FUNCTION__, token));
+
+					RTMP_SEM_UNLOCK(&token_q->token_id_lock);
+					return pkt_buf;
+				}
+				entry->pkt_buf = NULL;
+				PCI_UNMAP_SINGLE(pAd, entry->pkt_phy_addr, entry->pkt_len, RTMP_PCI_DMA_TODEVICE);
+				entry->InOrder = FALSE;
+				entry->rxDone= FALSE;
+				entry->Drop = FALSE;
+				entry->Type = TOKEN_NONE;
+				token_list->free_id[token_list->id_tail] = token;
+#ifdef CUT_THROUGH_DBG
+				head[0] = token_list->id_head;
+				tail[0] = token_list->id_tail;
+#endif /* CUT_THROUGH_DBG */
+				INC_INDEX(token_list->id_tail, PKT_TX_TOKEN_ID_ARAY);
+				token_list->FreeTokenCnt++;
+				token_list->TotalTxBackTokenCnt++;
+#ifdef CUT_THROUGH_DBG
+				token_list->BackTokenCnt++;
+				head[1] = token_list->id_head;
+				tail[1] = token_list->id_tail;
+#endif /* CUT_THROUGH_DBG */
+			}
+			else
+			{
+				MTWF_LOG(DBG_CAT_TOKEN, TOKEN_INFO, DBG_LVL_OFF, ("%s(): Invalid token ID(%d)\n", __FUNCTION__, token));
+			}
+		}
+	}
+	RTMP_SEM_UNLOCK(&token_q->token_id_lock);
+
+#ifdef CUT_THROUGH_DBG
+#endif /* CUT_THROUGH_DBG */
+
+	return pkt_buf;
 }
 
 
 UINT16 cut_through_tx_enq(
-    PKT_TOKEN_CB *pktTokenCb,
-    PNDIS_PACKET pkt,
-	UINT8 Type)
+	PKT_TOKEN_CB *pktTokenCb,
+	PNDIS_PACKET pkt,
+	UINT8 Type,
+	NDIS_PHYSICAL_ADDRESS pkt_phy_addr,
+	size_t pkt_len)
 {
-	UINT16 token_id;
-	token_id = cut_through_enq(pktTokenCb, &pktTokenCb->tx_id_list, pkt, Type);
+	PKT_TOKEN_QUEUE *token_q = &pktTokenCb->tx_id_list;
+	PKT_TOKEN_LIST *token_list = token_q->list;
+	UINT16 idx = 0, token = PKT_TOKEN_ID_INVALID;
 #ifdef CUT_THROUGH_DBG
-	NdisGetSystemUpTime(&pktTokenCb->tx_id_list.list->pkt_token[token_id].startTime);
+	INT head[2] = {-1, -1}, tail[2] = {-1, -1};
+#endif /* CUT_THROUGH_DBG */
+	RTMP_ADAPTER *pAd = (RTMP_ADAPTER *)(pktTokenCb->pAd);
+	PKT_TOKEN_ENTRY *entry = NULL;
+
+	ASSERT(pkt);
+	ASSERT(token_list);
+
+	RTMP_SEM_LOCK(&token_q->token_id_lock);
+	if (token_q->token_inited == TRUE)
+	{
+		if (token_q->list) {
+#ifdef CUT_THROUGH_DBG
+			head[0] = token_list->id_head;
+			tail[0] = token_list->id_tail;
+#endif /* CUT_THROUGH_DBG */
+
+			idx = token_list->id_head;
+			token = token_list->free_id[idx];
+			if (token <= PKT_TX_TOKEN_ID_MAX) {
+				entry = &token_list->pkt_token[token];
+				if (entry->pkt_buf)
+				{
+					PCI_UNMAP_SINGLE(pAd, entry->pkt_phy_addr, entry->pkt_len, RTMP_PCI_DMA_TODEVICE);
+					RELEASE_NDIS_PACKET(pktTokenCb->pAd, entry->pkt_buf, NDIS_STATUS_FAILURE);
+				}
+
+				entry->pkt_buf = pkt;
+				entry->Type = Type;
+				entry->pkt_phy_addr = pkt_phy_addr;
+				entry->pkt_len = pkt_len;
+				token_list->free_id[idx] = PKT_TOKEN_ID_INVALID;
+				INC_INDEX(token_list->id_head, PKT_TX_TOKEN_ID_ARAY);
+#ifdef CUT_THROUGH_DBG
+				head[1] = token_list->id_head;
+				tail[1] = token_list->id_tail;
+				token_list->UsedTokenCnt++;
+#endif /* CUT_THROUGH_DBG */
+				token_list->FreeTokenCnt--;
+				token_list->TotalTxUsedTokenCnt++;
+			} else {
+				token = PKT_TOKEN_ID_INVALID;
+			}
+		}
+	}
+	RTMP_SEM_UNLOCK(&token_q->token_id_lock);
+
+#ifdef CUT_THROUGH_DBG
+#endif /* CUT_THROUGH_DBG */
+
+	if (0) {
+		printk("%s():Dump latest Free TokenList\n", __FUNCTION__);
+		for  (idx =0; idx <PKT_TX_TOKEN_ID_ARAY; idx++) {
+			printk("\ttoken_list->free_id[%d]=%d\n", idx, token_list->free_id[idx]);
+			if (idx < PKT_TX_TOKEN_ID_CNT)
+				printk("\ttoken_list->pkt_token[%d].pkt_buf=0x%p\n", idx, token_list->pkt_token[idx].pkt_buf);
+		}
+	}
+
+#ifdef CUT_THROUGH_DBG
+	NdisGetSystemUpTime(&pktTokenCb->tx_id_list.list->pkt_token[token].startTime);
 #endif
-	return token_id;
+	
+	return token;
 }
 
 
@@ -863,6 +894,7 @@ UINT cut_through_rx_rxdone(
 INT cut_through_deinit(PKT_TOKEN_CB **ppPktTokenCb)
 {
 	PKT_TOKEN_CB *pktTokenCb;
+	TX_BLOCK_DEV *TxBlockDev = NULL;
 	UINT32 Index;
 
 #ifdef FAST_PATH_TXQ
@@ -870,11 +902,11 @@ INT cut_through_deinit(PKT_TOKEN_CB **ppPktTokenCb)
 #endif
 
 	RTMP_ADAPTER *pAd;
-	
+
 #ifdef CUT_THROUGH_DBG
 	BOOLEAN Cancelled;
 #endif
-
+	
 	pktTokenCb = *ppPktTokenCb;
 	
 	if (pktTokenCb == NULL)
@@ -882,11 +914,15 @@ INT cut_through_deinit(PKT_TOKEN_CB **ppPktTokenCb)
 		return TRUE;
 	}
 
+	pAd = (RTMP_ADAPTER *)pktTokenCb->pAd;
+
+#ifdef FAST_PATH_TXQ
+	pAd->bFastPathTaskSchedulable = FALSE;
+	RTMP_OS_TASKLET_KILL(&pAd->FastPathDequeTask);
+#endif
 	cut_through_token_list_destroy(pktTokenCb, &pktTokenCb->tx_id_list, CUT_THROUGH_TYPE_TX);
 	cut_through_token_list_destroy(pktTokenCb, &pktTokenCb->rx_id_list, CUT_THROUGH_TYPE_RX);
 	
-	pAd = (RTMP_ADAPTER *)pktTokenCb->pAd;
-
 #ifdef CUT_THROUGH_DBG
 	RTMPReleaseTimer(&pktTokenCb->TokenHistoryTimer, &Cancelled);
 #endif
@@ -894,8 +930,6 @@ INT cut_through_deinit(PKT_TOKEN_CB **ppPktTokenCb)
 	NdisFreeSpinLock(&pktTokenCb->rx_order_notify_lock);
 
 #ifdef FAST_PATH_TXQ
-	RTMP_OS_TASKLET_KILL(&pAd->FastPathDequeTask);
-
 	while (1)
 	{
 		RTMP_SEM_LOCK(&pAd->FastPathTxQueLock);
@@ -959,27 +993,36 @@ INT cut_through_deinit(PKT_TOKEN_CB **ppPktTokenCb)
 
 		os_free_mem(FPTxElement);
 	}
-	
+
 	NdisFreeSpinLock(&pAd->FastPathTxQueLock);
 	NdisFreeSpinLock(&pAd->MgmtQueLock);
 	NdisFreeSpinLock(&pAd->FastPathTxFreeQueLock);
 #endif
 
+	/* wake up netif queue once it is in stopped state.*/
 	for (Index = 0; Index < NUM_OF_TX_RING; Index++)
 	{
-		NdisFreeSpinLock(&pktTokenCb->TxBlockLock);
+		RTMP_SEM_LOCK(&pktTokenCb->TxBlockLock[Index]);
+		while (1)
+		{
+			TxBlockDev = DlListFirst(&pktTokenCb->TxBlockDevList[Index], TX_BLOCK_DEV, list);
+
+			if (!TxBlockDev)
+				break;
+
+			DlListDel(&TxBlockDev->list);
+
+			RTMP_OS_NETDEV_WAKE_QUEUE(TxBlockDev->NetDev);
+			os_free_mem(TxBlockDev);
+		}
+		RTMP_SEM_UNLOCK(&pktTokenCb->TxBlockLock[Index]);
+		NdisFreeSpinLock(&pktTokenCb->TxBlockLock[Index]);
 	}
 
-    if (pktTokenCb != NULL)
-    {
-        os_free_mem((VOID *)pktTokenCb);
-        *ppPktTokenCb = NULL;
-        return FALSE;
-    }
-
-    return TRUE;
+	os_free_mem((VOID *)pktTokenCb);
+	*ppPktTokenCb = NULL;
+	return TRUE;
 }
-
 
 #ifdef CUT_THROUGH_DBG
 DECLARE_TIMER_FUNCTION(TokenHistoryExec);
@@ -1111,9 +1154,21 @@ INT cut_through_init(VOID **ppPktTokenCb, VOID *pAd)
 	NdisAllocateSpinLock(ad, &ad->FastPathTxFreeQueLock);
 	DlListInit(&ad->FastPathTxFreeQue);
 
-	RTMP_OS_TASKLET_INIT(ad, &ad->FastPathDequeTask, FastPathDequeBh, (unsigned long)ad);
-
 	ad->FastPathTxQueNum = 0;
+#ifdef CONFIG_TX_DELAY
+	ad->force_deq = FALSE;
+	ad->que_agg_en = FALSE;
+	ad->que_agg_timeout_value = QUE_AGG_TIMEOUT;
+	ad->min_pkt_len = MIN_AGG_PKT_LEN;
+	ad->max_pkt_len = MAX_AGG_PKT_LEN;
+	ad->tx_process_batch_cnt = TX_BATCH_CNT;
+	MtCmdCr4Set(pAd, CR4_SET_ID_CONFIG_TX_DELAY_MODE,
+			TX_DELAY_MODE_ARG1_TX_BATCH_CNT, ad->tx_process_batch_cnt);
+	MtCmdCr4Set(pAd, CR4_SET_ID_CONFIG_TX_DELAY_MODE,
+			TX_DELAY_MODE_ARG1_TX_DELAY_TIMEOUT_US, ad->que_agg_timeout_value);
+	MtCmdCr4Set(pAd, CR4_SET_ID_CONFIG_TX_DELAY_MODE,
+			TX_DELAY_MODE_ARG1_PKT_LENGTHS, ad->min_pkt_len);
+#endif
 	ad->FPTxElementFullNum = 0;
 	ad->MgmtQueNum = 0;
 	ad->FPTxElementFreeNum = 0;
@@ -1129,6 +1184,8 @@ INT cut_through_init(VOID **ppPktTokenCb, VOID *pAd)
 		{
 			MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_ERROR,
 						("can not allocate FPTxElement\n"));
+	
+			os_free_mem((VOID *)pktTokenCb);
 			return FALSE;
 		}
 
@@ -1153,8 +1210,8 @@ INT cut_through_init(VOID **ppPktTokenCb, VOID *pAd)
 
 	pktTokenCb->TxRingLowWaterMark = 5;
 	pktTokenCb->TxRingHighWaterMark = 5;
-	pktTokenCb->TxTokenLowWaterMark = 5;
-	pktTokenCb->TxTokenHighWaterMark = pktTokenCb->TxTokenLowWaterMark * 2;  
+	pktTokenCb->TxTokenLowWaterMark = 211;
+	pktTokenCb->TxTokenHighWaterMark = pktTokenCb->TxTokenLowWaterMark + 5;  
 	pktTokenCb->RxTokenLowWaterMark = 5;
 	pktTokenCb->RxTokenHighWaterMark = pktTokenCb->RxTokenLowWaterMark * 2;
 	pktTokenCb->RxFlowBlockState = 0;
@@ -1170,6 +1227,11 @@ INT cut_through_init(VOID **ppPktTokenCb, VOID *pAd)
 
 	pktTokenCb->TxRingFullCnt = 0;
 	pktTokenCb->TxTokenFullCnt = 0;
+
+#ifdef FAST_PATH_TXQ
+	RTMP_OS_TASKLET_INIT(ad, &ad->FastPathDequeTask, FastPathDequeBh, (unsigned long)ad);
+	ad->bFastPathTaskSchedulable = TRUE;
+#endif
 
 #ifdef CUT_THROUGH_DBG
 	pktTokenCb->TimeSlot = 0;

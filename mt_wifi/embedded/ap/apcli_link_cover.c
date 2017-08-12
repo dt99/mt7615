@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,6 +26,7 @@
 	--------	----------		----------------------------------------------
 	Fonchi		2006-06-23      modified for rt61-APClinent
 */
+#endif /* MTK_LICENSE */
 #ifdef APCLI_SUPPORT
 #ifdef APCLI_LINK_COVER_SUPPORT
 #include "rt_config.h"

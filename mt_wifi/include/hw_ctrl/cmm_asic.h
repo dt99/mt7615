@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #ifndef __ASIC_CTRL_H__
 #define __ASIC_CTRL_H__
@@ -48,11 +49,28 @@ struct _RX_BLK;
 #define MINIMUM_POWER_VALUE		       -127
 #define TX_STREAM_PATH		              4
 
+#ifdef NR_PD_DETECTION
+#define CHANNEL_BAND_2G                   0
+#define CHANNEL_BAND_5G                   1
+
+#define CMW_RSSI_SOURCE_BBP               0
+#define CMW_RSSI_SOURCE_WTBL              1
+#define CMW_DBDC_BAND0_MODE               0
+#define CMW_DBDC_BAND1_MODE               1
+#define CMW_MODE_DONT_CARE                0xFF
+
+#define CMW_RCPI_MA_1_1                   1
+#define CMW_RCPI_MA_1_2                   2
+#define CMW_RCPI_MA_1_4                   4
+#define CMW_RCPI_MA_1_8                   8
+#endif /* NR_PD_DETECTION */
 
 VOID AsicNotSupportFunc(struct _RTMP_ADAPTER *pAd, const RTMP_STRING *caller);
 
 
-VOID AsicUpdateRtsThld(struct _RTMP_ADAPTER *pAd, UINT32 PktNumThrd, UINT32 PpduLengthThrd);
+VOID AsicUpdateRtsThld(struct _RTMP_ADAPTER *pAd,
+		struct wifi_dev *wdev, UCHAR pkt_num, UINT32 length);
+
 VOID AsicUpdateProtect(
 	struct _RTMP_ADAPTER *pAd,
 	IN 		USHORT			OperaionMode,
@@ -78,6 +96,10 @@ INT AsicSetChannel(struct _RTMP_ADAPTER *pAd, UCHAR ch, UINT8 bw, UINT8 ext_ch, 
 INT AsicSetDevMac(struct _RTMP_ADAPTER *pAd, UCHAR *addr, UCHAR omac_idx);
 VOID AsicSetBssid(struct _RTMP_ADAPTER *pAd, UCHAR *pBssid, UCHAR curr_bssid_idx);
 VOID AsicDelWcidTab(struct _RTMP_ADAPTER *pAd, UCHAR Wcid);
+
+#ifdef HTC_DECRYPT_IOT
+VOID AsicSetWcidAAD_OM(struct _RTMP_ADAPTER *pAd, UCHAR Wcid , CHAR value);
+#endif /* HTC_DECRYPT_IOT */
 
 #ifdef MAC_APCLI_SUPPORT
 VOID AsicSetApCliBssid(struct _RTMP_ADAPTER *pAd, UCHAR *pBssid, UCHAR index);
@@ -113,8 +135,8 @@ VOID AsicSetSyncModeAndEnable(
 
 VOID AsicDisableSync(struct _RTMP_ADAPTER *pAd, UCHAR HWBssidIdx);
 
-VOID AsicDisableBcnSntReq(struct _RTMP_ADAPTER *pAd);
-VOID AsicEnableBcnSntReq(struct _RTMP_ADAPTER *pAd);
+VOID AsicDisableBcnSntReq(struct _RTMP_ADAPTER *pAd, struct wifi_dev *wdev);
+VOID AsicEnableBcnSntReq(struct _RTMP_ADAPTER *pAd, struct wifi_dev *wdev);
 
 
 UINT32 AsicGetWmmParam(struct _RTMP_ADAPTER *pAd, UINT32 ac, UINT32 type);
@@ -138,7 +160,7 @@ VOID AsicAddSharedKeyEntry(
 VOID AsicRemoveSharedKeyEntry(struct _RTMP_ADAPTER *pAd, UCHAR BssIdx, UCHAR KeyIdx);
 
 VOID AsicUpdateWCIDIVEIV(struct _RTMP_ADAPTER *pAd, USHORT WCID, ULONG uIV, ULONG uEIV);
-VOID AsicUpdateRxWCIDTable(struct _RTMP_ADAPTER *pAd, USHORT WCID, UCHAR *pAddr, BOOLEAN IsBCMCWCID);
+VOID AsicUpdateRxWCIDTable(struct _RTMP_ADAPTER *pAd, USHORT WCID, UCHAR *pAddr, BOOLEAN IsBCMCWCID, BOOLEAN IsReset);
 VOID AsicUpdateBASession(struct _RTMP_ADAPTER *pAd, UCHAR wcid, UCHAR tid, UINT16 sn, UCHAR basize, BOOLEAN isAdd, INT ses_type);
 UINT16 AsicGetTidSn(struct _RTMP_ADAPTER *pAd, UCHAR wcid, UCHAR tid);
 
@@ -187,6 +209,7 @@ INT32 AsicDevInfoUpdate(
 
 INT32 AsicStaRecUpdate(
 	struct _RTMP_ADAPTER *pAd,
+	struct wifi_dev *wdev,
 	UINT8 ucBssIndex,
 	UINT8 ucWlanIdx,
 	UINT32 ConnectionType,
@@ -236,7 +259,12 @@ INT32 AsicTxBfTxApplyCtrl(
 INT32 AsicTxBfApClientCluster(
 	struct _RTMP_ADAPTER *pAd,
     UCHAR                ucWlanId,
-    UCHAR                ucPfmuId);
+    UCHAR                ucCmmWlanId);
+
+INT32 AsicTxBfReptClonedStaToNormalSta(
+	RTMP_ADAPTER *pAd,
+    UCHAR   ucWlanId,
+    UCHAR   ucCliIdx);
 
 INT32 AsicTxBfHwEnStatusUpdate(
 	struct _RTMP_ADAPTER *pAd,
@@ -248,8 +276,11 @@ INT32 AsicTxBfHwEnStatusUpdate(
 
 INT32 AsicExtPwrMgtBitWifi(struct _RTMP_ADAPTER *pAd, UINT8 ucWlanIdx, UINT8 ucPwrMgtBit);
 INT32 AsicRadioOnOffCtrl(struct _RTMP_ADAPTER *pAd, UINT8 ucDbdcIdx, UINT8 ucRadio);
+#ifdef GREENAP_SUPPORT
+INT32 AsicGreenAPOnOffCtrl(struct _RTMP_ADAPTER *pAd, UINT8 ucDbdcIdx, BOOLEAN ucGreenAPOn);
+#endif /* GREENAP_SUPPORT */
 INT32 AsicExtPmStateCtrl(struct _RTMP_ADAPTER *pAd, struct _STA_ADMIN_CONFIG *pStaCfg, UINT8 ucPmNumber, UINT8 ucPmState);
-INT32 AsicExtWifiHifCtrl(struct _RTMP_ADAPTER *pAd, UINT8 PmStatCtrl, VOID *pResult);
+INT32 AsicExtWifiHifCtrl(struct _RTMP_ADAPTER *pAd, UINT8 ucDbdcIdx, UINT8 PmStatCtrl, VOID *pResult);
 
 INT32 AsicMccStart(struct _RTMP_ADAPTER *ad,
     UCHAR channel_1st,
@@ -422,6 +453,8 @@ BOOLEAN AsicMcastEntryDelete(struct _RTMP_ADAPTER *pAd, PUCHAR GrpAddr, UINT8 Bs
 
 VOID RssiUpdate(struct _RTMP_ADAPTER *pAd);
 
+INT AsicRtsOnOff(struct wifi_dev *wdev, BOOLEAN rts_en);
+INT AsicAmpduEfficiencyAdjust(struct wifi_dev *wdev, UCHAR	aifs_adjust);
 
 typedef struct _RTMP_ARCH_OP {
 	UINT32 (*archGetCrcErrCnt)(struct _RTMP_ADAPTER *pAd);
@@ -436,7 +469,7 @@ typedef struct _RTMP_ARCH_OP {
 	INT (*archSetAutoFallBack)(struct _RTMP_ADAPTER *pAd, BOOLEAN enable);
 	INT (*archAutoFallbackInit)(struct _RTMP_ADAPTER *pAd);
 	VOID (*archUpdateProtect)(struct _RTMP_ADAPTER *pAd, MT_PROTECT_CTRL_T *Protect);
-    VOID (*archUpdateRtsThld)(struct _RTMP_ADAPTER *pAd, MT_RTS_THRESHOLD_T *RtsThld);
+	VOID (*archUpdateRtsThld)(struct _RTMP_ADAPTER *pAd, struct wifi_dev *wdev, UCHAR pkt_thld, UINT32 len_thld);
 #ifdef DOT11_N_SUPPORT
 	INT (*archSetRDG)(struct _RTMP_ADAPTER *pAd, MT_RDG_CTRL_T *Rdg);
 #endif /* DOT11_N_SUPPORT */
@@ -463,6 +496,10 @@ typedef struct _RTMP_ARCH_OP {
 	INT32 (*archSetStaRec)(struct _RTMP_ADAPTER *pAd,STA_REC_CFG_T StaCfg);
 
 	VOID (*archDelWcidTab)(struct _RTMP_ADAPTER *pAd, UCHAR wcid_idx);
+
+#ifdef HTC_DECRYPT_IOT
+	VOID (*archSetWcidAAD_OM)(struct _RTMP_ADAPTER *pAd, UCHAR wcid_idx, UCHAR value);
+#endif /* HTC_DECRYPT_IOT */
 
 	VOID (*archAddRemoveKeyTab)(struct _RTMP_ADAPTER *pAd, struct _ASIC_SEC_INFO *pInfo);
 
@@ -505,8 +542,8 @@ typedef struct _RTMP_ARCH_OP {
             UCHAR HWBssidIdx,
             UCHAR OPMode);
 
-	VOID (*archDisableBcnSntReq)(struct _RTMP_ADAPTER *pAd);
-	VOID (*archEnableBcnSntReq)(struct _RTMP_ADAPTER *pAd);
+	VOID (*archDisableBcnSntReq)(struct _RTMP_ADAPTER *pAd, struct wifi_dev *wifiDev);
+	VOID (*archEnableBcnSntReq)(struct _RTMP_ADAPTER *pAd, struct wifi_dev *wifiDev);
 
 
 	INT (*archSetWmmParam)(struct _RTMP_ADAPTER *pAd,UCHAR idx, UINT ac, UINT type, UINT val);
@@ -559,6 +596,7 @@ typedef struct _RTMP_ARCH_OP {
 	INT (*archSetDbdcCtrl)(struct _RTMP_ADAPTER *pAd,struct _BCTRL_INFO_T *pBctrInfo);
 	INT (*archGetDbdcCtrl)(struct _RTMP_ADAPTER *pAd,struct _BCTRL_INFO_T *pBctrInfo);
 #endif
+	VOID (*archUpdateWtblVhtInfo)(struct _RTMP_ADAPTER *pAd, UCHAR wcid, struct _wtbl_vht_info *vht_info);
 
 VOID (*archUpdateBcnToAsicMethod)(struct _RTMP_ADAPTER *pAd, INT apidx, ULONG FrameLen, ULONG UpdatePos);
 
@@ -589,7 +627,19 @@ VOID (*archUpdateBcnToAsicMethod)(struct _RTMP_ADAPTER *pAd, INT apidx, ULONG Fr
 
 	BOOLEAN (*archMcastEntryDelete)(RTMP_ADAPTER *pAd, PUCHAR GrpAddr, UINT8 BssIdx, PUCHAR MemberAddr, PNET_DEV dev, UINT8 WlanIndex);
 #endif
+	INT (*asic_rts_on_off)(struct _RTMP_ADAPTER *ad, UCHAR band_idx, UINT32 rts_num, UINT32 rts_len, BOOLEAN rts_en);
+
+	INT (*asic_ampdu_efficiency_on_off)(struct _RTMP_ADAPTER *ad, UCHAR	wmm_idx, UCHAR aifs_adjust);
 }RTMP_ARCH_OP;
 
+#ifdef NR_PD_DETECTION
+VOID CMWRcpiSet(struct _RTMP_ADAPTER *pAd, UCHAR Wcid, UINT8 AntIdx, INT8 cRCPI);
+VOID NRPDDetectCtrl(struct _RTMP_ADAPTER *pAd);
+VOID NRTxDetecCtrl(struct _RTMP_ADAPTER *pAd);
+VOID NRPDACRCtrl(struct _RTMP_ADAPTER *pAd);
+VOID CMWLinkCtrl(struct _RTMP_ADAPTER *pAd);
+UINT8 CMWRSSICheck(RTMP_ADAPTER *pAd, INT8 *cRSSI, UCHAR ucRSSIThManual, UINT8 ucRSSISource, UINT8 ucMode);
+UINT8 CMWRSSIComp(RTMP_ADAPTER *pAd, INT8 *cRSSI, UCHAR ucRSSIThManual, UINT8 ucStart, UINT8 ucEnd);
+#endif /* NR_PD_DETECTION */
 
 #endif /* __ASIC_CTRL_H_ */

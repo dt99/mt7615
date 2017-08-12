@@ -17,7 +17,7 @@ VOID Start_MCC(RTMP_ADAPTER *pAd)
 	/*because Start_time will channel channel 2to channel 1 , we put GO in Channel 2*/
 	pAd->Mlme.bStartMcc = TRUE;
 
- 	pAd->Mlme.channel_1st_bw = pAd->StaCfg[0].wdev.bw;
+ 	pAd->Mlme.channel_1st_bw = wlan_operate_get_ht_bw(&pAd->StaCfg[0].wdev);
 	if (pAd->Mlme.channel_1st_bw == HT_BW_20)
 	{
 		pAd->Mlme.channel_1st_primary_ch = pAd->StaCfg[0].wdev.channel;
@@ -32,7 +32,7 @@ VOID Start_MCC(RTMP_ADAPTER *pAd)
 	if (RTMP_CFG80211_VIF_P2P_GO_ON(pAd))
 	{
 		p2p_wdev = &pMbss->wdev;			
-	 	pAd->Mlme.channel_2nd_bw = p2p_wdev->bw;
+	 	pAd->Mlme.channel_2nd_bw = wlan_operate_get_ht_bw(p2p_wdev);
 		if (pAd->Mlme.channel_2nd_bw == HT_BW_20)
 		{
 			pAd->Mlme.channel_2nd_primary_ch = p2p_wdev->channel;
@@ -48,7 +48,7 @@ VOID Start_MCC(RTMP_ADAPTER *pAd)
 	{
 
 		p2p_wdev = &pApCliEntry->wdev;
-	 	pAd->Mlme.channel_2nd_bw = p2p_wdev->bw;
+	 	pAd->Mlme.channel_2nd_bw = wlan_operate_get_ht_bw(p2p_wdev);
 		if (pAd->Mlme.channel_2nd_bw == HT_BW_20)
 		{
 			pAd->Mlme.channel_2nd_primary_ch = p2p_wdev->channel;
@@ -110,5 +110,4 @@ VOID Stop_MCC(RTMP_ADAPTER *pAd,INT channel)
 
 		printk("Stop_MCC swtich to channel %d \n",channel);
 		MtCmdMccStop(pAd, channel, 0, 0, 0); //park at p2p GO| CLI Cannel
-
 }

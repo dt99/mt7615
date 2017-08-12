@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -23,6 +24,7 @@
     Who          When          What
     ---------    ----------    ----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #define RTMP_MODULE_OS
 
 /*#include "rt_config.h" */
@@ -198,7 +200,8 @@ INT rt28xx_ap_ioctl(struct net_device *net_dev, struct ifreq *rq, int cmd)
 						break;
 					}
 				}
-				MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("IOCTL::SIOCGIWESSID (Len=%d, ssid=%s...)\n", erq->length, (char *)erq->pointer));
+				/* The below code tries to access user space buffer directly,
+				 * hence remove it . */
 			}
 			break;
 		case SIOCGIWNWID: /* get network id */
@@ -312,8 +315,8 @@ INT rt28xx_ap_ioctl(struct net_device *net_dev, struct ifreq *rq, int cmd)
 #ifdef HOSTAPD_SUPPORT
 		case SIOCSIWGENIE:
 			MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_TRACE,("ioctl SIOCSIWGENIE apidx=%d\n",apidx));
-			MTWF_LOG(DBG_CAT_CFG, DBG_SUBCAT_ALL, DBG_LVL_TRACE,("ioctl SIOCSIWGENIE length=%d, pointer=%x\n", wrqin->u.data.length, wrqin->u.data.pointer));
-
+			/* The below code tries to access user space buffer directly,
+			 * hence remove it . */
 			RTMP_AP_IoctlHandle(pAd, wrqin, CMD_RTPRIV_IOCTL_AP_SIOCSIWGENIE, 0, NULL, 0);
 			break;
 #endif /* HOSTAPD_SUPPORT */

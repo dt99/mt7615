@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #ifndef __WF_CFG_H__
 #define __WF_CFG_H__
@@ -41,6 +42,10 @@
 #define MACON_LOGRST_MASK       0x04
 #define MACON_LOGRST_EN         BIT2
 
+#define CFG_DBG_EN				(WF_CFG_BASE + 0x14)
+#define CFG_DBG_L1_MOD_SEL		(WF_CFG_BASE + 0x18)
+#define CFG_DBG0				(WF_CFG_BASE + 0x24)
+#define CFG_DBG_L1_SEL			(WF_CFG_BASE + 0x4c)
 
 #define CFG_DBDC_CTRL0			(WF_CFG_BASE + 0x50)
 #define CFG_DBDC_CTRL1			(WF_CFG_BASE + 0x54)

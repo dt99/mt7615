@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * 4F, No. 2 Technology 5th Rd.
@@ -17,7 +18,7 @@
 
 
  */
-
+#endif /* MTK_LICENSE */
 
 #ifndef __AUTOCHSELECT_CMM_H__
 #define __AUTOCHSELECT_CMM_H__
@@ -41,6 +42,10 @@ typedef struct {
 	ULONG ApCnt[MAX_NUM_OF_CHANNELS+1];
 	UINT32 FalseCCA[MAX_NUM_OF_CHANNELS+1];
     BOOLEAN SkipList[MAX_NUM_OF_CHANNELS+1];
+#ifdef CUSTOMER_DCC_FEATURE
+	UINT32	ChannelNo;
+	BOOLEAN GetChannelInfo;
+#endif
 //#ifdef AP_QLOAD_SUPPORT
 	UINT32 chanbusytime[MAX_NUM_OF_CHANNELS+1]; /* QLOAD ALARM */
 //#endif /* AP_QLOAD_SUPPORT */
@@ -96,22 +101,22 @@ typedef struct _AUTOCH_SEL_CH_LIST {
 } AUTOCH_SEL_CH_LIST, *PAUTOCH_SEL_CH_LIST;
 
 typedef struct _AUTOCH_SEL_CTRL{  
-    struct wifi_dev *p2GScanwdev;
-    struct wifi_dev *p5GScanwdev;
     struct wifi_dev *pScanReqwdev;
 	CHAR ScanChIdx;    
-	UCHAR					ChannelListNum2G;
-	UCHAR					ChannelListNum5G;
-	UCHAR					ChannelListNum;
-	UCHAR					IsABand;
+	UCHAR ChannelListNum2G;
+	UCHAR ChannelListNum5G;
+	UCHAR ChannelListNum;
+	UCHAR IsBuild2GCh;
+	UCHAR IsBuild5GCh;
+	UCHAR IsABand;
 	UCHAR PhyMode;
 	UINT32 AutoChannelFlag; /* Flag for auto-channel selection */
 	RALINK_TIMER_STRUCT AutoChScanTimer;
     STATE_MACHINE AutoChScanStatMachine;
     STATE_MACHINE_FUNC AutoChScanFunc[AUTO_CH_SEL_SCAN_FUNC_SIZE];
-	AUTOCH_SEL_CH_LIST		AutoChSel2GChList[MAX_NUM_OF_CHANNELS+1];	/* List all supported channels for auto-channel selection in G-band*/
-	AUTOCH_SEL_CH_LIST		AutoChSel5GChList[MAX_NUM_OF_CHANNELS+1];	/* List all supported channels for auto-channel selection in A-band*/ 
-	AUTOCH_SEL_CH_LIST		AutoChSelChList[MAX_NUM_OF_CHANNELS+1];
+	AUTOCH_SEL_CH_LIST AutoChSel2GChList[MAX_NUM_OF_CHANNELS+1];	/* List all supported channels for auto-channel selection in G-band*/
+	AUTOCH_SEL_CH_LIST AutoChSel5GChList[MAX_NUM_OF_CHANNELS+1];	/* List all supported channels for auto-channel selection in A-band*/ 
+	AUTOCH_SEL_CH_LIST AutoChSelChList[MAX_NUM_OF_CHANNELS+1];
 }AUTOCH_SEL_CTRL, *PAUTOCH_SEL_CTRL;
 
 #endif /* __AUTOCHSELECT_CMM_H__ */

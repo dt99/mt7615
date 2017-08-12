@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -28,14 +29,26 @@
 	Snowpin Lee 07-04-19        Do modifications and Add APIs for STA
 	Snowpin Lee 07-05-17        Do modifications and Add APIs for AP Client
 */
-
+#endif /* MTK_LICENSE */
 #include    "rt_config.h"
 
 #ifdef WSC_INCLUDED
+#ifdef VENDOR_FEATURE6_SUPPORT
+#ifdef WSC_LED_SUPPORT
+#include "rt_led.h"
+#endif /* WSC_LED_SUPPORT */
+#include "arris_wps_gpio_handler.h"
+#endif
 #include    "wsc_tlv.h"
 /*#ifdef LINUX */
 /*#include <net/iw_handler.h> */
 /*#endif*/
+#ifdef INTELP6_SUPPORT
+#ifdef MULTI_INF_SUPPORT
+#define FIRST_AP_PROFILE_PATH	"/tmp/mt76xx_24.dat"			//	"/tmp/mt76xx_24.dat"
+#define SECOND_AP_PROFILE_PATH	"/tmp/mt76xx_5.dat"			//	"/tmp/mt76xx_5.dat"
+#endif
+#endif
 
 #define WSC_UPNP_MSG_TIMEOUT			(150 * OS_HZ)
 #define RTMP_WSC_NLMSG_SIGNATURE_LEN	8
@@ -98,6 +111,11 @@ UINT8 WPS_DH_P_VALUE[192] =
 
 /* General used field */
 UCHAR	STA_Wsc_Pri_Dev_Type[8] = {0x00, 0x01, 0x00, 0x50, 0xf2, 0x04, 0x00, 0x01};
+
+#ifdef CON_WPS
+UUID_BSSID_CH_INFO      TmpInfo_2G;
+UUID_BSSID_CH_INFO      TmpInfo_5G;
+#endif /*CON_WPS Dung_Ru*/
 
 #ifdef CONFIG_AP_SUPPORT
 UCHAR	AP_Wsc_Pri_Dev_Type[8] = {0x00, 0x06, 0x00, 0x50, 0xf2, 0x04, 0x00, 0x01};
@@ -168,13 +186,30 @@ VOID ConWpsApCliMonitorTimeout(
         PRTMP_ADAPTER pAd = (PRTMP_ADAPTER)FunctionContext;
         PRTMP_ADAPTER pOpposAd , pActionAd;
         UINT actionBandIdx = 0;
+#ifdef MULTI_INF_SUPPORT			
         UINT nowBandIdx = multi_inf_get_idx(pAd);
         UINT opsBandIdx = !nowBandIdx;
+#else
+        UINT nowBandIdx = 0;
+#endif /* MULTI_INF_SUPPORT */
 
+	UCHAR index = BSS0;
+
+	pOpposAd=NULL;
+
+#ifdef MULTI_INF_SUPPORT	
         pOpposAd = (PRTMP_ADAPTER)adapt_list[opsBandIdx];
+	nowBandIdx = multi_inf_get_idx(pAd);
+#else
+        pOpposAd = NULL;
+#endif /* MULTI_INF_SUPPORT */
 
 	MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("%s: Interface %s\n", __FUNCTION__, pAd->net_dev->name));
 
+
+#ifdef MULTI_INF_SUPPORT	
+	if (pOpposAd)
+	{
         if (pOpposAd->ApCfg.ConWpsApCliStatus == TRUE)
         {
                 /* 2G/5G Band WPS Ready */                               
@@ -187,24 +222,45 @@ VOID ConWpsApCliMonitorTimeout(
         {
                 actionBandIdx = nowBandIdx;
 
-                /* Cancel the other band if onGoing */      
-                WscConWpsStop(pAd, TRUE, &pAd->ApCfg.ApCliTab[BSS0].WscControl);
+			if (pAd->ApCfg.ConWpsApCliMode == CON_WPS_APCLI_BAND_2G)	
+				WscStop(pAd, TRUE, &pAd->ApCfg.ApCliTab[BSS1].WscControl);
+			else if (pAd->ApCfg.ConWpsApCliMode == CON_WPS_APCLI_BAND_5G)	
+				WscStop(pAd, TRUE, &pAd->ApCfg.ApCliTab[BSS0].WscControl);			
         }
 
-	pActionAd = (PRTMP_ADAPTER)adapt_list[actionBandIdx];
+		
+	}
+        else
+#endif /* MULTI_INF_SUPPORT */			
+        {
+                actionBandIdx = nowBandIdx;
 
-        MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("%s: using %s interface to link (BandPolicy: %d, %s state: %d, %s state: %d )\n",
-                                                __FUNCTION__, pActionAd->net_dev->name, pAd->ApCfg.ConWpsApCliMode,
-                                                pAd->net_dev->name, pAd->ApCfg.ConWpsApCliStatus,
-                                                pOpposAd->net_dev->name, pOpposAd->ApCfg.ConWpsApCliStatus));
+                /* Cancel the other band if onGoing */      
+			if (pAd->ApCfg.ConWpsApCliMode == CON_WPS_APCLI_BAND_2G)	
+				WscStop(pAd, TRUE, &pAd->ApCfg.ApCliTab[BSS1].WscControl);
+			else if (pAd->ApCfg.ConWpsApCliMode == CON_WPS_APCLI_BAND_5G)	
+				WscStop(pAd, TRUE, &pAd->ApCfg.ApCliTab[BSS0].WscControl);	
+        }
+#ifdef MULTI_INF_SUPPORT	
+	pActionAd = (PRTMP_ADAPTER)adapt_list[actionBandIdx];
+#else
+	pActionAd =pAd;
+#endif /* MULTI_INF_SUPPORT */
 
 	{
-		UCHAR apidx = BSS0;
-		RTEnqueueInternalCmd(pActionAd, CMDTHREAD_APCLI_IF_DOWN, (VOID *)&apidx, sizeof(UCHAR));
-	}
-        pAd->conWscStatus = CON_WPS_STATUS_DISABLED;
 
+		for(index = 0; index < MAX_APCLI_NUM; index++)
+	{
+			RTEnqueueInternalCmd(pActionAd, CMDTHREAD_APCLI_IF_DOWN, (VOID *)&index, sizeof(UCHAR));
+
+		}
+	}
+	for(index = 0; index < MAX_APCLI_NUM; index++)
+        	pAd->ApCfg.ApCliTab[index].WscControl.conWscStatus = CON_WPS_STATUS_DISABLED;
+
+	if (pOpposAd)
 	pOpposAd->ApCfg.ConWpsApCliStatus = FALSE;
+
 	pAd->ApCfg.ConWpsApCliStatus = FALSE;
 }
 
@@ -277,7 +333,10 @@ INT WscGenerateUUID(
 	/* Get the current time. */
 	if (bUseCurrentTime)
 	{
-		NdisGetSystemUpTime((ULONG *)&uuid_time);
+		ULONG Now;
+		NdisGetSystemUpTime(&Now);
+
+		uuid_time = Now;
 	}
 	else
 		uuid_time = 2860; /*xtime.tv_sec; 	// Well, we fix this to make JumpStart  happy! */
@@ -377,6 +436,9 @@ VOID	WscInitClientTimers(
 #endif
 	WSC_TIMER_INIT(pAdapter, pWScControl, &pWScControl->WscScanTimer, pWScControl->WscScanTimerRunning, WscScanTimeOutAction);
 	WSC_TIMER_INIT(pAdapter, pWScControl, &pWScControl->WscProfileRetryTimer, pWScControl->WscProfileRetryTimerRunning, WscProfileRetryTimeout);  /* add by johnli, fix WPS test plan 5.1.1 */
+#ifdef CON_WPS
+        WSC_TIMER_INIT(pAdapter, pWScControl, &pWScControl->ConWscApcliScanDoneCheckTimer, pWScControl->ConWscApcliScanDoneCheckTimerRunning, WscScanDoneCheckTimeOutAction);
+#endif /*CON_WPS*/
 }
 
 /*
@@ -665,18 +727,23 @@ VOID WscEAPOLStartAction(
 #ifdef CON_WPS
 	{
         	PWSC_CTRL pApCliWpsCtrl = NULL;
-        	pApCliWpsCtrl = &pAd->ApCfg.ApCliTab[BSS0].WscControl;
 
+			if (CurOpMode == AP_MODE)
+		    {   
+		        if (pEntry->func_tb_idx < MAX_APCLI_NUM)
+				pApCliWpsCtrl = &pAd->ApCfg.ApCliTab[pEntry->func_tb_idx].WscControl;
+		        else
+        	pApCliWpsCtrl = &pAd->ApCfg.ApCliTab[BSS0].WscControl;
+		    }  
         	MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("CON_WPS: Stop the ApCli WPS, state [%d]\n", pApCliWpsCtrl->WscState));
 
-        	if ((pAd->conWscStatus != CON_WPS_STATUS_DISABLED) &&
+        	if ((pApCliWpsCtrl->conWscStatus != CON_WPS_STATUS_DISABLED) &&
                     (pApCliWpsCtrl->WscState != WSC_STATE_OFF))
         	{
                 	WscStop(pAd, TRUE, pApCliWpsCtrl);
                 	pApCliWpsCtrl->WscConfMode = WSC_DISABLE;
         		/* APCLI: For stop the other side of the band with WSC SM */
         		WscConWpsStop(pAd, TRUE, pApCliWpsCtrl);
-
         	}
 	}
 #endif /* CON_WPS */
@@ -973,6 +1040,11 @@ VOID WscEAPAction(
 				pWscControl->WscStatus = STATUS_WSC_PBC_SESSION_OVERLAP;
 				RTMPSendWirelessEvent(pAdapter, IW_WSC_PBC_SESSION_OVERLAP, NULL, (pWscControl->EntryIfIdx & 0x0F), 0);
 				MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, ("WscEAPAction: PBC Session Overlap!\n"));
+#ifdef VENDOR_FEATURE6_SUPPORT
+			    WscSendUPnPMessage(pAdapter, (pWscControl->EntryIfIdx & 0x0F), 
+									WSC_OPCODE_UPNP_CTRL, WSC_UPNP_DATA_SUB_PBC_OVERLAP, 
+									&pAdapter->ApCfg.MBSSID[pWscControl->EntryIfIdx& 0x0F].wdev.bssid[0], MAC_ADDR_LEN, 0, 0, &pAdapter->ApCfg.MBSSID[pWscControl->EntryIfIdx& 0x0F].wdev.bssid[0], AP_MODE);
+#endif /* VENDOR_FEATURE6_SUPPORT */
 			}
 			else
 #endif /* CONFIG_AP_SUPPORT */
@@ -1008,13 +1080,6 @@ VOID WscEAPAction(
 					pWscControl->bWscLastOne = TRUE;
 					if (CurOpMode == AP_MODE)
 						WscSendMessage(pAdapter, WSC_OPCODE_START, NULL, 0, pWscControl, AP_MODE, EAP_CODE_REQ);
-					else
-					{
-						if (ADHOC_ON(pAdapter) && (pWscControl->WscConfMode == WSC_REGISTRAR))
-							WscSendMessage(pAdapter, WSC_OPCODE_START, NULL, 0, pWscControl, STA_MODE, EAP_CODE_REQ);
-						else
-							WscSendMessage(pAdapter, WSC_OPCODE_START, NULL, 0, pWscControl, STA_MODE, EAP_CODE_RSP);
-					}
 				}
 			}
 		}
@@ -1083,27 +1148,37 @@ VOID WscEAPAction(
 				UCHAR if_idx = (pWscControl->EntryIfIdx & 0x0F);
 				pWscControl->WscConfMode = WSC_DISABLE;
 #ifdef CON_WPS
-                                /* ApCli: WPS Done notify the other side of band to stop */
-                                if (pAdapter->conWscStatus != CON_WPS_STATUS_DISABLED) 
+				if (pWscControl->conWscStatus != CON_WPS_STATUS_DISABLED)
 				{
 				   	if  (pAdapter->ApCfg.ConWpsApCliMode == CON_WPS_APCLI_BAND_AUTO)
                                 	{
+#ifdef MULTI_INF_SUPPORT	
+						PRTMP_ADAPTER pOpposAd = NULL;
+						UINT opposIfaceIdx = !multi_inf_get_idx(pAdapter);
+						pOpposAd = (PRTMP_ADAPTER)adapt_list[opposIfaceIdx];	
+#endif/* MULTI_INF_SUPPORT */
                                         	WscConWpsStop(pAdapter, TRUE, pWscControl);
-						pAdapter->conWscStatus = CON_WPS_STATUS_DISABLED;
-                                	}
-					else
-					{
+						pWscControl->conWscStatus = CON_WPS_STATUS_DISABLED;
+                                	} else {
+                                	
+						
+#ifdef MULTI_INF_SUPPORT	
 						BOOLEAN Cancelled;
 						PRTMP_ADAPTER pOpposAd, pActionAd;
 						UINT nowBandIdx, opposBandIdx;
+#endif/* MULTI_INF_SUPPORT */
 
+#ifdef MULTI_INF_SUPPORT	
 						nowBandIdx = multi_inf_get_idx(pAdapter);
-
 						opposBandIdx = !nowBandIdx;
 						pOpposAd = (PRTMP_ADAPTER)adapt_list[opposBandIdx];
+#endif /* MULTI_INF_SUPPORT */
 
 						pAdapter->ApCfg.ConWpsApCliStatus = TRUE;
 
+#ifdef MULTI_INF_SUPPORT						
+						if (pOpposAd)
+						{	
 						if (pOpposAd->ApCfg.ConWpsApCliStatus == TRUE)
 						{
 							MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("%s another Band WPS ready\n", pAdapter->net_dev->name));
@@ -1123,19 +1198,38 @@ VOID WscEAPAction(
 								ApCliIfDown(pActionAd);
 								pActionAd->ApCfg.ApCliTab[if_idx].Enable = TRUE;	
 							}
+							} else {
 
-							pAdapter->conWscStatus = CON_WPS_STATUS_DISABLED;
+								if (pAdapter->ApCfg.ConWpsApCliMode == CON_WPS_APCLI_BAND_2G)
+									pAdapter->ApCfg.ApCliTab[1].Enable = FALSE;
+								else
+									pAdapter->ApCfg.ApCliTab[0].Enable = FALSE;
+
+								ApCliIfDown(pAdapter);
+								RTMPSetTimer(&pAdapter->ApCfg.ConWpsApCliBandMonitorTimer, CON_WPS_APCLIENT_MONITOR_TIME);
+								pAdapter->ApCfg.ConWpsMonitorTimerRunning = TRUE;								
+							}
+
+						
+							pWscControl->conWscStatus = CON_WPS_STATUS_DISABLED;
+
 						}
 						else
+#endif /* MULTI_INF_SUPPORT */
 						{
-							MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("%s only Now Band WPS ready\n", pAdapter->net_dev->name));
-							//only Now Band WPS ready 
+
+								if (pAdapter->ApCfg.ConWpsApCliMode == CON_WPS_APCLI_BAND_2G)
+									pAdapter->ApCfg.ApCliTab[1].Enable = FALSE;
+								else
+									pAdapter->ApCfg.ApCliTab[0].Enable = FALSE;
+
+								ApCliIfDown(pAdapter);
 							RTMPSetTimer(&pAdapter->ApCfg.ConWpsApCliBandMonitorTimer, CON_WPS_APCLIENT_MONITOR_TIME);
 							pAdapter->ApCfg.ConWpsMonitorTimerRunning = TRUE;							
 						}
 					}
-					
 				}
+					
 #endif /* CON_WPS */
 
 				/* Bring apcli interface down first */
@@ -1258,11 +1352,11 @@ VOID WscEAPAction(
         BOOLEAN bNonceMatch = WscCheckNonce(pAdapter, Elem, FALSE, pWscControl);
 		BOOLEAN bGoWPS = FALSE;
 
-		if ((CurOpMode == AP_MODE) ||
-			((CurOpMode == STA_MODE) &&
-			 (pWscControl->bWscTrigger
-			  )))
+#ifdef CONFIG_AP_SUPPORT
+		if (CurOpMode == AP_MODE)
 			bGoWPS = TRUE;
+#endif /* CONFIG_AP_SUPPORT */		
+
 
 #ifdef CONFIG_AP_SUPPORT
 #ifdef WSC_V2_SUPPORT
@@ -1286,11 +1380,11 @@ VOID WscEAPAction(
 				if (CurOpMode == AP_MODE)
 				{
 					if (pWscControl->bWscTrigger == FALSE)
-				{
-					pWscControl->WscMode = 1;
-					WscGetConfWithoutTrigger(pAdapter, pWscControl, FALSE);
-				}
-					else
+					{
+						pWscControl->WscMode = 1;
+						WscGetConfWithoutTrigger(pAdapter, pWscControl, FALSE);
+					}
+					else if (!(pWscControl->EntryIfIdx & MIN_NET_DEVICE_FOR_APCLI))
 					{
 						WscBuildBeaconIE(pAdapter,
 										pWscControl->WscConfStatus,
@@ -1674,8 +1768,9 @@ VOID WscEapEnrolleeAction(
 	switch (MsgType)
 	{
 		case WSC_MSG_EAP_RSP_ID:
-			MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, ("WscEapEnrolleeAction : Rx Identity(ReComputePke=%d)\n", pWscControl->RegData.ReComputePke));
 		case WSC_MSG_EAP_REQ_START:
+			if (MsgType == WSC_MSG_EAP_RSP_ID)
+				MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, ("WscEapEnrolleeAction : Rx Identity(ReComputePke=%d)\n", pWscControl->RegData.ReComputePke));
 			if (MsgType == WSC_MSG_EAP_REQ_START)
 				MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, ("WscEapEnrolleeAction : Rx Wsc_Start(ReComputePke=%d)\n", pWscControl->RegData.ReComputePke));
 
@@ -1971,7 +2066,39 @@ VOID WscEapEnrolleeAction(
 					}
 #endif /* CONFIG_AP_SUPPORT */
 
+#ifdef VENDOR_FEATURE6_SUPPORT
+			WscSendUPnPMessage(pAdapter, (pWscControl->EntryIfIdx & 0x0F), 
+									WSC_OPCODE_UPNP_CTRL, WSC_UPNP_DATA_SUB_M8, 
+									&pAdapter->ApCfg.MBSSID[pWscControl->EntryIfIdx].wdev.bssid[0], MAC_ADDR_LEN, 0, 0, &pAdapter->ApCfg.MBSSID[pWscControl->EntryIfIdx& 0x0F].wdev.bssid[0], AP_MODE);
+#endif /* VENDOR_FEATURE6_SUPPORT */
+
 	 				RTMPSendWirelessEvent(pAdapter, IW_WSC_SEND_DONE, NULL, (pWscControl->EntryIfIdx & 0x0F), 0);
+#ifdef VENDOR_FEATURE6_SUPPORT
+					{
+						// Send the configuration made by external registrar
+						UCHAR newApConfig[136] = {0};
+						if (WMODE_CAP_5G(pAdapter->ApCfg.MBSSID[pWscControl->EntryIfIdx & 0x0F].wdev.PhyMode)) {
+							sprintf((char *) newApConfig, "bss=%d&ssid=%s&auth=%d&enc=%d&key=%s&upnp=%d",
+							  (pWscControl->EntryIfIdx & 0x0F) + WIFI_50_RADIO,
+							  pWscControl->WscProfile.Profile[0].SSID.Ssid,
+							  pWscControl->WscProfile.Profile[0].AuthType,   /* 1: open, 2: wpa-psk, 4: shared, 8:wpa, 0x10: wpa2, 0x20: wpa2-psk */
+							  pWscControl->WscProfile.Profile[0].EncrType,   /* 1: none, 2: wep, 4: tkip, 8: aes */
+							  pWscControl->WscProfile.Profile[0].Key,
+							  pWscControl->WscProfile.Profile[0].bFromUPnP); /* TRUE: This credential is from external UPnP registrar */
+						}
+						else {
+							sprintf((char *) newApConfig, "bss=%d&ssid=%s&auth=%d&enc=%d&key=%s&upnp=%d",
+							  (pWscControl->EntryIfIdx & 0x0F) + WIFI_24_RADIO,
+							  pWscControl->WscProfile.Profile[0].SSID.Ssid,
+							  pWscControl->WscProfile.Profile[0].AuthType,   /* 1: open, 2: wpa-psk, 4: shared, 8:wpa, 0x10: wpa2, 0x20: wpa2-psk */
+							  pWscControl->WscProfile.Profile[0].EncrType,   /* 1: none, 2: wep, 4: tkip, 8: aes */
+							  pWscControl->WscProfile.Profile[0].Key,
+							  pWscControl->WscProfile.Profile[0].bFromUPnP); /* TRUE: This credential is from external UPnP registrar */
+						}
+					  //RTMPSendWirelessEvent(pAdapter, IW_WSC_SEND_DONE, newApConfig, (pWscControl->EntryIfIdx & 0x0F), 0);
+					  ARRISMOD_CALL(arris_event_send_hook, ATOM_HOST, WLAN_EVENT, WPS_AP_CONFIGURED, newApConfig, strlen(newApConfig));
+					}
+#endif
 				}
 			}
 			break;
@@ -2599,17 +2726,28 @@ VOID WscEapRegistrarAction(
 					goto Fail;
 				else
 				{
-					if (
-#ifdef CONFIG_AP_SUPPORT
-						(CurOpMode == AP_MODE) ||
-#endif /* CONFIG_AP_SUPPORT */
-						(0))
+					if ((CurOpMode == AP_MODE) 
+						)
 					{
 						OpCode |= WSC_OPCODE_MSG;
 						DataLen = BuildMessageM8(pAdapter, pWscControl, WscData);
 						pWscControl->WscStatus = STATUS_WSC_EAP_M8_SENT;
 						/* Change the state to next one */
 						pWscControl->WscState = WSC_STATE_WAIT_DONE;
+#ifdef VENDOR_FEATURE6_SUPPORT
+						//Registrar case:
+						{
+							/* 
+								If APUT is Registra ,
+								send event to wscd / miniupnpd , to let it query crendential and sync to system's flash & GUI. 
+							*/
+
+								WscSendUPnPMessage(pAdapter, (pWscControl->EntryIfIdx & 0x0F), 
+														WSC_OPCODE_UPNP_CTRL, WSC_UPNP_DATA_SUB_WSC_DONE, 
+														&pAdapter->ApCfg.MBSSID[pWscControl->EntryIfIdx & 0x0F].wdev.bssid[0], MAC_ADDR_LEN, 0, 0, &pAdapter->ApCfg.MBSSID[pWscControl->EntryIfIdx & 0x0F].wdev.bssid[0], AP_MODE);		
+						}
+#endif /* VENDOR_FEATURE6_SUPPORT */
+
 		 				RTMPSendWirelessEvent(pAdapter, IW_WSC_SEND_M8, NULL, (pWscControl->EntryIfIdx & 0x0F), 0);
 #ifdef CONFIG_AP_SUPPORT
 #ifdef WSC_V2_SUPPORT
@@ -2648,12 +2786,12 @@ VOID WscEapRegistrarAction(
 					pWscControl->WscStatus = STATUS_WSC_CONFIGURED;
 
 #ifdef CON_WPS
-                                        /* AP: stop the other side of band */
-                                        if (pAdapter->conWscStatus != CON_WPS_STATUS_DISABLED)
+	                                        /* AP: stop the other side of band */
+                                        if (pWscControl->conWscStatus != CON_WPS_STATUS_DISABLED)
                                         {
                                                 WscConWpsStop(pAdapter, FALSE, pWscControl);
-                                                pAdapter->conWscStatus = CON_WPS_STATUS_DISABLED;
-                                        }
+                                                pWscControl->conWscStatus = CON_WPS_STATUS_DISABLED;
+                                        }	
 #endif /* CON_WPS */
 
 				}
@@ -2662,6 +2800,18 @@ VOID WscEapRegistrarAction(
 
 				pWscControl->WscState = WSC_STATE_CONFIGURED;
 				RTMPSendWirelessEvent(pAdapter, IW_WSC_STATUS_SUCCESS, NULL, (pWscControl->EntryIfIdx & 0x0F), 0);
+#ifdef VENDOR_FEATURE6_SUPPORT
+				{
+					UCHAR wsc_done_event_msg[128] = {0};
+
+					if (WMODE_CAP_5G(pAdapter->ApCfg.MBSSID[pWscControl->EntryIfIdx & 0x0F].wdev.PhyMode))
+						sprintf((char *)wsc_done_event_msg, "WSC Done for Bss(%d)", (pWscControl->EntryIfIdx & 0x0F) + WIFI_50_RADIO);
+					else
+						sprintf((char *)wsc_done_event_msg, "WSC Done for Bss(%d)", (pWscControl->EntryIfIdx & 0x0F) + WIFI_24_RADIO);
+
+					ARRISMOD_CALL(arris_event_send_hook, ATOM_HOST, WLAN_EVENT, WPS_AP_CONFIGURED, wsc_done_event_msg, strlen(wsc_done_event_msg));
+				}
+#endif
 				pWscControl->EapMsgRunning = FALSE;
 			}
 			break;
@@ -2966,11 +3116,18 @@ VOID WscTimeOutProcess(
 									&pWscControl->WscProfile.Profile[0],
 									FALSE);
 			{
-			    /*
-			        Using CMD thread to prevent in-band command failed.
-			        @20150710
-			    */
-                RTEnqueueInternalCmd(pAd, CMDTHREAD_AP_RESTART, NULL, 0);
+				UCHAR RfIC;
+				BSS_STRUCT *pMbss = NULL;
+
+				pMbss = &pAd->ApCfg.MBSSID[pWscControl->EntryIfIdx & 0x0F];
+				RfIC = wmode_2_rfic(pMbss->wdev.PhyMode);				
+				/*
+					Using CMD thread to prevent in-band command failed.
+					@20150710
+					Need to add RfIC to do ApStop/ApStart.
+					@20160321
+				*/
+				RTEnqueueInternalCmd(pAd, CMDTHREAD_AP_RESTART, &RfIC, sizeof(UCHAR));
 			}
 
 /*#ifdef KTHREAD_SUPPORT */
@@ -3395,10 +3552,10 @@ VOID Wsc2MinsTimeOutAction(
 		}
 #ifdef CONFIG_AP_SUPPORT
 #ifdef CON_WPS
-                if (pAd->conWscStatus != CON_WPS_STATUS_DISABLED)
+                if (pWscControl->conWscStatus != CON_WPS_STATUS_DISABLED)
                 {
                         MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("CON_WPS: Reset the status to default.\n"));
-                        pAd->conWscStatus = CON_WPS_STATUS_DISABLED;
+                        pWscControl->conWscStatus = CON_WPS_STATUS_DISABLED;
                 }
 #endif /* CON_WPS */
 
@@ -3452,6 +3609,14 @@ VOID Wsc2MinsTimeOutAction(
 
 			RTMPSendWirelessEvent(pAd, IW_WSC_2MINS_TIMEOUT, NULL, (pWscControl->EntryIfIdx & 0x0F), 0);
 
+#ifdef VENDOR_FEATURE6_SUPPORT
+#ifdef CONFIG_AP_SUPPORT
+	            WscSendUPnPMessage(pAd, (pWscControl->EntryIfIdx & 0x0F), 
+	                WSC_OPCODE_UPNP_CTRL, WSC_UPNP_DATA_SUB_WSC_TIMEOUT, 
+	            &pAd->ApCfg.MBSSID[pWscControl->EntryIfIdx& 0x0F].wdev.bssid[0], MAC_ADDR_LEN, 0, 0, &pAd->ApCfg.MBSSID[pWscControl->EntryIfIdx& 0x0F].wdev.bssid[0], AP_MODE);
+#endif /* CONFIG_AP_SUPPORT */
+#endif /* VENDOR_FEATURE6_SUPPORT */
+
 			if (pWscControl->WscScanTimerRunning)
 			{
 				pWscControl->WscScanTimerRunning = FALSE;
@@ -3470,7 +3635,11 @@ VOID Wsc2MinsTimeOutAction(
 #ifdef WSC_LED_SUPPORT
 		/* if link is up, there shall be nothing wrong */
 		/* perhaps we will set another flag to do it */
+#ifdef VENDOR_FEATURE6_SUPPORT
+		if ( /*(STA_STATUS_TEST_FLAG(pStaCfg, fSTA_STATUS_MEDIA_STATE_CONNECTED)) && */
+#else
 		if ((STA_STATUS_TEST_FLAG(pStaCfg, fSTA_STATUS_MEDIA_STATE_CONNECTED)) &&
+#endif
 			(pWscControl->WscState == WSC_STATE_OFF) &&
 			(pWscControl->WscStatus == STATUS_WSC_CONFIGURED))
 		{
@@ -3742,9 +3911,18 @@ VOID WscInitRegistrarPair(RTMP_ADAPTER *pAd, WSC_CTRL *pWscControl, UCHAR apidx)
 	if (CurOpMode == AP_MODE)
 	{
 		if (!RTMP_TEST_FLAG(pWscControl, 0x04)) {
+#ifdef VENDOR_FEATURE6_SUPPORT
+			if (pWscControl->WscConfStatus == WSC_SCSTATE_UNCONFIGURED)
+				NdisMoveMemory(&pWscControl->RegData.SelfInfo.DeviceName, AP_WSC_DEVICE_NAME_OOB, sizeof(AP_WSC_DEVICE_NAME_OOB));  // ARRIS MODIFY
+			else if (WMODE_CAP_5G(wdev->PhyMode))
+				NdisMoveMemory(&pWscControl->RegData.SelfInfo.DeviceName, AP_WSC_DEVICE_NAME_5G, sizeof(AP_WSC_DEVICE_NAME_5G));  // ARRIS MODIFY
+			else if (WMODE_CAP_2G(wdev->PhyMode))
+				NdisMoveMemory(&pWscControl->RegData.SelfInfo.DeviceName, AP_WSC_DEVICE_NAME_2G, sizeof(AP_WSC_DEVICE_NAME_2G));  // ARRIS MODIFY
+#else
 			NdisZeroMemory(&pWscControl->RegData.SelfInfo.DeviceName[0], 
 					sizeof(pWscControl->RegData.SelfInfo.DeviceName));
-			sprintf(&pWscControl->RegData.SelfInfo.DeviceName[0], "%s_%d", AP_WSC_DEVICE_NAME, apidx);
+			snprintf(&pWscControl->RegData.SelfInfo.DeviceName[0], sizeof(pWscControl->RegData.SelfInfo.DeviceName), "%s_%d", AP_WSC_DEVICE_NAME, apidx);
+#endif
 		}
 	}
 #endif /* CONFIG_AP_SUPPORT */
@@ -4080,10 +4258,14 @@ VOID WscSendEapRspId(
 #ifdef APCLI_SUPPORT
 	if (CurOpMode == AP_MODE)
 	{
-		MAKE_802_3_HEADER(Header802_3,
+		UCHAR apidx = (pWscControl->EntryIfIdx & 0x0F);
+		if(apidx < MAX_APCLI_NUM)
+		{
+		    MAKE_802_3_HEADER(Header802_3,
 						  &pEntry->Addr[0],
-						  &pAdapter->ApCfg.ApCliTab[0].wdev.if_addr[0],
+						  &pAdapter->ApCfg.ApCliTab[apidx].wdev.if_addr[0],
 						  EAPOL);
+		}
 		Length = sizeof(EAP_FRAME) + sizeof(enrIdentity) - 1;
 		pWscControl->WscConfMode = WSC_ENROLLEE; /* Ap Client only support Enrollee now. 20070518 */
 	}
@@ -4219,14 +4401,17 @@ int WscSendUPnPConfReqMsg(
 	IN UINT   eventID,
 	IN UCHAR  CurOpMode)
 {
-	UCHAR pData[39] = {0};
+
+#define WSC_JOIN_MSG_LEN (MAX_LEN_OF_SSID + MAC_ADDR_LEN + 1)
+
+	UCHAR pData[WSC_JOIN_MSG_LEN] = {0};
 
 
-	strncpy((RTMP_STRING *) pData, (RTMP_STRING *)ssidStr, strlen((RTMP_STRING *) ssidStr));
-	NdisMoveMemory(&pData[32], macAddr, MAC_ADDR_LEN);
-	pData[38] = Status;
+	strncpy((RTMP_STRING *) pData, (RTMP_STRING *)ssidStr, MAX_LEN_OF_SSID);
+	NdisMoveMemory(&pData[MAX_LEN_OF_SSID], macAddr, MAC_ADDR_LEN);
+	pData[MAX_LEN_OF_SSID+MAC_ADDR_LEN] = Status;
 	WscSendUPnPMessage(pAd, apIdx, WSC_OPCODE_UPNP_MGMT, WSC_UPNP_MGMT_SUB_CONFIG_REQ,
-							&pData[0], 39, eventID, 0, NULL, CurOpMode);
+							&pData[0], WSC_JOIN_MSG_LEN, eventID, 0, NULL, CurOpMode);
 
 	return 0;
 }
@@ -4458,13 +4643,15 @@ VOID	WscSendMessage(
                 if (bssIdx < HW_BEACON_MAX_NUM)
                 {  
 				    MAKE_802_3_HEADER(Header802_3, &pWscControl->EntryAddr[0], &pAdapter->ApCfg.MBSSID[bssIdx].wdev.bssid[0], EAPOL);
-
                 }
             }    
 #ifdef APCLI_SUPPORT
 	        else if (OpMode == AP_CLIENT_MODE)
 	        {
-				MAKE_802_3_HEADER(Header802_3, &pWscControl->EntryAddr[0], &pAdapter->ApCfg.ApCliTab[0].wdev.if_addr[0], EAPOL);
+	            if(bssIdx < MAX_APCLI_NUM)
+                    {
+				MAKE_802_3_HEADER(Header802_3, &pWscControl->EntryAddr[0], &pAdapter->ApCfg.ApCliTab[bssIdx].wdev.if_addr[0], EAPOL);
+	            }
 	        }
 #endif /* APCLI_SUPPORT */
 	}
@@ -4614,11 +4801,8 @@ VOID WscBuildBeaconIE(
 #ifdef CONFIG_AP_SUPPORT
 	if (CurOpMode == AP_MODE)
 	{
-        if ((apidx & 0x0F) < HW_BEACON_MAX_NUM)
-        {  
-    		pWpsCtrl = &pAd->ApCfg.MBSSID[apidx & 0x0F].WscControl;
-    		wdev = &pAd->ApCfg.MBSSID[apidx & 0x0F].wdev;
-        }    
+		pWpsCtrl = &pAd->ApCfg.MBSSID[apidx & 0x0F].WscControl;
+		wdev = &pAd->ApCfg.MBSSID[apidx & 0x0F].wdev;
 	}
 #endif /* CONFIG_AP_SUPPORT */
 
@@ -4627,6 +4811,7 @@ VOID WscBuildBeaconIE(
     {
         MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_ERROR, 
             ("%s: pWpsCtrl or wdev is NULL!!!\n", __FUNCTION__));
+		os_free_mem(Data);
         return;
     }
 
@@ -4691,6 +4876,7 @@ VOID WscBuildBeaconIE(
 	Len   += templen;
 
 	/* 7. RF Bands */
+#ifdef CONFIG_AP_SUPPORT	
 	if (CurOpMode == AP_MODE)
 	{
 		if (wdev && WMODE_CAP_5G(wdev->PhyMode))
@@ -4698,13 +4884,8 @@ VOID WscBuildBeaconIE(
 		else
 			tempVal = 1;
 	}
-	else
-	{
-		if (wdev && wdev->PhyMode > 14)
-			tempVal = 2;
-		else
-			tempVal = 1;
-	}
+#endif /* CONFIG_AP_SUPPORT */	
+
 
 #ifdef RT_BIG_ENDIAN
 	tempVal =SWAP16(tempVal);
@@ -4801,6 +4982,7 @@ VOID WscBuildProbeRespIE(
     {
 		MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_ERROR, 
                 ("%s: Wdev is NULL!!!\n", __FUNCTION__));
+		os_free_mem(Data);
 		return;
 	}
 
@@ -4929,6 +5111,7 @@ VOID WscBuildProbeRespIE(
 
 
 	/* 15. RF Bands */
+#ifdef CONFIG_AP_SUPPORT	
 	if (CurOpMode == AP_MODE)
 	{
 		if (WMODE_CAP_5G(wdev->PhyMode))
@@ -4936,13 +5119,9 @@ VOID WscBuildProbeRespIE(
 		else
 			tempVal = 1;
 	}
-	else
-	{
-		if (wdev->channel > 14)
-			tempVal = 2;
-		else
-			tempVal = 1;
-	}
+#endif /* CONFIG_AP_SUPPORT */
+
+
 #ifdef RT_BIG_ENDIAN
 	tempVal =SWAP16(tempVal);
 #endif /* RT_BIG_ENDIAN */
@@ -5238,7 +5417,9 @@ VOID WscSelectedRegistrar(
 					/*
 						Find WFA_EXT_ID_AUTHORIZEDMACS
 					*/
-					os_alloc_mem(NULL, &pAuthorizedMACs, WscLen);
+
+					if (!pAuthorizedMACs)
+						os_alloc_mem(NULL, &pAuthorizedMACs, WscLen);
 					if (!pAuthorizedMACs)
 					{
 					    MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, 
@@ -5337,6 +5518,7 @@ VOID WscSelectedRegistrar(
 VOID WscBuildProbeReqIE(
 	IN	PRTMP_ADAPTER	pAd,
 	IN  UCHAR			CurOpMode,
+	IN  USHORT			ifIndex,
 	OUT	PUCHAR			pOutBuf,
 	OUT	PUCHAR			pIeLen)
 {
@@ -5349,7 +5531,7 @@ VOID WscBuildProbeReqIE(
 	USHORT          tempVal = 0;
 
 #ifdef APCLI_SUPPORT
-	PWSC_REG_DATA	pReg = (PWSC_REG_DATA)&pAd->ApCfg.ApCliTab[0].WscControl.RegData;
+	PWSC_REG_DATA	pReg = (PWSC_REG_DATA)&pAd->ApCfg.ApCliTab[ifIndex].WscControl.RegData;
 #else /* APCLI_SUPPORT */
 	PWSC_REG_DATA	pReg = (PWSC_REG_DATA) &pAd->StaCfg[0].WscControl.RegData;
 #endif /* !APCLI_SUPPORT */
@@ -5679,14 +5861,6 @@ VOID WscProfileRetryTimeout(
 		}
 #endif /* APCLI_SUPPORT */
 #endif /* CONFIG_AP_SUPPORT */
-
-		if ((CurOpMode == STA_MODE) 
-		&& (pAdapter->IndicateMediaState == NdisMediaStateConnected))
-		{
-			pWscControl->WscProfileRetryTimerRunning = FALSE;
-			bReConnect = FALSE;
-		}
-
 		if (bReConnect)
 		{
 			if (pWscControl->WscProfile.ApplyProfileIdx < pWscControl->WscProfile.ProfileCnt-1)
@@ -5736,7 +5910,11 @@ VOID WscPBCTimeOutAction(
 
 	if (pWscControl != NULL)
 		pAd = pWscControl->pAd;
-
+#ifdef CON_WPS
+#ifdef MULTI_INF_SUPPORT
+        MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("[IfaceIdx = %d] WscPBCTimeOutAction !!!\n", multi_inf_get_idx(pAd)));
+#endif /* MULTI_INF_SUPPORT */
+#endif  /*CON_WPS*/
 	if (pAd != NULL)
 	{
 
@@ -5826,15 +6004,25 @@ VOID WscScanTimeOutAction(
 		WscScanExec(pAd, pWscControl);
 
 		/* register 10 second timer for PBC or PIN connection execution */
-		if (pWscControl->WscMode == WSC_PBC_MODE)
-		{
-		    /* Prevent infinite loop if conncet time out didn't stop the repeat scan */
-			if (pWscControl->WscState != WSC_STATE_OFF)
-	        {
-			    RTMPSetTimer(&pWscControl->WscPBCTimer, 10000);
-	            pWscControl->WscPBCTimerRunning = TRUE;
-	        }
-		}
+        if (pWscControl->WscMode == WSC_PBC_MODE)
+        {
+            /* Prevent infinite loop if conncet time out didn't stop the repeat scan */
+            if (pWscControl->WscState != WSC_STATE_OFF)
+            {
+#ifdef CON_WPS /*Move to scan complete to trigger //Dung_Ru*/
+                if (pWscControl->conWscStatus == CON_WPS_STATUS_DISABLED)
+#endif /* CON_WPS */ 
+                {
+#ifdef APCLI_SUPPORT
+                    if(pWscControl->WscApCliScanMode != TRIGGER_PARTIAL_SCAN)
+#endif /* APCLI_SUPPORT */
+                    {
+                        RTMPSetTimer(&pWscControl->WscPBCTimer, 10000);
+                        pWscControl->WscPBCTimerRunning = TRUE;
+                    }
+                }
+            }
+        }
 		else if (pWscControl->WscMode == WSC_PIN_MODE)
 		{
 	        /* Prevent infinite loop if conncet time out didn't stop the repeat scan */
@@ -5853,6 +6041,52 @@ VOID WscScanTimeOutAction(
 		RTMP_MLME_HANDLER(pAd);
 	}
 }
+
+
+#ifdef CON_WPS
+extern VOID APMlmeScanCompleteAction(PRTMP_ADAPTER pAd, MLME_QUEUE_ELEM *Elem);
+VOID WscScanDoneCheckTimeOutAction(
+    IN PVOID SystemSpecific1,
+    IN PVOID FunctionContext,
+    IN PVOID SystemSpecific2,
+    IN PVOID SystemSpecific3)
+{
+  PWSC_CTRL       pWscControl = (PWSC_CTRL)FunctionContext;
+        RTMP_ADAPTER    *pAd = NULL;
+    BOOLEAN         Cancelled;
+	UCHAR if_idx =0;
+	struct wifi_dev *wdev;
+
+    MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("-----> WscScanDoneCheckTimeOutAction\n"));
+
+        if (pWscControl != NULL)
+        {
+                pAd = pWscControl->pAd;
+		if_idx = (pWscControl->EntryIfIdx & 0x0F);
+        }
+
+#ifdef MULTI_INF_SUPPORT
+        MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("[IfaceIdx = %d] WscScanDoneCheckTimeOutAction !!!\n", multi_inf_get_idx(pAd)));
+ #endif /* MULTI_INF_SUPPORT */
+ 
+        if (pAd != NULL)
+        {
+                pWscControl->ConWscApcliScanDoneCheckTimerRunning = FALSE;
+                RTMPCancelTimer(&pWscControl->ConWscApcliScanDoneCheckTimer, &Cancelled);
+                /* call Mlme handler to execute it */
+		if(if_idx < MAX_APCLI_NUM)
+		{
+			wdev=&(pAd->ApCfg.ApCliTab[if_idx].wdev);
+                	MlmeEnqueue(pAd, AP_SYNC_STATE_MACHINE, APMT2_MLME_SCAN_COMPLETE, 0, NULL, if_idx);
+                	RTMP_MLME_HANDLER(pAd);			
+		} else {
+                APMlmeScanCompleteAction(pAd, NULL);
+                RTMP_MLME_HANDLER(pAd);
+        }
+        }
+    MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("<----- WscScanDoneCheckTimeOutAction\n"));
+}
+#endif /*CON_WPS*/
 
 BOOLEAN ValidateChecksum(
 	IN UINT PIN)
@@ -6054,6 +6288,22 @@ VOID WscStop(
 		pWscControl->WscPBCTimerRunning = FALSE;
 		RTMPCancelTimer(&pWscControl->WscPBCTimer, &Cancelled);
 	}
+#ifdef CON_WPS
+	if (bFromApCli && (pWscControl->EntryIfIdx & 0x0F) < MAX_APCLI_NUM)
+	{
+	        pAd->ApCfg.ApCliTab[(pWscControl->EntryIfIdx & 0x0F)].ConWpsApCliModeScanDoneStatus = CON_WPS_APCLI_SCANDONE_STATUS_NOTRIGGER;
+        if (pWscControl->ConWscApcliScanDoneCheckTimerRunning)
+        {
+                pWscControl->ConWscApcliScanDoneCheckTimerRunning = FALSE;
+                RTMPCancelTimer(&pWscControl->ConWscApcliScanDoneCheckTimer, &Cancelled);
+        }
+	}  else {
+	        if (pWscControl->ConWscApcliScanDoneCheckTimerRunning)
+	        {
+	                pWscControl->ConWscApcliScanDoneCheckTimerRunning = FALSE;
+	                RTMPCancelTimer(&pWscControl->ConWscApcliScanDoneCheckTimer, &Cancelled);
+	        }	}
+#endif /*CON_WPS*/
 
 
 #ifdef WSC_LED_SUPPORT
@@ -6082,7 +6332,6 @@ VOID WscConWpsStop(
         IN  PWSC_CTRL       pWscControl)
 {
 
-        UCHAR   apidx = (pWscControl->EntryIfIdx & 0x0F);
 
 #ifdef MULTI_INF_SUPPORT
         /* Single Driver ctrl the WSC SM between the two pAd */
@@ -6092,8 +6341,9 @@ VOID WscConWpsStop(
         UCHAR pAdListInfo[2] = {0, 0};
         INT myBandIdx = 0, opsBandIdx = 0;
 	INT nowBandIdx = multi_inf_get_idx(pAd);
+	UCHAR loop;
 
-	if (pAd->conWscStatus == CON_WPS_STATUS_DISABLED)
+	if (pWscControl->conWscStatus == CON_WPS_STATUS_DISABLED)
                 return;
 
         /* Update the Global pAd List Band Info */
@@ -6128,51 +6378,85 @@ VOID WscConWpsStop(
 
         if (bFromApCli)
         {
-                pWpsCtrl = &pOpposAd->ApCfg.ApCliTab[BSS0].WscControl;
+        	if (pOpposAd)
+        	{
+	        	for (loop = 0; loop < pOpposAd->ApCfg.ApCliNum; loop++)
+	        	{
+	        					                pWpsCtrl = &pOpposAd->ApCfg.ApCliTab[loop].WscControl;
                 MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("CON_WPS: Stop the Band[%d] %s ApCli WPS, state [%d]\n",
-                                                        opsBandIdx, pOpposAd->net_dev->name, pWpsCtrl->WscState));
+		                                                        opsBandIdx, pWpsCtrl->IfName, pWpsCtrl->WscState));
         	if (pWpsCtrl->WscState != WSC_STATE_OFF)
         	{
                 	WscStop(pOpposAd, TRUE, pWpsCtrl);
                 	pWpsCtrl->WscConfMode = WSC_DISABLE;
         	}
         }
+        	}
+
+		for (loop = 0; loop < pAd->ApCfg.ApCliNum; loop++)
+		{
+			if ((pWscControl->EntryIfIdx & 0x0F) == loop)
+				continue;
+			
+
+		                pWpsCtrl = &pAd->ApCfg.ApCliTab[loop].WscControl;
+
+		        	if (pWpsCtrl->WscState != WSC_STATE_OFF)
+		        	{
+		        		MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("CON_WPS: Stop the current pAd apcli [%d]\n",
+			                                                        loop));
+		                	WscStop(pAd, TRUE, pWpsCtrl);
+		                	pWpsCtrl->WscConfMode = WSC_DISABLE;
+	        		}
+		
+		}
+
+			
+        }
         else
         {
-		struct wifi_dev *wdev = &pOpposAd->ApCfg.MBSSID[apidx].wdev; 
-        	pWpsCtrl = &pOpposAd->ApCfg.MBSSID[apidx].WscControl;
+
+		if (pOpposAd != NULL)
+		{
+
+        	for(loop=0; loop<HW_BEACON_MAX_NUM; loop++)
+        	{
+			struct wifi_dev *wdev = &pOpposAd->ApCfg.MBSSID[loop].wdev; 
+	        	pWpsCtrl = &pOpposAd->ApCfg.MBSSID[loop].WscControl;
         	IsAPConfigured = pWpsCtrl->WscConfStatus;
 
-        	if ((pWpsCtrl->WscConfMode != WSC_DISABLE) &&
+	        	if ((wdev) &&
+				(pWpsCtrl->WscConfMode != WSC_DISABLE) &&
              		(pWpsCtrl->bWscTrigger == TRUE))
         	{
                 	MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("CON_WPS[%d]: Stop the %s AP Wsc Machine\n", opsBandIdx, pOpposAd->net_dev->name));
-                	WscBuildBeaconIE(pOpposAd, IsAPConfigured, FALSE, 0, 0, apidx, NULL, 0, AP_MODE);
+	                	WscBuildBeaconIE(pOpposAd, IsAPConfigured, FALSE, 0, 0, loop, NULL, 0, AP_MODE);
                 	WscBuildProbeRespIE(pOpposAd, WSC_MSGTYPE_AP_WLAN_MGR, IsAPConfigured, FALSE, 0, 0,
-                                                                          apidx, NULL, 0, AP_MODE);
+	                                                                          loop, NULL, 0, AP_MODE);
 			UpdateBeaconHandler(pOpposAd, wdev, IE_CHANGE);
                 	WscStop(pOpposAd, FALSE, pWpsCtrl);
         	}
         }
-#else
-        /* Separate Driver used to MiniUpnpd to comunicate each other. */
-        PWSC_UPNP_CTRL_WSC_BAND_STOP pWscUpnpBandStop;
+		}else {
+	        	for(loop=0; loop<HW_BEACON_MAX_NUM; loop++)
+	        	{
+				struct wifi_dev *wdev = &pAd->ApCfg.MBSSID[loop].wdev; 
+		        	pWpsCtrl = &pAd->ApCfg.MBSSID[loop].WscControl;
+	        		IsAPConfigured = pWpsCtrl->WscConfStatus;
 
-        os_alloc_mem(NULL, (UCHAR **)&pWscUpnpBandStop, sizeof(WSC_UPNP_CTRL_WSC_BAND_STOP));
-
-        if (pWscUpnpBandStop != NULL)
-        {
-                NdisCopyMemory(pWscUpnpBandStop->ifName, pAd->net_dev->name, IFNAMSIZ);
-                pWscUpnpBandStop->is2gBand = !RFIC_IS_5G_BAND(pAd);
-                pWscUpnpBandStop->isApCli = bFromApCli;
-
-                MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, ("CON_WPS: WSC_UPNP_CTRL_WSC_BAND_STOP[%s] is2G[%d], isApCli[%d]\n",
-                                                pWscUpnpBandStop->ifName,
-                                                pWscUpnpBandStop->is2gBand, pWscUpnpBandStop->isApCli));
-
-                WscSendUPnPMessage(pAd, apidx, WSC_OPCODE_UPNP_CTRL, 99, pWscUpnpBandStop,
-                                sizeof(WSC_UPNP_CTRL_WSC_BAND_STOP), 0, 0, NULL, AP_MODE);
-                os_free_mem(pWscUpnpBandStop);
+		        	if ((wdev) &&
+					(pWpsCtrl->WscConfMode != WSC_DISABLE) &&
+	             		(pWpsCtrl->bWscTrigger == TRUE))
+	        		{
+		                	MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("CON_WPS: Stop the %s AP Wsc Machine\n", wdev->if_dev->name));
+			                	WscBuildBeaconIE(pAd, IsAPConfigured, FALSE, 0, 0, loop, NULL, 0, AP_MODE);
+		                	WscBuildProbeRespIE(pAd, WSC_MSGTYPE_AP_WLAN_MGR, IsAPConfigured, FALSE, 0, 0,
+			                                                                          loop, NULL, 0, AP_MODE);
+					UpdateBeaconHandler(pAd, wdev, IE_CHANGE);
+		                	WscStop(pAd, FALSE, pWpsCtrl);
+	        		}
+	        	}		
+		}
          }
 #endif /* MULTI_INF_SUPPORT */
          MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("<----- WscConWpsStop\n"));
@@ -6581,39 +6865,6 @@ void    WscWriteConfToPortCfg(
 			}
 		}
 #ifdef CONFIG_AP_SUPPORT
-	}
-	else
-	{
-		if (CurOpMode == AP_MODE)
-		{
-			pAd->ApCfg.MBSSID[CurApIdx].wdev.SecConfig.PairwiseKeyId = 1;
-			WscSetAuthMode(pAd, CurOpMode, CurApIdx, "WPAPSKWPA2PSK");
-			WscSetEncrypType(pAd, CurOpMode, CurApIdx, "TKIPAES");
-			pWscControl->WpaPskLen = (INT)pCredential->KeyLength;
-			NdisZeroMemory(pWscControl->WpaPsk, 64);
-			NdisMoveMemory(pWscControl->WpaPsk, pCredential->Key, pWscControl->WpaPskLen);
-			/* Copy SSID */
-			NdisZeroMemory(pAd->ApCfg.MBSSID[CurApIdx].Ssid, MAX_LEN_OF_SSID);
-			NdisMoveMemory(pAd->ApCfg.MBSSID[CurApIdx].Ssid, pCredential->SSID.Ssid, pCredential->SSID.SsidLength);
-			pAd->ApCfg.MBSSID[CurApIdx].SsidLen = pCredential->SSID.SsidLength;
-			/*
-				Hex Key
-			*/
-			if(pWscControl->WscKeyASCII == 0)
-			{
-				AtoH((RTMP_STRING *) pWscControl->WpaPsk, pAd->ApCfg.MBSSID[CurApIdx].wdev.SecConfig.PMK, 32);
-			}
-			else
-			{
-				UCHAR       keyMaterial[40] = {0};
-
-				RtmpPasswordHash((RTMP_STRING *)pWscControl->WpaPsk,
-							 (PUCHAR) pAd->ApCfg.MBSSID[CurApIdx].Ssid,
-							 pAd->ApCfg.MBSSID[CurApIdx].SsidLen,
-							 keyMaterial);
-				NdisMoveMemory(pAd->ApCfg.MBSSID[CurApIdx].wdev.SecConfig.PMK, keyMaterial, 32);
-			}
-		}
 	}
 #endif /* CONFIG_AP_SUPPORT */
 
@@ -7046,9 +7297,18 @@ VOID	WscPushPBCAction(
 	WscScanExec(pAd, pWscControl);
 
 	/* 4. Set 10 second timer to invoke PBC connection actions. */
-	RTMPSetTimer(&pWscControl->WscPBCTimer, 10000);
-	pWscControl->WscPBCTimerRunning = TRUE;
-
+#ifdef CON_WPS /*Move to scan complete to trigger //Dung_Ru*/
+ 	if (pWscControl->conWscStatus == CON_WPS_STATUS_DISABLED)
+#endif /* CON_WPS */
+	{
+#ifdef APCLI_SUPPORT
+        if(pWscControl->WscApCliScanMode != TRIGGER_PARTIAL_SCAN)
+#endif /* APCLI_SUPPORT */
+        {
+           RTMPSetTimer(&pWscControl->WscPBCTimer, 10000);
+           pWscControl->WscPBCTimerRunning = TRUE;
+        }
+	}
 	MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, ("<----- WscPushPBCAction\n"));
 }
 
@@ -7157,7 +7417,9 @@ VOID	WscScanExec(
 #ifdef WSC_LED_SUPPORT
 	UCHAR WPSLEDStatus;
 #endif /* WSC_LED_SUPPORT */
-
+#ifdef APCLI_SUPPORT
+        UCHAR if_idx = (pWscControl->EntryIfIdx & 0x0F);
+#endif /*APCLI_SUPPORT*/
 	/* Prevent infinite loop if conncet time out didn't stop the repeat scan */
 	if ((pWscControl->WscStatus == STATUS_WSC_FAIL) ||
 		(pWscControl->WscState == WSC_STATE_OFF))
@@ -7176,7 +7438,24 @@ VOID	WscScanExec(
 #ifdef APCLI_SUPPORT
 	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
 	{
-		ApSiteSurvey(pAd, NULL, SCAN_WSC_ACTIVE, FALSE);
+        if(if_idx < MAX_APCLI_NUM)
+        {
+#ifdef AP_SCAN_SUPPORT
+            if (pWscControl->WscApCliScanMode == TRIGGER_PARTIAL_SCAN)
+            {
+                if ((!pAd->ScanCtrl.PartialScan.bScanning) && 
+                    (pAd->ScanCtrl.PartialScan.LastScanChannel == 0)) 
+                {
+                    pAd->ScanCtrl.PartialScan.pwdev = &pAd->ApCfg.ApCliTab[if_idx].wdev;
+                    pAd->ScanCtrl.PartialScan.bScanning = TRUE;
+                }
+            }
+#endif /* AP_SCAN_SUPPORT */
+#ifdef CON_WPS
+                pAd->ApCfg.ApCliTab[if_idx].ConWpsApCliModeScanDoneStatus = CON_WPS_APCLI_SCANDONE_STATUS_ONGOING;
+#endif /*CON_WPS*/
+            	ApSiteSurvey_by_wdev(pAd, NULL, SCAN_WSC_ACTIVE, FALSE, &pAd->ApCfg.ApCliTab[if_idx].wdev);
+	}
 	}
 #endif /* APCLI_SUPPORT */
 
@@ -7307,22 +7586,15 @@ BOOLEAN	WscPBCExec(
 	if (CurOpMode == AP_MODE)
 	{
 		UCHAR apcli_idx = (pWscControl->EntryIfIdx & 0x0F);
-#ifdef RTMP_TIMER_TASK_SUPPORT	
-		RTMP_STRING ChStr[5] = {0};
-#else
-		UCHAR channel;
-#endif
 
 		NdisMoveMemory(pWscControl->RegData.SelfInfo.MacAddr,
 	                   pAd->ApCfg.ApCliTab[apcli_idx].wdev.if_addr,
 	                   MAC_ADDR_LEN);
 
 #ifdef RTMP_TIMER_TASK_SUPPORT
-		snprintf(ChStr, sizeof(ChStr), "%d", pAd->ApCfg.ApCliTab[apcli_idx].MlmeAux.Channel);
-		Set_Channel_Proc(pAd, ChStr);
+		rtmp_set_channel(pAd, &pAd->ApCfg.ApCliTab[apcli_idx].wdev, pAd->ApCfg.ApCliTab[apcli_idx].MlmeAux.Channel);
 #else
-		channel = pAd->ApCfg.ApCliTab[apcli_idx].MlmeAux.Channel;
-		RTEnqueueInternalCmd(pAd, CMDTHREAD_APCLI_PBC_TIMEOUT, (VOID *)&channel, sizeof(UCHAR));
+		RTEnqueueInternalCmd(pAd, CMDTHREAD_APCLI_PBC_TIMEOUT, (VOID*)&pAd->ApCfg.ApCliTab[apcli_idx], sizeof(APCLI_STRUCT));
 #endif
 
 	    /* bring apcli interface down first */
@@ -7489,6 +7761,11 @@ BOOLEAN WscBssWpsIESearchForPBC(
 	PWSC_IE				pWscIE;
 	UUID_BSSID_CH_INFO	TmpInfo;
 	UCHAR				zeros16[16]= {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+#ifdef CON_WPS
+        UCHAR apcli_idx = 0; 
+	struct wifi_dev *Reqwdev=NULL;
+	UCHAR dev_band = 0;
+#endif /*CON_WPS Dung_Ru*/
 
 	pData   = pVar;
 	bFound  = FALSE;
@@ -7496,6 +7773,17 @@ BOOLEAN WscBssWpsIESearchForPBC(
 	bSelReg = FALSE;
 	Len = VarIeLen;
 	NdisZeroMemory(&TmpInfo, sizeof(UUID_BSSID_CH_INFO));
+
+#ifdef CON_WPS
+		if (pWscControl->EntryIfIdx >= MIN_NET_DEVICE_FOR_APCLI)
+		{
+			apcli_idx = (pWscControl->EntryIfIdx & 0x0F);
+			Reqwdev=&(pAd->ApCfg.ApCliTab[apcli_idx].wdev);
+			if (Reqwdev)
+				dev_band=HcGetBandByWdev(Reqwdev);
+		}
+#endif
+	
 		while ((Len > 0) && (bFound == FALSE))
 		{
 			pEid = (PBEACON_EID_STRUCT) pData;
@@ -7588,6 +7876,25 @@ BOOLEAN WscBssWpsIESearchForPBC(
 				pData += (be2cpu16(pWscIE->Length) + 4);
 				Len   -= (be2cpu16(pWscIE->Length) + 4);
 			}
+
+#ifdef CON_WPS	
+	if ((pAd->ApCfg.ConWpsApCliDisabled==FALSE))
+	{
+		if ((pAd->ApCfg.ApCliTab[apcli_idx].WscControl.conWscStatus & CON_WPS_STATUS_APCLI_RUNNING) 
+			&&(pAd->ApCfg.ApCliTab[apcli_idx^1].WscControl.conWscStatus & CON_WPS_STATUS_APCLI_RUNNING)
+			&& (pAd->ApCfg.ApCliTab[apcli_idx].ConWpsApCliModeScanDoneStatus != CON_WPS_APCLI_SCANDONE_STATUS_ONGOING
+			&& pAd->ApCfg.ApCliTab[apcli_idx^1].ConWpsApCliModeScanDoneStatus != CON_WPS_APCLI_SCANDONE_STATUS_ONGOING))
+			{
+	
+				if (Reqwdev && HcGetBandByChannel(pAd, pInBss->Channel) != HcGetBandByWdev(Reqwdev))
+					{
+						if (bFound==TRUE)
+							printk("FIND AP TmpInfo.Band =%d ssid=%s but skip(band=%d wdev band=%d)\n",TmpInfo.Band,TmpInfo.Ssid,HcGetBandByChannel(pAd, pInBss->Channel), HcGetBandByWdev(Reqwdev));
+						bFound = FALSE;
+					}
+			}
+	}
+#endif /*CON_WPS*/
 
 
 		if ((bFound == TRUE) && (bSelReg == TRUE))
@@ -7712,7 +8019,7 @@ BOOLEAN WscBssWpsIESearchForPIN(
 	PUCHAR				pVar)
 {
 	INT					j = 0, Len = 0, idx = 0;
-	BOOLEAN				bFound, bSameAP, bSelReg;
+	BOOLEAN				bFound, bSameAP, bSelReg, bSelWpsPIN1;
 	PUCHAR				pData = NULL;
 	PBEACON_EID_STRUCT	pEid;
 	USHORT				DevicePasswordID;
@@ -7724,6 +8031,7 @@ BOOLEAN WscBssWpsIESearchForPIN(
 	bFound  = FALSE;
 	bSameAP = FALSE;
 	bSelReg = FALSE;
+	bSelWpsPIN1 = FALSE;
 	Len = VarIeLen;
 	MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, ("%s\n", __FUNCTION__));
 	NdisZeroMemory(&TmpInfo, sizeof(UUID_BSSID_CH_INFO));
@@ -7746,7 +8054,7 @@ BOOLEAN WscBssWpsIESearchForPIN(
 			if ((NdisEqualMemory(pEid->Octet, WPS_OUI, 4) == FALSE)
 				)
 				{
-					MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, ("%s: wpsIE AP found\n", __FUNCTION__));
+					MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, ("%s: wpsIE AP not found\n", __FUNCTION__));
 					/* Set the offset and look for next IE */
 					pData += (pEid->Len + 2);
 					Len   -= (pEid->Len + 2);
@@ -7757,6 +8065,10 @@ BOOLEAN WscBssWpsIESearchForPIN(
 			/* 3. Found	AP with WSC IE in beacons, skip 6 bytes = 1 + 1 + 4 */
 			pData += 6;
 			Len   -= 6;
+
+			/*if no wpsv2.0 ap found till 3 scans, enable search for wpsv1.0 ap, wpsv1.0 ap don't set selreg bit */   
+			if(pWscControl->ScanCountToincludeWPSPin1 > 3)
+				bSelWpsPIN1 = TRUE;
 
 			/* 4. Start to look the PIN type within WSC VarIE */
 			while (Len > 0)
@@ -7928,9 +8240,25 @@ BOOLEAN WscBssWpsIESearchForPIN(
 					pWscControl->WscPINBssCount++;
 				}
 			}
-		}
+		else if(bSelWpsPIN1 == TRUE)
+			{
+					UCHAR index = pWscControl->WscPINBssCount;
 
-	return (bFound && bSelReg);
+					/* Store UUID */
+					RTMPMoveMemory(&(ApUuidBssid[index].Uuid[0]), &TmpInfo.Uuid[0], 16);
+					RTMPMoveMemory(&(ApUuidBssid[index].Bssid[0]), &pInBss->Bssid[0], MAC_ADDR_LEN);
+					RTMPZeroMemory(&(ApUuidBssid[index].Ssid[0]), MAX_LEN_OF_SSID);
+					RTMPMoveMemory(&(ApUuidBssid[index].Ssid[0]), &pInBss->Ssid[0], pInBss->SsidLen);
+					ApUuidBssid[index].SsidLen = pInBss->SsidLen;
+					ApUuidBssid[index].Channel = pInBss->Channel;
+					if (ApUuidBssid[index].Channel > 14)
+						ApUuidBssid[index].Band = WSC_RFBAND_50GHZ;
+					else
+						ApUuidBssid[index].Band = WSC_RFBAND_24GHZ;
+					pWscControl->WscPINBssCount++;
+			}
+		}
+	return ((bFound && bSelReg)|| (bSelWpsPIN1));
 }
 #endif
 
@@ -7968,6 +8296,11 @@ VOID WscPBCBssTableSort(
 #ifdef APCLI_SUPPORT
 	UCHAR apcli_idx = 0;
 #endif /* APCLI_SUPPORT */
+
+#ifdef CON_WPS
+        INT idx = 0; 
+#endif /*CON_WPS Dung_Ru*/
+
 
 
 #ifdef APCLI_SUPPORT
@@ -8022,6 +8355,29 @@ VOID WscPBCBssTableSort(
 		RTMPZeroMemory(pWscControl->WscBssid, MAC_ADDR_LEN);
 		RTMPMoveMemory(pWscControl->WscBssid, ApUuidBssid[0].Bssid, MAC_ADDR_LEN);
 
+#ifdef CON_WPS
+                        if (ApUuidBssid[0].Band == WSC_RFBAND_50GHZ)
+                        {
+                                RTMPMoveMemory(&TmpInfo_5G.Uuid[0], &ApUuidBssid[0].Uuid, 16);
+                                TmpInfo_5G.Band = WSC_RFBAND_50GHZ;
+
+                                MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("[WscPBCBssTableSort] TmpInfo_5G UUID-E= "));
+                                        for(idx=0; idx<16; idx++)
+                                                MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("%02x  ", TmpInfo_5G.Uuid[idx]));
+                                MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("\n"));
+                        } 
+                        else
+                        {
+                                RTMPMoveMemory(&TmpInfo_2G.Uuid[0], &ApUuidBssid[0].Uuid,16);
+                                TmpInfo_2G.Band = WSC_RFBAND_24GHZ;
+
+                                MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("[WscPBCBssTableSort] TmpInfo_2G UUID-E= "));
+                                        for(idx=0; idx<16; idx++)
+                                                MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("%02x  ", TmpInfo_2G.Uuid[idx]));
+                                MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_OFF, ("\n"));
+                        }
+#endif /*CON_WPS Dung_Ru*/
+
 #ifdef APCLI_SUPPORT
 		if (CurOpMode == AP_MODE)
 		{
@@ -8075,6 +8431,8 @@ VOID WscPINBssTableSort(
 	if (pWscControl == NULL)
 		return;
 
+	pWscControl->ScanCountToincludeWPSPin1++;
+	
 	/* allocate memory */
 	os_alloc_mem(NULL, (UCHAR **)&ApUuidBssid, sizeof(UUID_BSSID_CH_INFO)*8);
 	if (ApUuidBssid == NULL)
@@ -8203,7 +8561,9 @@ VOID	WscCreateProfileFromCfg(
 	IN  PWSC_CTRL           pWscControl,
 	OUT PWSC_PROFILE        pWscProfile)
 {
+#ifdef CONFIG_AP_SUPPORT
     UCHAR	        apidx = (pWscControl->EntryIfIdx & 0x0F);
+#endif /* CONFIG_AP_SUPPORT */
     USHORT          authType = 0, encyType = 0;
     UCHAR           WepKeyId = 0;
     PWSC_CREDENTIAL pCredential = NULL;
@@ -8322,7 +8682,6 @@ VOID	WscCreateProfileFromCfg(
 			case WSC_ENCRTYPE_NONE:
 				break;
 			case WSC_ENCRTYPE_WEP:
-				apidx = apidx; /* For compiler Warning */
 #ifdef CONFIG_AP_SUPPORT
 				if (CurOpMode == AP_MODE)
 					pSecConfig = &pAd->ApCfg.MBSSID[apidx].wdev.SecConfig;
@@ -8889,45 +9248,21 @@ INT	WscGetConfWithoutTrigger(
 	UCHAR		apIdx;
     struct wifi_dev *wdev = NULL;
 
+    /* TODO: Is it possible ApCli call this fucntion?? */
+	apIdx = (pWscControl->EntryIfIdx & 0x0F);
+    if(apIdx < HW_BEACON_MAX_NUM)
+        wdev = &pAd->ApCfg.MBSSID[apIdx].wdev;
+
 #ifdef LINUX
 #ifdef WSC_SINGLE_TRIGGER
-/* +++  added by YYHuang@Ralink, 08/03/12 */
-/*
- Notify user space application that WPS procedure will begin.
- Signal
-    ra0: SIGXFSZ
-    rai0: SIGWINCH
-*/
-    {
-        struct task_struct *p;
-
-        MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_WARN, ("%s - WSC_SINGLE_TRIGGER_APPNAME: %s\n", 
-            __FUNCTION__, WSC_SINGLE_TRIGGER_APPNAME));
-        
-        rcu_read_lock();
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,21)
-	for_each_process(p)
-#else
-	for_each_task(p)
-#endif
-	{
-            if(!strcmp(p->comm, WSC_SINGLE_TRIGGER_APPNAME))
-            {
-                if (pAd->dev_idx == 0)
-                    send_sig(SIGXFSZ, p, 0);  /* ra0 */
-                else
-                    send_sig(SIGWINCH, p, 0); /* rai0 */
-            }
-        }
-        rcu_read_unlock();
+    if(wdev != NULL) {
+        if (pAd->dev_idx == 0)
+            RtmpOSWrielessEventSend(wdev->if_dev, RT_WLAN_EVENT_CUSTOM, SIGXFSZ, NULL, NULL, 0); /* ra0 */
+        else
+            RtmpOSWrielessEventSend(wdev->if_dev, RT_WLAN_EVENT_CUSTOM, SIGWINCH, NULL, NULL, 0); /* rai0 */
     }
-/* ---  added by YYHuang@Ralink, 08/03/12 */
 #endif /* WSC_SINGLE_TRIGGER */
 #endif /* LINUX */
-
-
-	/* TODO: Is it possible ApCli call this fucntion?? */
-	apIdx = (pWscControl->EntryIfIdx & 0x0F);
 
     IsAPConfigured = pWscControl->WscConfStatus;
     pWscUPnPNodeInfo = &pWscControl->WscUPnPNodeInfo;
@@ -8949,9 +9284,7 @@ INT	WscGetConfWithoutTrigger(
 
 	WscBuildBeaconIE(pAd, IsAPConfigured, TRUE, WscMode, pWscControl->WscConfigMethods, (pWscControl->EntryIfIdx & 0x0F), NULL, 0, AP_MODE);
 	WscBuildProbeRespIE(pAd, WSC_MSGTYPE_AP_WLAN_MGR, IsAPConfigured, TRUE, WscMode, pWscControl->WscConfigMethods, pWscControl->EntryIfIdx, NULL, 0, AP_MODE);
-
-    wdev = &pAd->ApCfg.MBSSID[apIdx].wdev;
-
+    if(wdev != NULL)
 	UpdateBeaconHandler(
                         pAd,
                         wdev,
@@ -8961,9 +9294,9 @@ INT	WscGetConfWithoutTrigger(
     RTMPSetTimer(&pWscControl->Wsc2MinsTimer, WSC_TWO_MINS_TIME_OUT);
     pWscControl->Wsc2MinsTimerRunning = TRUE;
     pWscControl->WscStatus = STATUS_WSC_LINK_UP;
-    if (bFromUPnP)
+    if (bFromUPnP && (wdev != NULL))
 		WscSendUPnPConfReqMsg(pAd, apIdx, (PUCHAR)pAd->ApCfg.MBSSID[apIdx].Ssid,
-									pAd->ApCfg.MBSSID[apIdx].wdev.bssid, 3, 0, AP_MODE);
+									wdev->bssid, 3, 0, AP_MODE);
 
     pWscControl->bWscTrigger = TRUE;
 	pWscControl->bWscAutoTigeer = TRUE;
@@ -9188,7 +9521,23 @@ VOID WscWriteConfToDatFile(RTMP_ADAPTER *pAd, UCHAR CurOpMode)
 			MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, ("<----- WscWriteConfToDatFile (wrong apidx = %d)\n", apidx));
 			return;
 		}
-		pWscControl = &pAd->ApCfg.MBSSID[apidx].WscControl;
+
+#ifdef VENDOR_FEATURE6_SUPPORT		
+#ifdef MT_FIRST_CARD
+		if (pAd->dev_idx == 0)
+		{
+			fileName = FIRST_AP_PROFILE_PATH;
+		}
+		else
+#endif /* CONFIG_RT_FIRST_CARD */
+#ifdef MT_SECOND_CARD
+		if (pAd->dev_idx == 1)
+		{
+			fileName = SECOND_AP_PROFILE_PATH;
+		}
+		else
+#endif /* CONFIG_RT_SECOND_CARD */
+#endif
 			fileName = AP_PROFILE_PATH;
 		snprintf((RTMP_STRING *) WepKeyName, sizeof(WepKeyName), "Key%dStr%d=", pAd->ApCfg.MBSSID[apidx].wdev.SecConfig.PairwiseKeyId+1, apidx+1);
 		snprintf((RTMP_STRING *) WepKeyFormatName, sizeof(WepKeyFormatName), "Key%dType=", pAd->ApCfg.MBSSID[apidx].wdev.SecConfig.PairwiseKeyId+1);
@@ -9394,10 +9743,7 @@ VOID WscWriteConfToDatFile(RTMP_ADAPTER *pAd, UCHAR CurOpMode)
 							if (ptr2 == NULL)
 								break;
 							pTempStr = ptr2+1;
-                            if (!pTempStr)
-                            {
-    						    break;
-                            }
+
                         	if ((*pTempStr == '0') || (*pTempStr == '1'))
 								KeyType[idx] = (UCHAR)(*pTempStr - 0x30);
                         }
@@ -9960,13 +10306,21 @@ BOOLEAN WscThreadExit(RTMP_ADAPTER *pAd)
                 RTMPReleaseTimer(&pWpsCtrl->WscPBCTimer, &Cancelled);
                 RTMPReleaseTimer(&pWpsCtrl->WscScanTimer, &Cancelled);
                 RTMPReleaseTimer(&pWpsCtrl->WscProfileRetryTimer, &Cancelled);
-
+#ifdef CON_WPS
+                RTMPReleaseTimer(&pWpsCtrl->ConWscApcliScanDoneCheckTimer, &Cancelled);
+#endif /* CON_WPS */
 				pWpsCtrl->WscTxBufLen = 0;
 				if (pWpsCtrl->pWscTxBuf)
+				{            
 					os_free_mem(pWpsCtrl->pWscTxBuf);
+					pWpsCtrl->pWscTxBuf = NULL;
+				}
 				pWpsCtrl->WscRxBufLen = 0;
 				if (pWpsCtrl->pWscRxBuf)
+				{            
 					os_free_mem(pWpsCtrl->pWscRxBuf);
+					pWpsCtrl->pWscRxBuf = NULL;
+				}
 				WscClearPeerList(&pWpsCtrl->WscPeerList);
 				NdisFreeSpinLock(&pWpsCtrl->WscPeerListSemLock);
 			}
@@ -10092,7 +10446,16 @@ VOID WSC_HDR_BTN_CheckHandler(
  	POS_COOKIE pObj = (POS_COOKIE) pAd->OS_Cookie;
 	BOOLEAN flg_pressed = 0;
 
+#ifdef VENDOR_FEATURE6_SUPPORT
+	//only need to check first SSID's WscConfMode as all BSSID use same setting    
+	if (pAd->ApCfg.MBSSID[0].WscControl.WscConfMode == WSC_DISABLE) 
+	{
+	    return;
+	}
+	flg_pressed = arris_wps_gpio_check_wps_button();
+#else	
 	WSC_HDR_BTN_MR_PRESS_FLG_GET(pAd, flg_pressed);
+#endif
 
 	if (flg_pressed)
 	{
@@ -10103,7 +10466,14 @@ VOID WSC_HDR_BTN_CheckHandler(
 			pAd->CommonCfg.WscHdrPshBtnCheckCount = 0;
 
 			/* execute WSC PBC function */
+#ifdef VENDOR_FEATURE6_SUPPORT
+			if (WMODE_CAP_5G(pAd->ApCfg.MBSSID[0].wdev.PhyMode))
+				MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_ERROR, ("wsc> execute WSC PBC for 5GHz radio\n"));
+			else
+				MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_ERROR, ("wsc> execute WSC PBC for 2.4GHz radio\n"));
+#else				
 			MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_ERROR, ("wsc> execute WSC PBC...\n"));
+#endif
 
 #ifdef CONFIG_AP_SUPPORT
 			IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
@@ -10341,6 +10711,7 @@ VOID WscUpdatePortCfgTimeout(
 	BOOLEAN	 bEnrollee = TRUE;
 	WSC_CREDENTIAL *pCredential = NULL;
 	BSS_STRUCT *pMbss = NULL;
+	UCHAR RfIC;
 
 	if (pWscControl == NULL)
 		return;
@@ -10368,15 +10739,16 @@ VOID WscUpdatePortCfgTimeout(
 						  bEnrollee);
 	pWscControl->WscProfile.ApplyProfileIdx &= 0x7FFF;
 	{
-	    NDIS_STATUS enq_rv = 0;
+		NDIS_STATUS enq_rv = 0;
 		pAd->WriteWscCfgToDatFile = (pWscControl->EntryIfIdx & 0x0F);
-        
-        /*
-	        Using CMD thread to prevent in-band command failed.
-	        @20150710
-	    */
-        enq_rv = RTEnqueueInternalCmd(pAd, CMDTHREAD_AP_RESTART, NULL, 0);
-        MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, ("%s: en-queu CMDTHREAD_AP_RESTART - enq_rv = 0x%x\n", __FUNCTION__, enq_rv));
+
+		/*
+			Using CMD thread to prevent in-band command failed.
+			@20150710
+		*/
+		RfIC = wmode_2_rfic(pMbss->wdev.PhyMode);
+		enq_rv = RTEnqueueInternalCmd(pAd, CMDTHREAD_AP_RESTART, &RfIC, sizeof(UCHAR));
+		MTWF_LOG(DBG_CAT_SEC, CATSEC_WPS, DBG_LVL_TRACE, ("%s: en-queu CMDTHREAD_AP_RESTART - enq_rv = 0x%x\n", __FUNCTION__, enq_rv));
 	}
 
 	RtmpOsTaskWakeUp(&(pAd->wscTask));
@@ -10768,13 +11140,22 @@ VOID WscUUIDInit(
 					&pWpsCtrl->Wsc_Uuid_Str[0], 0, FALSE, from_apcli);
 		pWpsCtrl->bWscFragment = FALSE;
 		pWpsCtrl->WscFragSize = 128;
-		pWpsCtrl->WscRxBufLen = 0;
-		pWpsCtrl->pWscRxBuf = NULL;
+        pWpsCtrl->WscRxBufLen = 0;
+        if(pWpsCtrl->pWscRxBuf)
+        {
+            os_free_mem(pWpsCtrl->pWscRxBuf);
+            pWpsCtrl->pWscRxBuf = NULL;
+        }
 		os_alloc_mem(pAd, &pWpsCtrl->pWscRxBuf, MGMT_DMA_BUFFER_SIZE);
 		if (pWpsCtrl->pWscRxBuf)
 			NdisZeroMemory(pWpsCtrl->pWscRxBuf, MGMT_DMA_BUFFER_SIZE);
+        
 		pWpsCtrl->WscTxBufLen = 0;
-		pWpsCtrl->pWscTxBuf = NULL;
+        if(pWpsCtrl->pWscTxBuf)
+        {
+            os_free_mem(pWpsCtrl->pWscTxBuf);
+            pWpsCtrl->pWscTxBuf = NULL;
+        }
 		os_alloc_mem(pAd, &pWpsCtrl->pWscTxBuf, MGMT_DMA_BUFFER_SIZE);
 		if (pWpsCtrl->pWscTxBuf)
 			NdisZeroMemory(pWpsCtrl->pWscTxBuf, MGMT_DMA_BUFFER_SIZE);

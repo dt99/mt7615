@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __MT_DMAC_H__
 #define __MT_DMAC_H__
 
@@ -545,6 +546,24 @@ typedef struct GNU_PACKED _TMAC_TXD_7 {
 } TMAC_TXD_7, *PTMAC_TXD_7;
 #endif
 
+/* Fields modified by packet processor */
+#ifdef RT_BIG_ENDIAN
+typedef struct GNU_PACKED _TMAC_TXD_7_PP {
+	UINT32 hif_err:1;
+	UINT32 pse_fid:15;
+	UINT32 spe_idx:5;
+	UINT32 rsv_10:1;
+	UINT32 sw_tx_time:10;
+} TMAC_TXD_7_PP, *PTMAC_TXD_7_PP;
+#else
+typedef struct GNU_PACKED _TMAC_TXD_7_PP {
+	UINT32 sw_tx_time:10;
+	UINT32 rsv_10:1;
+	UINT32 spe_idx:5;
+	UINT32 pse_fid:15;
+	UINT32 hif_err:1;
+} TMAC_TXD_7_PP, *PTMAC_TXD_7_PP;
+#endif
 /******************************************************************************
 	TX Descriptor in Long Format (TMAC_TXD_1.FT = 1)
 	which including TMAC_TXD_0~ TMAC_TXD_7
@@ -576,8 +595,16 @@ typedef struct GNU_PACKED _TMAC_TXD_S {
 
 
 #ifdef RT_BIG_ENDIAN
-// TODO: shiang-MT7615
-
+typedef struct GNU_PACKED _TXP_MSDU_INFO {
+ 	 	    UINT32 msdu_vld_3:1;
+ 	 	    UINT32 msdu_id_3:15;
+ 	 	    UINT32 msdu_vld_2:1;
+ 	 	    UINT32 msdu_id_2:15;
+ 	 	    UINT32 msdu_vld_1:1;
+ 	 	    UINT32 msdu_id_1:15;
+ 	 	    UINT32 msdu_vld_0:1;
+ 	 	    UINT32 msdu_id_0:15;
+ 	 	}TXP_MSDU_INFO;
 #else
 typedef struct GNU_PACKED _TXP_MSDU_INFO {
 	UINT32 msdu_id_0:15;
@@ -596,8 +623,18 @@ typedef struct GNU_PACKED _TXP_MSDU_INFO {
 
 
 #ifdef RT_BIG_ENDIAN
-// TODO: shiang-MT7615
-
+typedef struct GNU_PACKED _TXP_MSDU_PTR {
+ 	 	    UINT32 txp_addr_1;
+ 	 	    UINT32 amsdu_last_1:1;
+ 	 	    UINT32 msdu_last_1:1;
+ 	 	    UINT32 src_1:1;
+ 	 	    UINT32 tx_len_1:13;
+ 	 	    UINT32 amsdu_last_0:1;
+ 	 	    UINT32 msdu_last_0:1;
+ 	 	    UINT32 src_0:1;
+ 	 	    UINT32 tx_len_0:13;
+ 	 	    UINT32 txp_addr_0;  
+ 	 	}TXP_MSDU_PTR;
 #else
 typedef struct GNU_PACKED _TXP_MSDU_PTR {
 	UINT32 txp_addr_0;
@@ -1966,6 +2003,15 @@ typedef struct wtbl_entry {
 // TODO: shiang-MT7615, move to top.h!
 #define MCU_CFG_BASE		0x2000
 #define MCU_COM_REG1	    (MCU_CFG_BASE + 0x204)
+#ifdef ERR_RECOVERY
+#define MCU_COM_REG1_SER_PSE		BIT(0)
+#define MCU_COM_REG1_SER_PLE		BIT(1)
+#define MCU_COM_REG1_SER_PCIE		BIT(2)
+#define MCU_COM_REG1_SER_PDMA		BIT(3)
+#define MCU_COM_REG1_SER_LMAC_TX	BIT(4)
+#define MCU_COM_REG1_SER_SEC_RF_RX	BIT(5)
+#endif  /* ERR_RECOVERY */
+
 #define MCU_PCIE_REMAP_1	(MCU_CFG_BASE + 0x500)
 #define REMAP_1_OFFSET_MASK (0x3ffff)
 #define GET_REMAP_1_OFFSET(p) (((p) & REMAP_1_OFFSET_MASK))
@@ -2109,6 +2155,10 @@ INT dump_dmac_mib_info(struct _RTMP_ADAPTER *pAd, RTMP_STRING *arg);
 INT dump_dmac_pse_info(struct _RTMP_ADAPTER *pAd);
 INT dump_dmac_pse_data(struct _RTMP_ADAPTER *pAd, UINT32 StartFID, UINT32 FrameNums);
 VOID Update_Mib_Bucket_One_Sec(struct _RTMP_ADAPTER *pAd);
+VOID Update_Mib_Bucket_500Ms(struct _RTMP_ADAPTER *pAd);
+#ifdef CUSTOMER_RSG_FEATURE
+VOID Read_Mib_TxRx_Counters(struct _RTMP_ADAPTER *pAd);
+#endif
 
 INT mt_wtbl_init_ByFw(struct _RTMP_ADAPTER *pAd);
 INT mt_wtbl_init_ByDriver(struct _RTMP_ADAPTER *pAd);
@@ -2121,6 +2171,9 @@ VOID dump_wtbl_info(struct _RTMP_ADAPTER *pAd, UINT wtbl_idx);
 VOID dump_wtbl_base_info(struct _RTMP_ADAPTER *pAd);
 
 INT mt_mac_set_ctrlch(struct _RTMP_ADAPTER *pAd, UINT8 extch);
+#ifdef GREENAP_SUPPORT
+INT rtmp_mac_set_mmps(struct _RTMP_ADAPTER *pAd, INT ReduceCorePower);
+#endif /* GREENAP_SUPPORT */
 
 UINT16 tx_rate_to_tmi_rate(UINT8 mode, UINT8 mcs, UINT8 nss, BOOLEAN stbc, UINT8 preamble);
 UCHAR get_nsts_by_mcs(UCHAR phy_mode, UCHAR mcs, BOOLEAN stbc, UCHAR vht_nss);

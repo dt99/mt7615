@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -24,7 +25,7 @@
 	Who         When          What
 	--------    ----------    ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #include	"rt_config.h"
 
@@ -82,6 +83,10 @@ INT32 MCUSysInit(RTMP_ADAPTER *pAd)
 {
 	INT32 Ret = 0;
 
+#ifdef INTERNAL_CAPTURE_SUPPORT    
+	UINT32 Value;
+#endif /* INTERNAL_CAPTURE_SUPPORT */
+
 	MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s\n", __FUNCTION__));
 	
 	MCU_CTRL_INIT(pAd);
@@ -91,6 +96,30 @@ INT32 MCUSysInit(RTMP_ADAPTER *pAd)
 	
 
 #endif /* MT_MAC */
+
+#ifdef INTERNAL_CAPTURE_SUPPORT//AKai	
+	/* Refer to profile setting to decide the sysram partition format */
+    MTWF_LOG(DBG_CAT_FW, DBG_SUBCAT_ALL, DBG_LVL_ERROR, 
+	    ("%s: Before NICLoadFirmware, check IcapMode=%d\n", __FUNCTION__, pAd->IcapMode));
+
+    if (pAd->IcapMode == 2)/* Wifi-spectrum */
+    {
+        HW_IO_READ32(pAd,CONFG_COM_REG3, &Value);
+
+        Value = Value | CONFG_COM_REG3_FWOPMODE;
+
+        HW_IO_WRITE32(pAd,CONFG_COM_REG3, Value);
+        
+    }
+    else
+    {
+        HW_IO_READ32(pAd,CONFG_COM_REG3, &Value);
+
+        Value = Value & (~CONFG_COM_REG3_FWOPMODE);
+
+        HW_IO_WRITE32(pAd,CONFG_COM_REG3, Value);      
+    }
+#endif /* INTERNAL_CAPTURE_SUPPORT */
 
 	Ret = NICLoadFirmware(pAd);
 	
@@ -107,11 +136,6 @@ INT32 MCUSysInit(RTMP_ADAPTER *pAd)
 		MtCmdRfTestSwitchMode(pAd, OPERATION_ICAP_MODE, 0, 
 								RF_TEST_DEFAULT_RESP_LEN);
 	}
-	else if (pAd->IcapMode == 2) /* Wifi spectrum */
-	{
-		MtCmdRfTestSwitchMode(pAd, OPERATION_WIFI_SPECTRUM, 0, 
-								RF_TEST_DEFAULT_RESP_LEN);
-	}	
 #endif /* INTERNAL_CAPTURE_SUPPORT */
 
 	return Ret;

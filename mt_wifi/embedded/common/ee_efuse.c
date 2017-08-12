@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -22,7 +23,7 @@
 	Who         When          What
 	--------    ----------    ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #ifdef RTMP_EFUSE_SUPPORT
 
 #include	"rt_config.h"
@@ -146,7 +147,12 @@ UCHAR eFuseReadRegisters(PRTMP_ADAPTER pAd, UINT16 Offset, UINT16 Length, UINT16
 	if (eFuseCtrlStruc.field.EFSROM_AOUT == 0x3f)
 	{
 		for(i = 0; i < Length / 2; i++) {
+#if defined(MT7636) || defined(MT7637) || defined(MT7615) || defined(MT7622)
+			*(pData +2 * i) = 0x0;
+#else
 			*(pData +2 * i) = 0xffff;
+#endif
+
         }
         	return 0x3f;
 	} else {
@@ -1080,9 +1086,10 @@ int rtmp_ee_efuse_write16(
 
 	MtCmdEfuseAccessRead(pAd,Offset,&block[0],&isVaild);
 	index = Offset%EFUSE_BLOCK_SIZE;
-
+    
 	block[index] = data & 0xff;
-	block[index+1] = data >> 8 & 0xff;
+    if((index+1) < EFUSE_BLOCK_SIZE)
+	    block[index+1] = data >> 8 & 0xff;
 	MtCmdEfuseAccessWrite(pAd,Offset,&block[0]);
 	return 0;
 }
@@ -1143,8 +1150,19 @@ INT rtmp_ee_write_to_efuse(
 	UCHAR	index, i;
 	UCHAR	all_ff[EFUSE_BLOCK_SIZE] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 	USHORT offset = 0;
-	UINT isVaild = 0 ;
+	UINT isVaild = 0;
 	BOOL NeedWrite;
+#ifdef RF_LOCKDOWN
+	BOOL RFlockDown = FALSE;
+
+	/* Check RF lock down flag in Effuse column */
+	if ((pAd->fgQAEffuseWriteBack == FALSE) && (pAd->chipOps.check_RF_lock_down != NULL))
+		RFlockDown = pAd->chipOps.check_RF_lock_down(pAd);
+
+	/* check RF lock */
+	if (RFlockDown == TRUE)
+		return TRUE;
+#endif /* RF_LOCKDOWN */
 
 	for ( offset = 0 ; offset < length ; offset += EFUSE_BLOCK_SIZE )
 	{
@@ -1425,13 +1443,14 @@ VOID rtmp_ee_load_from_efuse(RTMP_ADAPTER *pAd)
 	UINT16 efuse_val=0;
 	UINT free_blk = 0;
 	UINT i;
+	PEEPROM_CONTROL pE2pCtrl = &pAd->E2pCtrl;
 
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_OFF, 
 		("Load EEPROM buffer from efuse, and change to BIN buffer mode\n"));
 
 	/* If the number of the used block is less than 5, assume the efuse is not well-calibrated, and force to use buffer mode */
 	eFuseGetFreeBlockCount(pAd, &free_blk);
-	if (free_blk > (pAd->chipCap.EFUSE_USAGE_MAP_SIZE - 5))
+	if (free_blk >= pAd->chipCap.EFUSE_RESERVED_SIZE)
 		return;
 
 	NdisZeroMemory(pAd->EEPROMImage, MAX_EEPROM_BIN_FILE_SIZE);
@@ -1440,8 +1459,9 @@ VOID rtmp_ee_load_from_efuse(RTMP_ADAPTER *pAd)
 			eFuseRead(pAd, i,&efuse_val, 2);
 			efuse_val = cpu2le16 (efuse_val);
 			NdisMoveMemory(&pAd->EEPROMImage[i],&efuse_val,2);
-	}		
-	
+	}
+	pE2pCtrl->e2pCurMode = E2P_EFUSE_MODE;
+	pE2pCtrl->e2pSource = E2P_SRC_FROM_EFUSE;
 	/* Change to BIN eeprom buffer mode */
 	RtmpChipOpsEepromHook(pAd, pAd->infType,E2P_BIN_MODE);
 }

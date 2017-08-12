@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,13 @@
 	Who         When          What
 	--------    ----------    ----------------------------------------------
 */
+#endif /* MTK_LICENSE */
 #include	"rt_config.h"
+
+#if defined(RLM_CAL_CACHE_SUPPORT) || defined(PRE_CAL_TRX_SET2_SUPPORT)
+#include "phy/rlm_cal_cache.h"
+#endif /* RLM_CAL_CACHE_SUPPORT */
+
 
 #ifdef OS_ABL_FUNC_SUPPORT
 /* Os utility link: printk, scanf */
@@ -155,13 +162,22 @@ NDIS_STATUS RTMPAllocAdapterBlock(VOID *handle, VOID **ppAdapter)
 #ifdef APCLI_SUPPORT
 #ifdef MAC_REPEATER_SUPPORT
         NdisAllocateSpinLock(pAd, &pAd->ApCfg.ReptCliEntryLock);
+		NdisAllocateSpinLock(pAd, &pAd->ApCfg.InsertReptCmdLock);
         NdisAllocateSpinLock(pAd, &pAd->ApCfg.CliLinkMapLock);
 #endif
 #endif
 #endif
 
+#ifdef GREENAP_SUPPORT
+        NdisAllocateSpinLock(pAd, &pAd->ApCfg.greenap.lock);
+#endif /* GREENAP_SUPPORT */
+
 		/*HIF related initial for pAd*/
 		RTMPInitHifAdapterBlock(pAd);
+
+#ifdef RLM_CAL_CACHE_SUPPORT
+        rlmCalCacheInit(pAd, &pAd->rlmCalCache);
+#endif /* RLM_CAL_CACHE_SUPPORT */
 
 		*ppAdapter = (VOID *)pAd;
 	} while (FALSE);
@@ -206,9 +222,13 @@ NDIS_STATUS RTMPAllocAdapterBlock(VOID *handle, VOID **ppAdapter)
 	/*init WifiSys information structure*/
 	WifiSysInfoInit(pAd);
 
+	/*allocate wpf related memory*/
+	wpf_config_init(pAd);
+#ifndef INTELP6_SUPPORT
 #ifdef MULTI_INF_SUPPORT
 	Status = multi_inf_adapt_reg((VOID *) pAd);
 #endif /* MULTI_INF_SUPPORT */
+#endif
 
 	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("<-- RTMPAllocAdapterBlock, Status=%x\n", Status));
 
@@ -510,6 +530,48 @@ extern RTMP_STRING *mac;
 	 NICReadEEPROMParameters(pAd, (RTMP_STRING *)mac);
 	 
 	 HcRadioInit(pAd,pAd->RfIcType,pAd->CommonCfg.dbdc_mode);
+
+#ifdef MT_MAC 
+#if defined(MT7603)||defined(MT7628)||defined(MT7636)||defined(MT7615)||defined(MT7637)||defined(MT7622)
+	/*Send EEprom parameter to FW*/
+	#ifdef CONFIG_ATE
+	if(!ATE_ON(pAd))
+	#endif
+
+#ifdef NR_PD_DETECTION
+        if (pAd->CommonCfg.LinkTestSupport)
+        {
+            /* Phy Init flag disable */
+            pAd->fgPhyInitDone = FALSE;
+    
+            /* Enable RF port TX1, TX2, TX3 */
+            if(pAd->CommonCfg.dbdc_mode)
+            {
+                MtCmdLinkTestTxCtrl(pAd, FALSE, CHANNEL_BAND_2G);
+                MtCmdLinkTestTxCtrl(pAd, FALSE, CHANNEL_BAND_5G);
+            }
+            else
+            {
+                MtCmdLinkTestTxCtrl(pAd, FALSE, pAd->ucCmwChannelBand);
+            }
+    
+            MTWF_LOG(DBG_CAT_CMW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("(Link Test) PHY Init ---> Enter 4T mode !!!\n"));
+        }
+#endif /* NR_PD_DETECTION */
+  
+		MtCmdEfusBufferModeSet(pAd,pAd->eeprom_type);
+
+#ifdef NR_PD_DETECTION
+    if (pAd->CommonCfg.LinkTestSupport)
+    {
+        /* Phy Init flag enable */
+        pAd->fgPhyInitDone = TRUE;
+    }
+#endif /* NR_PD_DETECTION */
+
+#endif /*#if defined(MT7603)||defined(MT7628)||defined(MT7636))||defined(MT7615)*/
+#endif /* MT_MAC */
+
 	 //+++Add by shiang for debug
 	 RfIC = HcGetRadioRfIC(pAd);
 	 MTWF_LOG(DBG_CAT_ALL, DBG_SUBCAT_ALL, DBG_LVL_TRACE,
@@ -903,6 +965,10 @@ VOID UserCfgExit(RTMP_ADAPTER *pAd)
 	}
 #endif /* CONFIG_AP_SUPPORT */
 
+#ifdef WSC_INCLUDED
+#endif /*WSC_INCLUDED*/
+
+	wdev_config_init(pAd);
 }
 
 
@@ -928,14 +994,97 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 {
 	UINT i;
 	UINT key_index, bss_index;
+#ifdef GREENAP_SUPPORT	
+    struct greenap_ctrl *greenap = &pAd->ApCfg.greenap;
+#endif /* GREENAP_SUPPORT */
 
 	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("--> UserCfgInit\n"));
 
+	/*init wifi profile*/
+	wpf_init(pAd);
+
 	pAd->IndicateMediaState = NdisMediaStateDisconnected;
+#ifdef CONFIG_AP_SUPPORT
+#ifdef CONFIG_INIT_RADIO_ONOFF
+	pAd->ApCfg.bRadioOn = TRUE;
+#endif /* CONFIG_INIT_RADIO_ONOFF */
+#endif /* CONFIG_AP_SUPPORT */
+#ifdef VENDOR_FEATURE6_SUPPORT
+	pAd->ApCfg.tx_retry_cnt = 0;
+	pAd->ApCfg.rts_retry_cnt = 0;
+#endif
 
 	/* part I. intialize common configuration */
 	pAd->CommonCfg.BasicRateBitmap = 0xF;
 	pAd->CommonCfg.BasicRateBitmapOld = 0xF;
+
+#ifdef NR_PD_DETECTION
+
+    /* state machine state flag */
+    pAd->fgLinkBw20State         = FALSE;
+    pAd->fgLinkSingleRxState     = FALSE;
+    pAd->fgACRstate              = FALSE;
+
+    /* Rx Control Parameter */
+    pAd->ucTestTimeoutCount      =     0;
+    pAd->u4TempRxCount           =     0;
+    pAd->ucLinkRssiTh            =    20;
+    pAd->ucRssiTh                =    10;
+    pAd->ucHighPowerRssiTh       =    25;
+    pAd->ucLowPowerRssiTh        =    20;
+    pAd->cLargePowerTh           =   -90;
+    pAd->ucRxCountTh             =     5;
+    pAd->ucTimeOutTh             =   200;  // 20s
+    pAd->ucPerTh                 =    50;
+    pAd->cNrRssiTh               =   -40;
+    pAd->cChgTestPathTh          =   -30;
+
+    /* ACR Control Parameter */
+    pAd->ucACRConfidenceCnt      =     0;
+    pAd->ucACRConfidenceCntTh    =    10;
+    pAd->ucMaxInConfidenceCnt    =     0;
+    pAd->ucMaxInConfidenceCntTh  =    10;
+    pAd->cMaxInRssiTh            =   -40;
+
+    /* Tx Control Parameter */
+    pAd->ucCmwCheckCount         =     0;
+    pAd->ucCmwCheckCountTh       =    20;  // 2s
+    pAd->fgCmwInstrumBack4T      = FALSE;
+    pAd->ucRssiBalanceCount      =     0;
+    pAd->ucRssiIBalanceCountTh   =   100;  //10s
+    pAd->fgRssiBack4T            = FALSE;
+    pAd->ucCableRssiTh           =    25;
+    pAd->fgCmwLinkDone           = FALSE;
+    pAd->ucLinkCount             =     0;
+    pAd->ucLinkCountTh           =    30;
+    pAd->fgLinkRSSICheck         = FALSE;
+    pAd->fgWifiInitDone          = FALSE;
+    pAd->fgChannelSwitchDone     = FALSE;
+    pAd->fgPhyInitDone           = FALSE;
+    pAd->ucCmwChannelBand        = CHANNEL_BAND_2G;
+    pAd->fgApclientLink          = FALSE;
+
+    /* Debug Log Parameter */
+    pAd->u4RoundCount            =     0;
+
+    /* manual command control function enable/disable flag */
+    pAd->fgTxSpurEn              =  TRUE;
+    pAd->fgNrFloating            =  TRUE;
+    pAd->fgACREn                 =  TRUE;
+#endif /* NR_PD_DETECTION */
+
+    /* disable QA Effuse Write back status by default */
+    pAd->fgQAEffuseWriteBack = FALSE;
+
+#ifdef RF_LOCKDOWN
+    /* Apply Cal-Free Effuse value by default */
+    pAd->fgCalFreeApply = TRUE;
+    pAd->RFlockTempIdx  =    0;
+    pAd->CalFreeTempIdx =    0;
+
+
+#endif /* RF_LOCKDOWN */
+
 
 
 
@@ -989,14 +1138,17 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 	pAd->bGenOneHCCA = FALSE;
 	pAd->CommonCfg.Dsifs = 10;      /* in units of usec */
 	pAd->CommonCfg.TxPower = 100; /* mW*/
-	pAd->CommonCfg.TxPowerPercentage = 0xffffffff; /* AUTO*/
-	pAd->CommonCfg.TxPowerDefault = 0xffffffff; /* AUTO*/
+    pAd->CommonCfg.TxPowerPercentage[BAND0] = 0xffffffff; /* AUTO*/
+#ifdef DBDC_MODE      
+    pAd->CommonCfg.TxPowerPercentage[BAND1] = 0xffffffff; /* AUTO*/
+#endif /* DBDC_MODE */
+    pAd->CommonCfg.TxPowerDefault[BAND0] = 0xffffffff; /* AUTO*/
+#ifdef DBDC_MODE  
+    pAd->CommonCfg.TxPowerDefault[BAND1] = 0xffffffff; /* AUTO*/
+#endif /* DBDC_MODE */
 	pAd->CommonCfg.TxPreamble = Rt802_11PreambleAuto; /* use Long preamble on TX by defaut*/
 	pAd->CommonCfg.bUseZeroToDisableFragment = FALSE;
-    pAd->bDisableRtsProtect = FALSE;
-    pAd->CommonCfg.RtsPktThreshold = 2;
-	pAd->CommonCfg.RtsThreshold = 2347;
-	pAd->CommonCfg.FragmentThreshold = 2346;
+	pAd->bDisableRtsProtect = FALSE;
 	pAd->CommonCfg.UseBGProtection = 0;    /* 0: AUTO*/
 	pAd->CommonCfg.bEnableTxBurst = TRUE; /* 0;    	*/
 	pAd->CommonCfg.SavedPhyMode =0xff;
@@ -1015,9 +1167,14 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 
 #ifdef CONFIG_AP_SUPPORT
 #ifdef AP_SCAN_SUPPORT
-	pAd->ApCfg.ACSCheckTime = 0;
+	os_zero_mem(&pAd->ApCfg.ACSCheckTime, sizeof(UINT32) * DBDC_BAND_NUM);
+	os_zero_mem(&pAd->ApCfg.ACSCheckCount, sizeof(UINT32) * DBDC_BAND_NUM);
 #endif /* AP_SCAN_SUPPORT */
 #endif /* CONFIG_AP_SUPPORT */
+
+#ifdef CONFIG_AP_SUPPORT
+	os_zero_mem(&pAd->AutoChSelCtrl, sizeof(AUTOCH_SEL_CTRL));
+#endif/* CONFIG_AP_SUPPORT */
 
 #ifdef CARRIER_DETECTION_SUPPORT
 	pAd->CommonCfg.CarrierDetect.delta = CARRIER_DETECT_DELTA;
@@ -1051,8 +1208,8 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 	pAd->CommonCfg.TriggerTimerCount = 0;
 	pAd->CommonCfg.bAPSDForcePowerSave = FALSE;
 	/*pAd->CommonCfg.bCountryFlag = FALSE;*/
-	pAd->CommonCfg.TxStream = 0;
-	pAd->CommonCfg.RxStream = 0;
+	//pAd->CommonCfg.TxStream = 0;
+	//pAd->CommonCfg.RxStream = 0;
 
 #ifdef DOT11_N_SUPPORT
 	NdisZeroMemory(&pAd->CommonCfg.HtCapability, sizeof(pAd->CommonCfg.HtCapability));
@@ -1076,7 +1233,6 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 
 	pAd->CommonCfg.bRcvBSSWidthTriggerEvents = FALSE;
 
-	NdisZeroMemory(&pAd->CommonCfg.AddHTInfo, sizeof(pAd->CommonCfg.AddHTInfo));
 	pAd->CommonCfg.BACapability.field.MMPSmode = MMPS_DISABLE;
 	pAd->CommonCfg.BACapability.field.MpduDensity = 0;
 	pAd->CommonCfg.BACapability.field.Policy = IMMED_BA;
@@ -1088,13 +1244,7 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 	BATableInit(pAd, &pAd->BATable);
 
 	pAd->CommonCfg.bExtChannelSwitchAnnouncement = 1;
-	pAd->CommonCfg.bHTProtect = 1;
 	pAd->CommonCfg.bMIMOPSEnable = TRUE;
-#ifdef GREENAP_SUPPORT
-	pAd->ApCfg.bGreenAPEnable=FALSE;
-	pAd->ApCfg.bGreenAPActive = FALSE;
-	pAd->ApCfg.GreenAPLevel= GREENAP_WITHOUT_ANY_STAS_CONNECT;
-#endif /* GREENAP_SUPPORT */
 	pAd->CommonCfg.bBADecline = FALSE;
 	pAd->CommonCfg.bDisableReordering = FALSE;
 
@@ -1143,6 +1293,7 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 
 #ifdef MCAST_RATE_SPECIFIC
 	pAd->CommonCfg.MCastPhyMode.word = pAd->MacTab.Content[MCAST_WCID].HTPhyMode.word;
+	pAd->CommonCfg.MCastPhyMode_5G.word = pAd->MacTab.Content[MCAST_WCID].HTPhyMode.word;
 #endif /* MCAST_RATE_SPECIFIC */
 
 	/* WFA policy - disallow TH rate in WEP or TKIP cipher */
@@ -1181,6 +1332,9 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 #ifdef CONFIG_AP_SUPPORT
 	/* Default Config change flag*/
 	pAd->bConfigChanged = FALSE;
+#ifdef GREENAP_SUPPORT
+    greenap_init(greenap);
+#endif /* GREENAP_SUPPORT */	
 #endif
 
 	/*
@@ -1201,6 +1355,11 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 			BSS_STRUCT *mbss = &pAd->ApCfg.MBSSID[j];
 			struct wifi_dev *wdev = &pAd->ApCfg.MBSSID[j].wdev;
 
+#ifdef DOT11V_WNM_SUPPORT
+			WNM_CONFIG *wnm_cfg = &pAd->ApCfg.MBSSID[j].WnmCfg;
+			wnm_cfg->bDot11vWNM_BSSEnable = 1;
+#endif /* DOT11V_WNM_SUPPORT */	
+
 #ifdef SPECIFIC_TX_POWER_SUPPORT
 			if (IS_RT6352(pAd))
 				mbss->TxPwrAdj = -1;
@@ -1209,7 +1368,6 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 #ifdef DOT1X_SUPPORT
 			/* PMK cache setting*/
 			mbss->PMKCachePeriod = (10 * 60 * OS_HZ); /* unit : tick(default: 10 minute)*/
-			NdisZeroMemory(&mbss->PMKIDCache, sizeof(NDIS_AP_802_11_PMKID));
 
 			/* dot1x related per BSS */
 			mbss->wdev.SecConfig.radius_srv_num = 0;
@@ -1224,7 +1382,6 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 			/* Default MCS as AUTO*/
 			wdev->bAutoTxRateSwitch = TRUE;
 			wdev->DesiredTransmitSetting.field.MCS = MCS_AUTO;
-
 			/* Default is zero. It means no limit.*/
 			mbss->MaxStaNum = 0;
 			mbss->StaCount = 0;
@@ -1312,9 +1469,23 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 #endif /* WSC_AP_SUPPORT */
 
 
+#ifdef DOT11U_INTERWORKING_IE_SUPPORT
+			pAd->ApCfg.MBSSID[j].bEnableInterworkingIe = FALSE;
+			pAd->ApCfg.MBSSID[j].InterWorkingIe.AccessNwType = 15;
+			pAd->ApCfg.MBSSID[j].InterWorkingIe.Internet = 0;
+			pAd->ApCfg.MBSSID[j].InterWorkingIe.ASRA = 0;
+			pAd->ApCfg.MBSSID[j].InterWorkingIe.ESR = 0;
+			pAd->ApCfg.MBSSID[j].InterWorkingIe.UESA = 0;
+#endif /* DOT11U_INTERWORKING_IE_SUPPORT */
 			for(i = 0; i < WLAN_MAX_NUM_OF_TIM; i++)
                 mbss->wdev.bcn_buf.TimBitmaps[i] = 0;
 		}
+
+#ifdef DOT1X_SUPPORT
+		/* PMK cache setting*/
+		NdisZeroMemory(&pAd->ApCfg.PMKIDCache, sizeof(NDIS_AP_802_11_PMKID));
+#endif /* DOT1X_SUPPORT */
+
 		pAd->ApCfg.DtimCount  = 0;
 		pAd->ApCfg.DtimPeriod = DEFAULT_DTIM_PERIOD;
 
@@ -1350,6 +1521,9 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 
 #ifdef APCLI_SUPPORT
 		pAd->ApCfg.FlgApCliIsUapsdInfoUpdated = FALSE;
+#ifdef APCLI_CERT_SUPPORT
+		pAd->bApCliCertTest = FALSE;
+#endif /* APCLI_CERT_SUPPORT */
 		pAd->ApCfg.ApCliNum = MAX_APCLI_NUM;
 		for(j = 0; j < MAX_APCLI_NUM; j++)
 		{
@@ -1366,6 +1540,12 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 #ifdef APCLI_CONNECTION_TRIAL
 			apcli_entry->TrialCh = 0;//if the channel is 0, AP will connect the rootap is in the same channel with ra0.
 #endif // APCLI_CONNECTION_TRIAL
+#ifdef APCLI_CERT_SUPPORT
+			apcli_entry->NeedFallback = FALSE;
+#endif /* APCLI_CERT_SUPPORT */
+#ifdef WSC_AP_SUPPORT
+            apcli_entry->WscControl.WscApCliScanMode = TRIGGER_FULL_SCAN;
+#endif /* WSC_AP_SUPPORT */
 		}
 #endif /* APCLI_SUPPORT */
 		pAd->ApCfg.EntryClientCount = 0;
@@ -1468,7 +1648,7 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 	pAd->CommonCfg.WscPBCOverlap = FALSE;
 #endif /* WSC_INCLUDED */
 
-#if defined (CONFIG_WIFI_PKT_FWD)
+#if defined(CONFIG_WIFI_PKT_FWD) || defined(CONFIG_WIFI_PKT_FWD_MODULE)
 	if (IS_MT7615(pAd) || IS_MT7622(pAd))
 		if (wf_fwd_set_cb_num != NULL)
 			wf_fwd_set_cb_num(PACKET_BAND_CB, RECV_FROM_CB);
@@ -1506,6 +1686,7 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 	DfsParamInit(pAd);//Jelly20150311
 #endif
 
+	pAd->CommonCfg.ThermalRecalMode = 1;
 
 
 #ifdef CONFIG_AP_SUPPORT
@@ -1529,6 +1710,10 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 	}
 	pAd->ApCfg.ApCliAutoConnectChannelSwitching = FALSE;
 #endif /* APCLI_AUTO_CONNECT_SUPPORT */
+	for (i = 0; i < MAX_APCLI_NUM; i++) {
+		pAd->ApCfg.bPartialScanEnable[i] = FALSE;
+		pAd->ApCfg.bPartialScanning[i] = FALSE;
+	}
 #endif /* APCLI_SUPPORT */
 
 #ifdef DOT11_VHT_AC
@@ -1651,7 +1836,7 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
     /* VOW control */
     pAd->vow_cfg.en_bw_ctrl = FALSE;
     pAd->vow_cfg.en_bw_refill = TRUE;
-    pAd->vow_cfg.en_airtime_fairness = FALSE;
+    pAd->vow_cfg.en_airtime_fairness = TRUE;
     pAd->vow_cfg.en_txop_no_change_bss = TRUE;
     pAd->vow_cfg.dbdc0_search_rule = VOW_WMM_SET_FIRST;
     pAd->vow_cfg.dbdc1_search_rule = VOW_WMM_SET_FIRST;
@@ -1688,10 +1873,10 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
     /* per station default configuration */
     for (i = 0; i < MAX_LEN_OF_MAC_TABLE; i++)
     {
-        pAd->vow_sta_cfg[i].dwrr_quantum[WMM_AC_BK] = VOW_STA_DWRR_IDX1; //1ms
-        pAd->vow_sta_cfg[i].dwrr_quantum[WMM_AC_BE] = VOW_STA_DWRR_IDX1;
-        pAd->vow_sta_cfg[i].dwrr_quantum[WMM_AC_VI] = VOW_STA_DWRR_IDX3;
-        pAd->vow_sta_cfg[i].dwrr_quantum[WMM_AC_VO] = VOW_STA_DWRR_IDX2;
+        pAd->vow_sta_cfg[i].dwrr_quantum[WMM_AC_BK] = VOW_STA_DWRR_IDX2; //4ms
+        pAd->vow_sta_cfg[i].dwrr_quantum[WMM_AC_BE] = VOW_STA_DWRR_IDX2; //4ms
+        pAd->vow_sta_cfg[i].dwrr_quantum[WMM_AC_VI] = VOW_STA_DWRR_IDX1; //3ms
+        pAd->vow_sta_cfg[i].dwrr_quantum[WMM_AC_VO] = VOW_STA_DWRR_IDX0; //1.5ms
         pAd->vow_sta_cfg[i].group = 0;
         pAd->vow_sta_cfg[i].wmm_idx = VOW_WMM_SET0;
         pAd->vow_sta_cfg[i].ac_change_rule = VOW_DEFAULT_AC;
@@ -1708,6 +1893,8 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
     pAd->vow_cfg.vow_sta_dwrr_quantum[6] = VOW_STA_DWRR_QUANTUM6;
     pAd->vow_cfg.vow_sta_dwrr_quantum[7] = VOW_STA_DWRR_QUANTUM7;
 
+	/* for fast round robin */
+	pAd->vow_sta_frr_quantum = 2;	/* 0.5ms */
 
     /* RX airtime */
     pAd->vow_rx_time_cfg.rx_time_en = TRUE;
@@ -1748,7 +1935,10 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 #endif /* VOW_SUPPORT */
 #endif /* CONFIG_AP_SUPPORT */
 
-
+#ifdef RED_SUPPORT
+	pAd->red_en = TRUE;
+#endif /* RED_SUPPORT */
+	pAd->cp_support = 2;
 
 #ifdef INTERNAL_CAPTURE_SUPPORT    
     pAd->IcapMode = 0;
@@ -1756,6 +1946,10 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
     pAd->Src_IQ = "/tmp/WifiSpectrum_IQ.txt";
     pAd->Src_Gain = "/tmp/WifiSpectrum_LNA_LPF.txt";
 #endif /* INTERNAL_CAPTURE_SUPPORT */
+
+#ifdef PA_TRIM_SUPPORT
+    pAd->CalFileOffset = 0;
+#endif /* PA_TRIM_SUPPORT */
 
 
  //=====================================================
@@ -1780,7 +1974,7 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
 	pAd->SCSCtrl.CckFixedRssiBond[i] = CckFixedRssiBondDefault;
 	pAd->SCSCtrl.OfdmFixedRssiBond[i] = OfdmFixedRssiBondDefault;	
     }    
-    //pAd->SCSCtrl.SCSEnable[0] = SCS_ENABLE;
+    pAd->SCSCtrl.SCSEnable[DBDC_BAND0] = SCS_ENABLE;
 #endif /* SMART_CARRIER_SENSE_SUPPORT */
 
         for (i=0; i<DBDC_BAND_NUM; i++)
@@ -1790,7 +1984,48 @@ VOID UserCfgInit(RTMP_ADAPTER *pAd)
         pAd->g_mode_txop_wdev = NULL;
         pAd->G_MODE_INFRA_TXOP_RUNNING = FALSE;
 
+#ifdef CONFIG_AP_SUPPORT
+#ifdef VENDOR_FEATURE6_SUPPORT
+     pAd->ApCfg.BSSEnabled = 0; 
+#endif
+#endif
         pAd->MUMIMO_TxOP_Value = 0;
+#ifndef DISABLE_MULTICLIENT_DYNAMIC_TXOP
+	pAd->txop_ctl.multi_client_nums = 0;
+	pAd->txop_ctl.cur_wdev = NULL;
+	pAd->txop_ctl.multi_cli_txop_running = FALSE;
+	pAd->txop_ctl.multi_client_nums_2g = 0;
+	pAd->txop_ctl.cur_wdev_2g = NULL;
+	pAd->txop_ctl.multi_cli_txop_2g_running = FALSE;
+#endif	
+
+#ifdef PKT_BUDGET_CTRL_SUPPORT
+	pAd->pbc_bound[PBC_AC_BE] = PBC_WMM_UP_DEFAULT_BE;
+	pAd->pbc_bound[PBC_AC_BK] = PBC_WMM_UP_DEFAULT_BK;
+	pAd->pbc_bound[PBC_AC_VO] = PBC_WMM_UP_DEFAULT_VO;
+	pAd->pbc_bound[PBC_AC_VI] = PBC_WMM_UP_DEFAULT_VI;
+	pAd->pbc_bound[PBC_AC_MGMT] = PBC_WMM_UP_DEFAULT_MGMT;
+#endif /*PKT_BUDGET_CTRL_SUPPORT*/
+#ifdef TX_AGG_ADJUST_WKR
+	pAd->TxAggAdjsut = TRUE;
+#endif /* TX_AGG_ADJUST_WKR */
+
+#ifdef HTC_DECRYPT_IOT
+	pAd->HTC_ICV_Err_TH = 5;
+#endif /* HTC_DECRYPT_IOT */
+#ifdef DHCP_UC_SUPPORT
+	pAd->DhcpUcEnable = FALSE; 
+#endif /* DHCP_UC_SUPPORT */
+	for (i=0; i<DBDC_BAND_NUM; i++)
+    	{
+    		pAd->CommonCfg.ucEDCCACtrl[i] = TRUE; //EDCCA default is ON.
+	}
+
+	pAd->cn_cnt = 0xFF;
+
+#ifdef LINUX_NET_TXQ_SUPPORT
+	pAd->tx_net_queue_len = LINUX_DEF_TX_QUEUE_LENGTH;/* for veriwave test */
+#endif /* LINUX_NET_TXQ_SUPPORT */
 
 	MTWF_LOG(DBG_CAT_INIT, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("<-- UserCfgInit\n"));
 }
@@ -2072,6 +2307,9 @@ VOID RTMPInitTimer(
 */
 VOID RTMPSetTimer(RALINK_TIMER_STRUCT *pTimer, ULONG Value)
 {
+	if(!pTimer->timer_lock)
+		return;
+
 	RTMP_SEM_LOCK(pTimer->timer_lock);
 
 	if (pTimer->Valid)
@@ -2131,6 +2369,8 @@ VOID RTMPModTimer(RALINK_TIMER_STRUCT *pTimer, ULONG Value)
 {
 	BOOLEAN	Cancel;
 
+	if(!pTimer->timer_lock)
+		return;
 
 	RTMP_SEM_LOCK(pTimer->timer_lock);
 
@@ -2501,8 +2741,8 @@ extern UINT8  MC_CardUsed[MAX_NUM_OF_MULTIPLE_CARD];
 	}
 #endif
 
-	HcCfgExit(pAd);
-
+	HcCfgExit(pAd);	
+	wpf_config_exit(pAd);
 	RTMPFreeAdapter(pAd);
 
 	return TRUE;

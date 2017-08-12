@@ -45,6 +45,14 @@ cmm_objs := $(SRC_EMBEDDED_DIR)/common/action.o\
 		$(SRC_EMBEDDED_DIR)/common/cmm_radar.o\
 		$(SRC_EMBEDDED_DIR)/common/cmm_sync.o\
 		$(SRC_EMBEDDED_DIR)/common/wifi_sys_info.o\
+		$(SRC_EMBEDDED_DIR)/wlan_config/config_basic.o\
+                $(SRC_EMBEDDED_DIR)/wlan_config/config_phy.o\
+                $(SRC_EMBEDDED_DIR)/wlan_config/config_ht.o\
+                $(SRC_EMBEDDED_DIR)/wlan_config/config_vht.o\
+                $(SRC_EMBEDDED_DIR)/mgmt/be_basic.o\
+                $(SRC_EMBEDDED_DIR)/mgmt/be_phy.o\
+                $(SRC_EMBEDDED_DIR)/mgmt/be_ht.o\
+                $(SRC_EMBEDDED_DIR)/mgmt/be_vht.o\
 		$(SRC_EMBEDDED_DIR)/common/cmm_sanity.o\
 		$(SRC_EMBEDDED_DIR)/common/vendor.o\
 		$(SRC_EMBEDDED_DIR)/security/cmm_sec.o\
@@ -76,7 +84,9 @@ cmm_objs := $(SRC_EMBEDDED_DIR)/common/action.o\
 		$(SRC_EMBEDDED_DIR)/tx_rx/wdev.o\
 		$(SRC_EMBEDDED_DIR)/tx_rx/wdev_tx.o\
 		$(SRC_EMBEDDED_DIR)/tx_rx/wdev_rx.o\
+		$(SRC_DIR)/protocol/protection.o\
 		$(SRC_DIR)/os/linux/rt_profile.o
+
 
 ########################################################
 # Rate adaptation related files
@@ -395,6 +405,22 @@ ifeq ($(CONFIG_RTMP_FLASH_SUPPORT),y)
     EXTRA_CFLAGS += -DRTMP_FLASH_SUPPORT
 endif
 
+#ifeq ($(CONFIG_PRE_CAL_TRX_SET1_SUPPORT),y)
+    EXTRA_CFLAGS += -DPRE_CAL_TRX_SET1_SUPPORT
+#endif
+
+#ifeq ($(CONFIG_RLM_CAL_CACHE_SUPPORT),y)
+    EXTRA_CFLAGS += -DRLM_CAL_CACHE_SUPPORT
+#endif
+
+#ifeq ($(CONFIG_PRE_CAL_TRX_SET2_SUPPORT),y)
+    EXTRA_CFLAGS += -DPRE_CAL_TRX_SET2_SUPPORT
+#endif
+
+#ifeq ($(CONFIG_PA_TRIM_SUPPORT),y)
+    EXTRA_CFLAGS += -DPA_TRIM_SUPPORT
+#endif
+
 ifeq ($(CONFIG_RTMP_TEMPERATURE_TX_ALC),y)
     EXTRA_CFLAGS += -DRTMP_TEMPERATURE_TX_ALC
 endif
@@ -441,6 +467,10 @@ ifeq ($(CONFIG_ETH_CONVERT_SUPPORT),y)
     		$(SRC_EMBEDDED_DIR)/common/cmm_mat_iparp.o\
 		$(SRC_EMBEDDED_DIR)/common/cmm_mat_pppoe.o\
 		$(SRC_EMBEDDED_DIR)/common/cmm_mat_ipv6.o    
+endif
+
+ifeq ($(CONFIG_RED_SUPPORT),y)
+    EXTRA_CFLAGS += -DRED_SUPPORT
 endif
 
 ########################################################
@@ -547,6 +577,7 @@ EXTRA_CFLAGS += -DMCS_LUT_SUPPORT -DA_BAND_SUPPORT
 EXTRA_CFLAGS += -DRTMP_EFUSE_SUPPORT
 EXTRA_CFLAGS += -DBCN_OFFLOAD_SUPPORT
 EXTRA_CFLAGS += -DRX_SCATTER
+EXTRA_CFLAGS += -DPKT_BUDGET_CTRL_SUPPORT
 ifeq ($(CONFIG_G_BAND_256QAM_SUPPORT), y)
 EXTRA_CFLAGS += -DG_BAND_256QAM
 ifeq ($(CONFIG_BRCM_256QAM_SUPPORT), y)
@@ -560,12 +591,16 @@ EXTRA_CFLAGS += -DUNIFY_FW_CMD
 EXTRA_CFLAGS += -DDBDC_MODE
 EXTRA_CFLAGS += -DNEED_ROM_PATCH
 EXTRA_CFLAGS += -DMAC_INIT_OFFLOAD
+EXTRA_CFLAGS += -DCONFIG_BA_REORDER_MONITOR
 EXTRA_CFLAGS += -DENHANCED_STAT_DISPLAY
 EXTRA_CFLAGS += -DCONFIG_FWOWN_SUPPORT
 EXTRA_CFLAGS += -DNEWSEC
 EXTRA_CFLAGS += -DTHERMAL_PROTECT_SUPPORT
 EXTRA_CFLAGS += -DCONFIG_KEEP_ALIVE_OFFLOAD -DSTA_LP_PHASE_2_SUPPORT -DCONFIG_PM_BIT_HW_MODE
 EXTRA_CFLAGS += -DMT_WOW_SUPPORT -DCONFIG_PM
+EXTRA_CFLAGS += -DRATE_ADAPTION
+EXTRA_CFLAGS += -DRATE_ADAPT_AGBS_SUPPORT
+EXTRA_CFLAGS += -DRACTRL_FW_OFFLOAD_SUPPORT
 ifeq ($(CONFIG_HDR_TRANS_TX_SUPPORT),y)
 	EXTRA_CFLAGS += -DHDR_TRANS_TX_SUPPORT -DCUT_THROUGH_FULL_OFFLOAD
 endif
@@ -573,9 +608,9 @@ ifeq ($(CONFIG_HDR_TRANS_RX_SUPPORT),y)
 	EXTRA_CFLAGS += -DHDR_TRANS_RX_SUPPORT
 endif
 
-ifeq ($(CONFIG_RATE_ADAPT_AGBS_SUPPORT),y)
-	EXTRA_CFLAGS += -DRACTRL_FW_OFFLOAD_SUPPORT
-endif
+#ifeq ($(CONFIG_RATE_ADAPT_AGBS_SUPPORT),y)
+#	EXTRA_CFLAGS += -DRACTRL_FW_OFFLOAD_SUPPORT
+#endif
 
 chip_objs += $(SRC_DIR)/chips/mt7615.o\
 		$(SRC_DIR)/hw_ctrl/cmm_asic_mt_dmac.o\

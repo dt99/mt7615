@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -23,7 +24,7 @@
 	Who 		When			What
 	--------	----------		----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #include "rt_config.h"
 
@@ -306,9 +307,19 @@ UCHAR vht_cent_ch_freq(UCHAR prim_ch, UCHAR vht_bw)
 INT vht_mode_adjust(RTMP_ADAPTER *pAd, MAC_TABLE_ENTRY *pEntry, VHT_CAP_IE *cap, VHT_OP_IE *op)
 {
 	RT_PHY_INFO *ht_phyinfo;
+	struct wifi_dev *wdev = pEntry->wdev;
+	ADD_HT_INFO_IE *addht;
+	UCHAR band = 0;
+
 	pEntry->MaxHTPhyMode.field.MODE = MODE_VHT;
-	pAd->CommonCfg.AddHTInfo.AddHtInfo2.NonGfPresent = 1;
-	pAd->MacTab.fAnyStationNonGF = TRUE;
+
+	if (!wdev) 
+		return FALSE;
+
+	addht = wlan_operate_get_addht(wdev);
+	addht->AddHtInfo2.NonGfPresent = 1;
+	band = HcGetBandByWdev(pEntry->wdev);
+	pAd->MacTab.fAnyStationNonGF[band] = TRUE;
 
 	/*
 	if (op->vht_op_info.ch_width >= 1 && pEntry->MaxHTPhyMode.field.BW == BW_40)
@@ -325,7 +336,7 @@ INT vht_mode_adjust(RTMP_ADAPTER *pAd, MAC_TABLE_ENTRY *pEntry, VHT_CAP_IE *cap,
 					 ht_phyinfo->vht_bw, cap->vht_cap.ch_width));
 			if((ht_phyinfo->vht_bw == VHT_BW_2040)) {
 				pEntry->MaxHTPhyMode.field.ShortGI = (pAd->CommonCfg.vht_sgi & (cap->vht_cap.sgi_80M));
-				pEntry->MaxHTPhyMode.field.STBC = ((pAd->CommonCfg.vht_stbc & cap->vht_cap.rx_stbc) > 1 ? 1 : 0);
+				pEntry->MaxHTPhyMode.field.STBC = ((wlan_config_get_vht_stbc(pEntry->wdev) & cap->vht_cap.rx_stbc) > 1 ? 1 : 0);
 			} else if((ht_phyinfo->vht_bw >= VHT_BW_80) && (cap->vht_cap.ch_width == 0)) {
 				if (op != NULL) {
 					if(op->vht_op_info.ch_width == 0) { //peer support VHT20,40
@@ -338,16 +349,16 @@ INT vht_mode_adjust(RTMP_ADAPTER *pAd, MAC_TABLE_ENTRY *pEntry, VHT_CAP_IE *cap,
 					pEntry->MaxHTPhyMode.field.BW = BW_80;
 				}
 				pEntry->MaxHTPhyMode.field.ShortGI = (pAd->CommonCfg.vht_sgi & (cap->vht_cap.sgi_80M));
-				pEntry->MaxHTPhyMode.field.STBC = ((pAd->CommonCfg.vht_stbc & cap->vht_cap.rx_stbc) > 1 ? 1 : 0);
+				pEntry->MaxHTPhyMode.field.STBC = ((wlan_config_get_vht_stbc(pEntry->wdev) & cap->vht_cap.rx_stbc) > 1 ? 1 : 0);
 			} else if((ht_phyinfo->vht_bw == VHT_BW_80) && (cap->vht_cap.ch_width != 0)) {
 				pEntry->MaxHTPhyMode.field.BW = BW_80;
 				pEntry->MaxHTPhyMode.field.ShortGI = (pAd->CommonCfg.vht_sgi & (cap->vht_cap.sgi_80M));
-				pEntry->MaxHTPhyMode.field.STBC = ((pAd->CommonCfg.vht_stbc& cap->vht_cap.rx_stbc) > 1 ? 1 : 0);
+				pEntry->MaxHTPhyMode.field.STBC = ((wlan_config_get_vht_stbc(pEntry->wdev) & cap->vht_cap.rx_stbc) > 1 ? 1 : 0);
 			} else if (((ht_phyinfo->vht_bw == VHT_BW_160) || (ht_phyinfo->vht_bw == VHT_BW_8080)) &&
 					(cap->vht_cap.ch_width != 0)) {
 				pEntry->MaxHTPhyMode.field.BW = BW_160;
 				pEntry->MaxHTPhyMode.field.ShortGI = (pAd->CommonCfg.vht_sgi & (cap->vht_cap.sgi_160M));
-				pEntry->MaxHTPhyMode.field.STBC = ((pAd->CommonCfg.vht_stbc& cap->vht_cap.rx_stbc) > 1 ? 1 : 0);
+				pEntry->MaxHTPhyMode.field.STBC = ((wlan_config_get_vht_stbc(pEntry->wdev) & cap->vht_cap.rx_stbc) > 1 ? 1 : 0);
 			}
 		}
 	}
@@ -357,9 +368,11 @@ INT vht_mode_adjust(RTMP_ADAPTER *pAd, MAC_TABLE_ENTRY *pEntry, VHT_CAP_IE *cap,
 
 VOID set_vht_cap(RTMP_ADAPTER *pAd, MAC_TABLE_ENTRY *entry, VHT_CAP_IE *vht_cap_ie)
 {
-        if (pAd->CommonCfg.vht_ldpc && (pAd->chipCap.phy_caps & fPHY_CAP_LDPC) &&
+    if (wlan_config_get_vht_ldpc(entry->wdev) && (pAd->chipCap.phy_caps & fPHY_CAP_LDPC) &&
 		(vht_cap_ie->vht_cap.rx_ldpc))
         	CLIENT_STATUS_SET_FLAG(entry, fCLIENT_STATUS_VHT_RX_LDPC_CAPABLE);
+
+	CLIENT_STATUS_SET_FLAG(entry, fCLIENT_STATUS_VHT_CAPABLE);
 
 	if (pAd->CommonCfg.vht_sgi == GI_400)
 	{
@@ -370,7 +383,7 @@ VOID set_vht_cap(RTMP_ADAPTER *pAd, MAC_TABLE_ENTRY *entry, VHT_CAP_IE *vht_cap_
 			CLIENT_STATUS_SET_FLAG(entry, fCLIENT_STATUS_SGI160_CAPABLE);
 	}
 
-	if (pAd->CommonCfg.vht_stbc) {
+	if (wlan_config_get_vht_stbc(entry->wdev)) {
         	if (vht_cap_ie->vht_cap.tx_stbc)
 			CLIENT_STATUS_SET_FLAG(entry, fCLIENT_STATUS_VHT_TXSTBC_CAPABLE);
 		if (vht_cap_ie->vht_cap.rx_stbc)
@@ -397,7 +410,11 @@ static UCHAR spec_cap_to_mcs[]={
 	0, /* VHT_MCS_CAP_NA */
 };
 
-INT dot11_vht_mcs_to_internal_mcs(struct _RTMP_ADAPTER *pAd,VHT_CAP_IE *vht_cap, HTTRANSMIT_SETTING *tx)
+INT dot11_vht_mcs_to_internal_mcs(
+	struct _RTMP_ADAPTER *pAd,
+	struct wifi_dev *wdev,
+	VHT_CAP_IE *vht_cap,
+	HTTRANSMIT_SETTING *tx)
 {
 	HTTRANSMIT_SETTING *tx_mode = tx;
 	UCHAR spec_cap, peer_cap, cap_offset = 0, nss;
@@ -421,7 +438,7 @@ INT dot11_vht_mcs_to_internal_mcs(struct _RTMP_ADAPTER *pAd,VHT_CAP_IE *vht_cap,
 			break;
 	};
 
-	if ((vht_cap->mcs_set.rx_mcs_map.mcs_ss1 != VHT_MCS_CAP_NA) && (pAd->CommonCfg.TxStream >= 1))
+	if ((vht_cap->mcs_set.rx_mcs_map.mcs_ss1 != VHT_MCS_CAP_NA) && (wlan_config_get_tx_stream(wdev) >= 1))
 	{
 		nss = 1;
 		spec_cap = dot11_vht_mcs_bw_cap[cap_offset + (nss -1)];
@@ -432,7 +449,7 @@ INT dot11_vht_mcs_to_internal_mcs(struct _RTMP_ADAPTER *pAd,VHT_CAP_IE *vht_cap,
 			tx_mode->field.MCS = ((nss -1) << 4) | spec_cap;
 	}
 
-	if ((vht_cap->mcs_set.rx_mcs_map.mcs_ss2 != VHT_MCS_CAP_NA) && (pAd->CommonCfg.TxStream >= 2))
+	if ((vht_cap->mcs_set.rx_mcs_map.mcs_ss2 != VHT_MCS_CAP_NA) && (wlan_config_get_tx_stream(wdev) >= 2))
 	{
 		nss = 2;
 		spec_cap = dot11_vht_mcs_bw_cap[cap_offset + (nss -1)];
@@ -443,7 +460,7 @@ INT dot11_vht_mcs_to_internal_mcs(struct _RTMP_ADAPTER *pAd,VHT_CAP_IE *vht_cap,
 			tx_mode->field.MCS = ((nss -1) << 4) | spec_cap;
 	}
 
-	if ((vht_cap->mcs_set.rx_mcs_map.mcs_ss3 != VHT_MCS_CAP_NA) && (pAd->CommonCfg.TxStream >= 3))
+	if ((vht_cap->mcs_set.rx_mcs_map.mcs_ss3 != VHT_MCS_CAP_NA) && (wlan_config_get_tx_stream(wdev) >= 3))
 	{
 		nss = 3;
 		spec_cap = dot11_vht_mcs_bw_cap[cap_offset + (nss -1)];
@@ -454,7 +471,7 @@ INT dot11_vht_mcs_to_internal_mcs(struct _RTMP_ADAPTER *pAd,VHT_CAP_IE *vht_cap,
 			tx_mode->field.MCS = ((nss -1) << 4) | spec_cap;
 	}
 
-	if ((vht_cap->mcs_set.rx_mcs_map.mcs_ss4 != VHT_MCS_CAP_NA) && (pAd->CommonCfg.TxStream >= 4))
+	if ((vht_cap->mcs_set.rx_mcs_map.mcs_ss4 != VHT_MCS_CAP_NA) && (wlan_config_get_tx_stream(wdev) >= 4))
 	{
 		nss = 4;
 		spec_cap = dot11_vht_mcs_bw_cap[cap_offset + (nss -1)];
@@ -528,11 +545,10 @@ INT build_ext_pwr_constraint(RTMP_ADAPTER *pAd, UCHAR *buf)
 
 	Appeared in Beacon, ProbResp frames
 */
-INT build_vht_txpwr_envelope(RTMP_ADAPTER *pAd, UCHAR *buf)
+INT build_vht_txpwr_envelope(RTMP_ADAPTER *pAd,struct wifi_dev *wdev,UCHAR *buf)
 {
 	INT len = 0, pwr_cnt;
 	VHT_TXPWR_ENV_IE txpwr_env;
-
 	NdisZeroMemory(&txpwr_env, sizeof(txpwr_env));
 
     if ((pAd->CommonCfg.vht_bw == VHT_BW_160)
@@ -542,7 +558,7 @@ INT build_vht_txpwr_envelope(RTMP_ADAPTER *pAd, UCHAR *buf)
 	else if (pAd->CommonCfg.vht_bw == VHT_BW_80) {
 		pwr_cnt = 2;
 	} else {
-		if (pAd->CommonCfg.AddHTInfo.AddHtInfo.RecomWidth == 1)
+		if (wlan_operate_get_ht_bw(wdev) == HT_BW_40)
 			pwr_cnt = 1;
 		else
 			pwr_cnt = 0;
@@ -552,7 +568,7 @@ INT build_vht_txpwr_envelope(RTMP_ADAPTER *pAd, UCHAR *buf)
 
 // TODO: fixme, we need the real tx_pwr value for each port.
 	for (len = 0; len <= pwr_cnt; len++)
-		txpwr_env.tx_pwr_bw[len] = 15;
+		txpwr_env.tx_pwr_bw[len] = 30; /* 15dB */
 
 	len = 2 + pwr_cnt;
 	NdisMoveMemory(buf, &txpwr_env, len);
@@ -566,10 +582,11 @@ INT build_vht_txpwr_envelope(RTMP_ADAPTER *pAd, UCHAR *buf)
 
 	Appeared in Beacon, (Re)AssocResp, ProbResp frames
 */	
-INT build_vht_op_ie(RTMP_ADAPTER *pAd, UCHAR bw, UCHAR Channel, UCHAR *buf)
+INT build_vht_op_ie(RTMP_ADAPTER *pAd, struct wifi_dev *wdev, UCHAR bw, UCHAR Channel, UCHAR *buf)
 {
 	VHT_OP_IE vht_op;
 	UCHAR cent_ch;
+	UCHAR prim_ch;
 #ifdef RT_BIG_ENDIAN
 	UINT16 tmp;
 #endif /* RT_BIG_ENDIAN */
@@ -579,11 +596,15 @@ INT build_vht_op_ie(RTMP_ADAPTER *pAd, UCHAR bw, UCHAR Channel, UCHAR *buf)
 #ifdef CONFIG_AP_SUPPORT
 	if (Channel > 14 && 
 		(pAd->CommonCfg.bIEEE80211H == 1) && 
-		(pAd->Dot11_H.RDMode == RD_SWITCHING_MODE))
+		(pAd->Dot11_H.RDMode == RD_SWITCHING_MODE)) {
 		cent_ch = vht_cent_ch_freq(pAd->Dot11_H.org_ch, bw);
-	else
+		prim_ch = pAd->Dot11_H.org_ch;
+	} else
 #endif /* CONFIG_AP_SUPPORT */
+	{
 		cent_ch = vht_cent_ch_freq(Channel, bw);
+		prim_ch = Channel;
+	}
 
 	switch (bw)
 	{
@@ -600,7 +621,7 @@ INT build_vht_op_ie(RTMP_ADAPTER *pAd, UCHAR bw, UCHAR Channel, UCHAR *buf)
 		case VHT_BW_160:
 #ifdef DOT11_VHT_R2
 			vht_op.vht_op_info.ch_width = 1;
-			vht_op.vht_op_info.center_freq_1 = (cent_ch - 8);
+			vht_op.vht_op_info.center_freq_1 = (prim_ch > cent_ch) ? (cent_ch + 8) : (cent_ch - 8);
 			vht_op.vht_op_info.center_freq_2 = cent_ch;
 #else
 			vht_op.vht_op_info.ch_width = 2;
@@ -629,7 +650,7 @@ INT build_vht_op_ie(RTMP_ADAPTER *pAd, UCHAR bw, UCHAR Channel, UCHAR *buf)
 	vht_op.basic_mcs_set.mcs_ss6 = VHT_MCS_CAP_NA;
 	vht_op.basic_mcs_set.mcs_ss7 = VHT_MCS_CAP_NA;
 	vht_op.basic_mcs_set.mcs_ss8 = VHT_MCS_CAP_NA;
-	switch  (pAd->CommonCfg.RxStream)
+	switch (wlan_config_get_rx_stream(wdev))
 	{
 		case 4:
 			vht_op.basic_mcs_set.mcs_ss4 = VHT_MCS_CAP_7;
@@ -685,18 +706,21 @@ INT build_vht_op_ie(RTMP_ADAPTER *pAd, UCHAR bw, UCHAR Channel, UCHAR *buf)
 	Defined in IEEE 802.11AC
 
 	Appeared in Beacon, (Re)AssocReq, (Re)AssocResp, ProbReq/Resp frames
+VHT_HIGH_RATE:
+	channel width: VHT_BW_80, VHT_BW_160/8080
+	mcs cap: MCS7/8/9
+	nss: 1x1, 2x2, 3x3, 4x4
 */
-static UINT16 VHT_HIGH_RATE_BW80[3][4]={
-	{292, 585, 877, 1170},
-	{351, 702, 1053, 1404},
-	{390, 780, 1170, 1560},
+static UINT16 VHT_HIGH_RATE[2][3][4]={
+	{{292, 585, 877, 1170}, {351, 702, 1053, 1404}, {390, 780, 1170, 1560}},
+	{{585, 1170, 1579, 2340}, {702, 1404, 1755, 2808}, {780, 1560, 2106, 3120}}
 };
 
 
-INT build_vht_cap_ie(RTMP_ADAPTER *pAd, UCHAR *buf)
+INT build_vht_cap_ie(RTMP_ADAPTER *pAd, UCHAR *buf, struct wifi_dev *wdev)
 {
 	VHT_CAP_IE vht_cap_ie;
-	INT rx_nss, tx_nss, mcs_cap;
+	INT rx_nss, tx_nss, mcs_cap, over_vht80 = 0;
 #ifdef RT_BIG_ENDIAN
 	UINT32 tmp_1;
 	UINT64 tmp_2;
@@ -720,7 +744,10 @@ INT build_vht_cap_ie(RTMP_ADAPTER *pAd, UCHAR *buf)
 		vht_cap_ie.vht_cap.ch_width = 0;
 	}
 
-	if (pAd->CommonCfg.vht_ldpc && (pAd->chipCap.phy_caps & fPHY_CAP_LDPC))
+	if (vht_cap_ie.vht_cap.ch_width)
+		over_vht80 = 1;
+
+	if (wlan_config_get_vht_ldpc(wdev) && (pAd->chipCap.phy_caps & fPHY_CAP_LDPC))
 		vht_cap_ie.vht_cap.rx_ldpc = 1;
 	else
 		vht_cap_ie.vht_cap.rx_ldpc = 0;
@@ -731,17 +758,28 @@ INT build_vht_cap_ie(RTMP_ADAPTER *pAd, UCHAR *buf)
 
 	vht_cap_ie.vht_cap.tx_stbc = 0;
 	vht_cap_ie.vht_cap.rx_stbc = 0;
-	if (pAd->CommonCfg.vht_stbc)
+	if (wlan_config_get_vht_stbc(wdev))
 	{
-		if (pAd->CommonCfg.TxStream >= 2)
+	    UCHAR max_tx_path;
+
+		if (pAd->CommonCfg.dbdc_mode)
+		{
+			UCHAR band_idx = HcGetBandByWdev(wdev);
+
+			if (band_idx == DBDC_BAND0)
+				max_tx_path = pAd->dbdc_2G_tx_stream;
+			else
+				max_tx_path = pAd->dbdc_5G_tx_stream;
+		} else {
+			max_tx_path = pAd->Antenna.field.TxPath;
+		}
+
+		if (max_tx_path >= 2)
 			vht_cap_ie.vht_cap.tx_stbc = 1;
 		else
 			vht_cap_ie.vht_cap.tx_stbc = 0;
 		
-		if (pAd->CommonCfg.RxStream >= 1)
-			vht_cap_ie.vht_cap.rx_stbc = 1; // TODO: is it depends on the number of our antennas?
-		else
-			vht_cap_ie.vht_cap.rx_stbc = 0;
+		vht_cap_ie.vht_cap.rx_stbc = 1;
 	}
 
 	vht_cap_ie.vht_cap.tx_ant_consistency = 1;
@@ -754,7 +792,7 @@ INT build_vht_cap_ie(RTMP_ADAPTER *pAd, UCHAR *buf)
 
 	    NdisCopyMemory(&vht_cap, &pAd->CommonCfg.vht_cap_ie.vht_cap, sizeof(VHT_CAP_INFO));
 	    
-	    mt_WrapSetVHTETxBFCap(pAd, &vht_cap);
+	    mt_WrapSetVHTETxBFCap(pAd, wdev, &vht_cap);
 	    
 		vht_cap_ie.vht_cap.num_snd_dimension = vht_cap.num_snd_dimension;
    		vht_cap_ie.vht_cap.bfee_sts_cap      = vht_cap.bfee_sts_cap;
@@ -787,15 +825,15 @@ INT build_vht_cap_ie(RTMP_ADAPTER *pAd, UCHAR *buf)
 
 	mcs_cap = pAd->chipCap.max_vht_mcs;
 
-	rx_nss = pAd->CommonCfg.RxStream;
-	tx_nss = pAd->CommonCfg.TxStream;
+	rx_nss = wlan_config_get_rx_stream(wdev);
+	tx_nss = wlan_config_get_tx_stream(wdev);
 #ifdef WFA_VHT_PF
 	if ((pAd->CommonCfg.vht_nss_cap > 0) &&
-		(pAd->CommonCfg.vht_nss_cap < pAd->CommonCfg.RxStream))
+		(pAd->CommonCfg.vht_nss_cap < wlan_config_get_rx_stream(wdev))
 		rx_nss = pAd->CommonCfg.vht_nss_cap;
 
 	if ((pAd->CommonCfg.vht_nss_cap > 0) && 
-		(pAd->CommonCfg.vht_nss_cap < pAd->CommonCfg.TxStream))
+		(pAd->CommonCfg.vht_nss_cap < wlan_config_get_tx_stream(wdev)))
 		tx_nss = pAd->CommonCfg.vht_nss_cap;
 
 	if (pAd->CommonCfg.vht_mcs_cap <pAd->chipCap.max_vht_mcs)
@@ -805,21 +843,16 @@ INT build_vht_cap_ie(RTMP_ADAPTER *pAd, UCHAR *buf)
 	if ((mcs_cap <= VHT_MCS_CAP_9) 
             && ((rx_nss > 0) && (rx_nss <= 4))
             && ((tx_nss > 0) && (tx_nss <= 4))) {
-		vht_cap_ie.mcs_set.rx_high_rate = VHT_HIGH_RATE_BW80[mcs_cap][rx_nss-1];
-		vht_cap_ie.mcs_set.tx_high_rate = VHT_HIGH_RATE_BW80[mcs_cap][tx_nss-1];
+		vht_cap_ie.mcs_set.rx_high_rate = VHT_HIGH_RATE[over_vht80][mcs_cap][rx_nss-1];
+		vht_cap_ie.mcs_set.tx_high_rate = VHT_HIGH_RATE[over_vht80][mcs_cap][tx_nss-1];
 		if (rx_nss >= 1)
 			vht_cap_ie.mcs_set.rx_mcs_map.mcs_ss1 = mcs_cap;
 		if (rx_nss >= 2)
 			vht_cap_ie.mcs_set.rx_mcs_map.mcs_ss2 = mcs_cap;
 		if (rx_nss >= 3)
 			vht_cap_ie.mcs_set.rx_mcs_map.mcs_ss3 = mcs_cap;
-		if (rx_nss >= 4) {
-            vht_cap_ie.mcs_set.rx_mcs_map.mcs_ss4 = mcs_cap;
-#ifdef MT7615
-#ifdef CONFIG_RALINK_MT7621
-#endif /*CONFIG_RALINK_MT7621*/
-#endif /*MT7615*/
-        }
+		if (rx_nss >= 4)
+			vht_cap_ie.mcs_set.rx_mcs_map.mcs_ss4 = mcs_cap;
 
 		if (tx_nss >= 1)
 			vht_cap_ie.mcs_set.tx_mcs_map.mcs_ss1 = mcs_cap;
@@ -827,13 +860,8 @@ INT build_vht_cap_ie(RTMP_ADAPTER *pAd, UCHAR *buf)
 			vht_cap_ie.mcs_set.tx_mcs_map.mcs_ss2 = mcs_cap;
 		if (tx_nss >= 3)
 			vht_cap_ie.mcs_set.tx_mcs_map.mcs_ss3 = mcs_cap;
-		if (tx_nss >= 4) {
-            vht_cap_ie.mcs_set.tx_mcs_map.mcs_ss4 = mcs_cap;
-#ifdef MT7615
-#ifdef CONFIG_RALINK_MT7621
-#endif /*CONFIG_RALINK_MT7621*/
-#endif /*MT7615*/
-        }
+		if (tx_nss >= 4)
+			vht_cap_ie.mcs_set.tx_mcs_map.mcs_ss4 = mcs_cap;
 	}
 	else
 	{
@@ -860,6 +888,46 @@ INT build_vht_cap_ie(RTMP_ADAPTER *pAd, UCHAR *buf)
 	return sizeof(VHT_CAP_IE);
 }
 
+static INT build_vht_op_mode_ie(RTMP_ADAPTER *pAd, struct wifi_dev *wdev, UCHAR *buf)
+{
+	INT len = 0;
+	EID_STRUCT eid_hdr;
+	OPERATING_MODE operating_mode_ie;   
+	UCHAR rx_nss = (wlan_config_get_rx_stream(wdev) - 1);
+	UCHAR op_vht_bw = wlan_operate_get_vht_bw(wdev);
+
+	NdisZeroMemory(&eid_hdr, sizeof(EID_STRUCT));
+	NdisZeroMemory((UCHAR *)&operating_mode_ie,  sizeof(OPERATING_MODE));
+
+	eid_hdr.Eid = IE_OPERATING_MODE_NOTIFY;
+	eid_hdr.Len = sizeof(OPERATING_MODE);
+	NdisMoveMemory(buf, (UCHAR *)&eid_hdr, 2);
+	len = 2;
+
+	if (op_vht_bw == VHT_BW_2040) {
+		if (wlan_operate_get_ht_bw(wdev) == HT_BW_40)
+			operating_mode_ie.ch_width = 1;
+		else
+			operating_mode_ie.ch_width = 0;
+	} else if (op_vht_bw == VHT_BW_80) {
+		operating_mode_ie.ch_width = 2;
+	} else if ((op_vht_bw == VHT_BW_160)||(op_vht_bw == VHT_BW_8080)) {
+		operating_mode_ie.ch_width = 3;
+		/* MT7615 only support 2ss in BW160&8080 */
+		if ((pAd->chipCap.max_bw160_nss) && (wlan_config_get_rx_stream(wdev) > pAd->chipCap.max_bw160_nss))
+			rx_nss = pAd->chipCap.max_bw160_nss - 1;
+	}
+
+	operating_mode_ie.rx_nss_type = 0;
+	operating_mode_ie.rx_nss = rx_nss;
+
+	buf += len;
+	NdisMoveMemory(buf, (UCHAR *)&operating_mode_ie, sizeof(OPERATING_MODE));
+	len += eid_hdr.Len;
+
+	return len;
+}
+
 #ifdef G_BAND_256QAM
 static BOOLEAN g_band_256_qam_enable(
         struct _RTMP_ADAPTER *pAd, struct _build_ie_info *info)
@@ -878,11 +946,59 @@ static BOOLEAN g_band_256_qam_enable(
 }
 #endif /* G_BAND_256QAM */
 
+UCHAR adjust_vht_cap_ie(
+	struct _RTMP_ADAPTER *pAd,
+	struct wifi_dev *wdev,
+	UCHAR *vht_cap_start,
+	VHT_CAP_IE *peer_vht_cap)
+{
+	UCHAR need_adjust = 0;
+	VHT_CAP_IE *vht_cap = (VHT_CAP_IE *)vht_cap_start;
+
+	if (peer_vht_cap->vht_cap.ch_width > 0) {
+		/* rx mcs map */
+		vht_cap->mcs_set.rx_mcs_map.mcs_ss3 = VHT_MCS_CAP_NA;
+		vht_cap->mcs_set.rx_mcs_map.mcs_ss4 = VHT_MCS_CAP_NA;
+		vht_cap->mcs_set.rx_mcs_map.mcs_ss5 = VHT_MCS_CAP_NA;
+		vht_cap->mcs_set.rx_mcs_map.mcs_ss6 = VHT_MCS_CAP_NA;
+		vht_cap->mcs_set.rx_mcs_map.mcs_ss7 = VHT_MCS_CAP_NA;
+		vht_cap->mcs_set.rx_mcs_map.mcs_ss8 = VHT_MCS_CAP_NA;
+
+		/* tx mcs map */
+		vht_cap->mcs_set.tx_mcs_map.mcs_ss3 = VHT_MCS_CAP_NA;
+		vht_cap->mcs_set.tx_mcs_map.mcs_ss4 = VHT_MCS_CAP_NA;
+		vht_cap->mcs_set.tx_mcs_map.mcs_ss5 = VHT_MCS_CAP_NA;
+		vht_cap->mcs_set.tx_mcs_map.mcs_ss6 = VHT_MCS_CAP_NA;
+		vht_cap->mcs_set.tx_mcs_map.mcs_ss7 = VHT_MCS_CAP_NA;
+		vht_cap->mcs_set.tx_mcs_map.mcs_ss8 = VHT_MCS_CAP_NA;
+
+		/* check peer supports BW160 & Nss=1 or not */
+		if ((peer_vht_cap->mcs_set.rx_mcs_map.mcs_ss2 == VHT_MCS_CAP_NA)
+				|| (min(wlan_config_get_rx_stream(wdev), pAd->chipCap.max_bw160_nss) == 1)) {
+			need_adjust = 1;
+			vht_cap->mcs_set.rx_mcs_map.mcs_ss2 = VHT_MCS_CAP_NA;
+		}
+		if ((peer_vht_cap->mcs_set.tx_mcs_map.mcs_ss2 == VHT_MCS_CAP_NA)
+				|| (min(wlan_config_get_tx_stream(wdev), pAd->chipCap.max_bw160_nss) == 1)) {
+			need_adjust = 1;
+			vht_cap->mcs_set.tx_mcs_map.mcs_ss2 = VHT_MCS_CAP_NA;
+		}
+	}
+
+	return need_adjust;
+}
+
 INT build_vht_ies(RTMP_ADAPTER *pAd, struct _build_ie_info *info)
 {
 	INT len = 0;
 	EID_STRUCT eid_hdr;
-    UCHAR bw = pAd->CommonCfg.vht_bw;
+	UCHAR bw = pAd->CommonCfg.vht_bw;
+	UCHAR *vht_cap_start = NULL;
+	UCHAR *vht_op_start = NULL;
+	UCHAR need_adjust = 0;
+
+	if ((info == NULL) || (info->wdev == NULL))
+		return len;
 
     if (
 #if defined(G_BAND_256QAM)
@@ -898,36 +1014,59 @@ INT build_vht_ies(RTMP_ADAPTER *pAd, struct _build_ie_info *info)
         eid_hdr.Len = sizeof(VHT_CAP_IE);
         NdisMoveMemory(info->frame_buf, (UCHAR *)&eid_hdr, 2);
         len = 2;
+	vht_cap_start = (UCHAR *)(info->frame_buf + len);
 
-        len += build_vht_cap_ie(pAd, (UCHAR *)(info->frame_buf + len));
+        len += build_vht_cap_ie(pAd, vht_cap_start, info->wdev);
 
         if ((info->frame_subtype == SUBTYPE_BEACON) ||
                 (info->frame_subtype == SUBTYPE_PROBE_RSP) ||
                 (info->frame_subtype == SUBTYPE_ASSOC_RSP) ||
-				(info->frame_subtype == SUBTYPE_ASSOC_REQ) ||
                 (info->frame_subtype == SUBTYPE_REASSOC_RSP))
         {
             eid_hdr.Eid = IE_VHT_OP;
             eid_hdr.Len = sizeof(VHT_OP_IE);
             NdisMoveMemory((UCHAR *)(info->frame_buf + len), (UCHAR *)&eid_hdr, 2);
             len +=2;
+	    vht_op_start = (UCHAR *)(info->frame_buf + len);
 
 #if defined(G_BAND_256QAM)
             bw = (g_band_256_qam_enable(pAd, info))? VHT_BW_2040:pAd->CommonCfg.vht_bw;
 #endif /* G_BAND_256QAM */
 
-            len += build_vht_op_ie(pAd, bw, info->channel, (UCHAR *)(info->frame_buf + len));
+            len += build_vht_op_ie(pAd, info->wdev, bw, info->channel, vht_op_start);
         }
+    	else if  ((info->frame_subtype == SUBTYPE_ASSOC_REQ) ||
+                  (info->frame_subtype == SUBTYPE_REASSOC_REQ))
+    	{
+    		/* optional IE, Now only FOR VHT40 STA/ApClient with op_mode ie to notify AP 
+               and avoid the BW info not sync. 
+             */ 
+            if ((wlan_operate_get_vht_bw(info->wdev) == VHT_BW_2040) && 
+                (wlan_operate_get_ht_bw(info->wdev) == HT_BW_40))
+    		{
+    			len += build_vht_op_mode_ie(pAd, info->wdev, (UCHAR *)(info->frame_buf + len));
+    		}
+    	}
+
+	if ((info->frame_subtype == SUBTYPE_ASSOC_RSP) && (bw > VHT_BW_80)
+			&& (wlan_config_get_tx_stream(info->wdev) > pAd->chipCap.max_bw160_nss)) {
+		need_adjust = adjust_vht_cap_ie(pAd, info->wdev, vht_cap_start, &info->peer_info.vht_cap);
+		/* appending Operation Notification IE */
+		if (need_adjust)
+			len += build_vht_op_mode_ie(pAd, info->wdev, (UCHAR *)(info->frame_buf + len));
+	}
     }
 
     return len;
 }
 
 
-static long ch_offset_abs(long x) {
-	long y;
-	y = x >> 31;
-	return (x ^ y) - y;
+static UINT8 ch_offset_abs(UINT8 x, UINT8 y) {
+
+	if (x > y)
+		return x - y;
+	else
+		return y - x;
 }
 
 UCHAR check_vht_op_bw (VHT_OP_INFO *vht_op_info)
@@ -943,9 +1082,9 @@ UCHAR check_vht_op_bw (VHT_OP_INFO *vht_op_info)
 		case VHT_BW_80:
 			if (s80160ccf == 0) {
 				bw = VHT_BW_80;
-			} else if (ch_offset_abs(s80160ccf-p80ccf) == 8) {
+			} else if (ch_offset_abs(s80160ccf,p80ccf) == 8) {
 				bw = VHT_BW_160;
-			} else if (ch_offset_abs(s80160ccf-p80ccf) > 16) {
+			} else if (ch_offset_abs(s80160ccf,p80ccf) > 16) {
 				bw = VHT_BW_8080;
 			}
 			break;
@@ -970,7 +1109,12 @@ void update_vht_op_info(UINT8 cap_bw, VHT_OP_INFO *vht_op_info, struct _op_info 
 	if (op_info == NULL)
 		return;
 
-	op_info->bw = vht_op_info->ch_width;
+	/*check op bw should below or equal the cap*/
+	if(vht_op_info->ch_width > cap_bw){
+		op_info->bw = cap_bw;
+	}else{
+		op_info->bw = vht_op_info->ch_width;
+	}
 
 	switch (vht_op_info->ch_width) {
 		case VHT_BW_2040:
@@ -981,10 +1125,10 @@ void update_vht_op_info(UINT8 cap_bw, VHT_OP_INFO *vht_op_info, struct _op_info 
 			} else if (cap_bw > VHT_BW_80) {
 				if (s80160ccf == 0) {
 					op_info->cent_ch = p80ccf;
-				} else if (ch_offset_abs(s80160ccf-p80ccf) == 8) {
+				} else if (ch_offset_abs(s80160ccf,p80ccf) == 8) {
 					op_info->bw = VHT_BW_160;
 					op_info->cent_ch = s80160ccf;
-				} else if (ch_offset_abs(s80160ccf-p80ccf) > 16) {
+				} else if (ch_offset_abs(s80160ccf,p80ccf) > 16) {
 					op_info->bw = VHT_BW_8080;
 					op_info->cent_ch = p80ccf;
 					op_info->cent_ch2 = s80160ccf;
@@ -1049,6 +1193,28 @@ BOOLEAN vht80_channel_group( RTMP_ADAPTER *pAd, UCHAR channel)
 
 	return FALSE;
 }
+
+BOOLEAN vht160_channel_group( RTMP_ADAPTER *pAd, UCHAR channel)
+{
+        INT idx = 0;
+        //UCHAR region = GetCountryRegionFromCountryCode(pAd);
+
+        if (channel <= 14)
+                return FALSE;
+
+        while (vht_ch_160M[idx].ch_up_bnd != 0)
+        {
+                if (channel >= vht_ch_160M[idx].ch_low_bnd &&
+                        channel <= vht_ch_160M[idx].ch_up_bnd)
+                {
+                        return TRUE;
+                }
+                idx++;
+        }
+
+        return FALSE;
+}
+
 
 void print_vht_op_info(VHT_OP_INFO *vht_op)
 {

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
     Who       When            What
     --------  ----------      ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 
 #ifdef DFS_SUPPORT
@@ -437,7 +438,7 @@ static inline VOID DfsProgramBbpValues(PRTMP_ADAPTER pAd,
 	DfsInputControl = pDfsProgramParam->Symmetric_Round << 4;
 
 	/* Full 40Mhz*/
-	if (pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40)
+	if (HcGetBwByRf(pAd,RFIC_5GHZ) >= BW_40)
 	{
 		/* BW 40*/
 		DfsInputControl |= 0x80; 
@@ -819,6 +820,7 @@ void NewRadarDetectionStart(PRTMP_ADAPTER pAd)
 	pRadarDetect->bDfsInit = FALSE;
 	BOOLEAN IsSupport5G =HcIsRfSupport(pAd,RFIC_5GHZ);
 	UCHAR Channel5G = HcGetChannelByRf(pAd,RFIC_5GHZ);
+	UCHAR bw = HcGetBwByRf(pAd,RFIC_5GHZ);
 
 	if(!IsSupport5G)
 		return;
@@ -830,7 +832,7 @@ void NewRadarDetectionStart(PRTMP_ADAPTER pAd)
 
 	RTMP_CHIP_RADAR_GLRT_COMPENSATE(pAd);
 
-	if ((pAd->CommonCfg.RDDurRegion == CE) && RESTRICTION_BAND_1(pAd,Channel5G))
+	if ((pAd->CommonCfg.RDDurRegion == CE) && RESTRICTION_BAND_1(pAd,Channel5G,bw))
 		pAd->Dot11_H.ChMovingTime = 605;
 	else
 		pAd->Dot11_H.ChMovingTime = 65;
@@ -932,6 +934,7 @@ int SWRadarCheck(
 	/*ENTRY_PLUS could be replace by (pDfsSwParam->sw_idx[id]+1)%128*/
 	USHORT	Total, SwIdxPlus = ENTRY_PLUS(pDfsSwParam->sw_idx[id], 1, NEW_DFS_DBG_PORT_ENT_NUM);
 	UCHAR	CounterToCheck;	
+	UCHAR bw = HcGetBwByRf(pAd,RFIC_5GHZ);
 
 	
 	if (!DFS_CHECK_FLAGS(pAd, pRadarDetect) ||
@@ -1014,7 +1017,7 @@ int SWRadarCheck(
 				p1 = &pDfsSwParam->DFS_W[id][j & NEW_DFS_DBG_PORT_MASK];
 				
 				/* check period, must within max period*/
-				if (pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40)
+				if (bw  > BW_20)
 				{
 					if (p1->counter + CounterToCheck < pCurrent->counter)
 						break;
@@ -1158,8 +1161,6 @@ int SWRadarCheck(
 						{
 							if (id <= 2) /* && (id >= 0)*/
 							{
-								/*if (((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40) && (T[1] > minPeriod)) ||*/
-								/*	((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_20) && (T[1] > (minPeriod >> 1))) )*/
 								{
 									unsigned int loop, PeriodMatched = 0, idx1;
 									for (loop = 1; loop < pDfsSwParam->dfs_check_loop; loop++)
@@ -1173,7 +1174,7 @@ int SWRadarCheck(
 									{
 										{
 											pNewDFSValidRadar pDFSValidRadar;
-											ULONG T1 = (pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40)? (T[1]>>1) : T[1];
+											ULONG T1 = (bw > BW_20) ? (T[1]>>1) : T[1];
 											
 											pDFSValidRadar = &NewDFSValidTable[0];
                     					
@@ -1223,13 +1224,13 @@ int SWRadarCheck(
 					/* increase FCC-1 detection*/
 					if (id <= 2)
 					{
-						if (IS_FCC_RADAR_1((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40), T[0]))
+						if (IS_FCC_RADAR_1((bw > BW_20), T[0]))
 						{
 							int loop, idx1, PeriodMatched_fcc1 = 0;
 							for (loop = 1; loop < pDfsSwParam->dfs_check_loop; loop++)
 							{
 								idx1 = (idx[0] >= loop)? (idx[0] - loop): (NEW_DFS_MPERIOD_ENT_NUM + idx[0] - loop);
-								if ( IS_FCC_RADAR_1((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40), pDfsSwParam->DFS_T[id][idx1].period) )
+								if ( IS_FCC_RADAR_1((bw > BW_20), pDfsSwParam->DFS_T[id][idx1].period) )
 								{
 									/*printk("%d %d %d\n", PeriodMatched_fcc1, pDfsSwParam->DFS_T[id][idx1].period, loop);*/
 									PeriodMatched_fcc1++;
@@ -1249,13 +1250,13 @@ int SWRadarCheck(
 					/* increase W56-3 detection*/
 					if ((pRadarDetect->MCURadarRegion == NEW_DFS_JAP) && (id <= 2))
 					{
-						if (IS_W56_RADAR_3((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40), T[0]))
+						if (IS_W56_RADAR_3((bw > BW_20), T[0]))
 						{
 							int loop, idx1, PeriodMatched_w56_3 = 0;
 							for (loop = 1; loop < pDfsSwParam->dfs_check_loop; loop++)
 							{
 								idx1 = (idx[0] >= loop)? (idx[0] - loop): (NEW_DFS_MPERIOD_ENT_NUM + idx[0] - loop);
-								if ( IS_W56_RADAR_3((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40), pDfsSwParam->DFS_T[id][idx1].period) )
+								if ( IS_W56_RADAR_3((bw > BW_20), pDfsSwParam->DFS_T[id][idx1].period) )
 								{
 									/*printk("%d %d %d\n", PeriodMatched_w56_3, pDfsSwParam->DFS_T[id][idx1].period, loop);*/
 									PeriodMatched_w56_3++;
@@ -1271,14 +1272,14 @@ int SWRadarCheck(
 						}
 					}
 
-					if ((pRadarDetect->MCURadarRegion == NEW_DFS_JAP_W53) && (id <= 2) && IS_W53_RADAR_2((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40), T[0]))
+					if ((pRadarDetect->MCURadarRegion == NEW_DFS_JAP_W53) && (id <= 2) && IS_W53_RADAR_2((bw > BW_20), T[0]))
 					{
 						int loop, idx1, PeriodMatched_W56_2 = 0;
 						
 						for (loop = 1; loop < pDfsSwParam->dfs_check_loop; loop++)
 						{
 							idx1 = (idx[0] >= loop)? (idx[0] - loop): (NEW_DFS_MPERIOD_ENT_NUM + idx[0] - loop);
-							if ( IS_W53_RADAR_2((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40), pDfsSwParam->DFS_T[id][idx1].period) )
+							if ( IS_W53_RADAR_2((bw > BW_20), pDfsSwParam->DFS_T[id][idx1].period) )
 							{
 								/*printk("%d %d %d\n", PeriodMatched_W56_2, pDfsSwParam->DFS_T[id][idx1].period, loop);*/
 								PeriodMatched_W56_2++;
@@ -1343,7 +1344,7 @@ int SWRadarCheck(
 			
 
 			/* check period, must within 16666 ~ 66666*/
-			if (pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40)
+			if (bw > BW_20)
 			{
 				if (p1->counter + CounterToCheck < pCurrent->counter)
 						break;
@@ -1511,8 +1512,8 @@ int SWRadarCheck(
 						{
 
 							
-							if (((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40) && (T[1] > 66666)) ||
-								((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_20) && (T[1] > 33333)) )
+							if (((bw > BW_20) && (T[1] > 66666)) ||
+								((bw == BW_20) && (T[1] > 33333)) )
 							{
 								unsigned int loop, PeriodMatched = 0, idx1;
 								
@@ -2081,7 +2082,8 @@ static VOID ChannelSelectOnRadarDetection(
 	UINT i;
 	BOOLEAN IsSupport5G =HcIsRfSupport(pAd,RFIC_5GHZ);
 	UCHAR Channel5G = HcGetChannelByRf(pAd,RFIC_5GHZ);
-	UCHAR PhyMode5G =  HcGetPhyModeByRf(pAd,RFIC_5GHZ);
+	UCHAR PhyMode5G =  HcGetPhyModeByRf(pAd,RFIC_5GHZ);	
+	UCHAR bw = HcGetBwByRf(pAd,RFIC_5GHZ);
 
 	if (pAd->Dot11_H.RDMode == RD_SWITCHING_MODE || !IsSupport5G)
 		return;
@@ -2114,7 +2116,7 @@ static VOID ChannelSelectOnRadarDetection(
 	{
 		if (Channel5G == pAd->ChannelList[i].Channel)
 		{
-			if (pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth == BW_40)
+			if (bw > BW_20)
 			{
 				if ((pAd->ChannelList[i].Channel >> 2) & 1)
 				{
@@ -2142,7 +2144,7 @@ static VOID ChannelSelectOnRadarDetection(
 	}
 
 	/*when find an radar, the ChMovingTime will be set to announce how many seconds to sending software radar detection time.*/
-	if ((pAd->CommonCfg.RDDurRegion == CE) && RESTRICTION_BAND_1(pAd,Channel5G))
+	if ((pAd->CommonCfg.RDDurRegion == CE) && RESTRICTION_BAND_1(pAd,Channel5G,bw))
 		pAd->Dot11_H.ChMovingTime = 605;
 	else
 		pAd->Dot11_H.ChMovingTime = 65;
@@ -2204,6 +2206,7 @@ static BOOLEAN DfsEventDrop(
 	BOOLEAN RetVal = FALSE;
 	PDFS_SW_DETECT_PARAM pDfsSwParam = &pAd->CommonCfg.RadarDetect.DfsSwParam;
 	PDFS_EVENT pPreDfsEvent = &pDfsSwParam->PreDfsEvent;
+	UCHAR bw = HcGetBwByRf(pAd,RFIC_5GHZ);
 
 	if (pDfsEvent->EngineId != pPreDfsEvent->EngineId)
 	{
@@ -2214,7 +2217,7 @@ static BOOLEAN DfsEventDrop(
 
 	if (pDfsEvent->EngineId == 0x01 || pDfsEvent->EngineId == 0x02)
 	{
-		if (pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth  == BW_40)
+		if (bw > BW_20)
 		{
 			TimeDiff = ((pDfsEvent->TimeStamp - pPreDfsEvent->TimeStamp) >> 1);  /* 25ns to 50ns*/
 			PreEnvtWidth = pPreDfsEvent->Width >> 1;

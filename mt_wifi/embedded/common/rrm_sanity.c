@@ -1,4 +1,4 @@
-
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -15,7 +15,7 @@
  * way altering	the	source code	is stricitly prohibited, unless	the	prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
 	Abstract:
 
@@ -44,24 +44,25 @@ BOOLEAN RRM_PeerNeighborReqSanity(
 	OUT PUINT8 pSsidLen)
 {
 	PFRAME_802_11 Fr = (PFRAME_802_11)pMsg;
-	PUCHAR pFramePtr = Fr->Octet;
+	PUCHAR pFramePtr;
 	BOOLEAN result = FALSE;
 	PEID_STRUCT eid_ptr;
 	PMAC_TABLE_ENTRY pEntry;
 	PRRM_CONFIG pRrmCfg;
 	UINT8 PeerMeasurementType;
 
+    if ((Fr == NULL) || (pDialogToken == NULL))
+		return result;
+
 	MsgLen -= sizeof(HEADER_802_11);
 
 	/* skip category and action code. */
+    pFramePtr = Fr->Octet;
 	pFramePtr += 2;
 	MsgLen -= 2;
 
-	if (pDialogToken == NULL)
-		return result;
-
 	pEntry = MacTableLookup(pAd, Fr->Hdr.Addr2);
-	if (pEntry->func_tb_idx > pAd->ApCfg.BssidNum)
+	if ((pEntry == NULL) || (pEntry->func_tb_idx > pAd->ApCfg.BssidNum))
 	{
 		return result;
 	}

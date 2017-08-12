@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -24,7 +25,7 @@
 	Who         When          What
 	--------    ----------    ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __ANDES_MT_H__
 #define __ANDES_MT_H__
 
@@ -65,6 +66,12 @@
 #define GET_EVENT_HDR_ADD_PAYLOAD_TOTAL_LEN(event_rxd) \
     (((EVENT_RXD *)(event_rxd))->fw_rxd_0.field.length - sizeof(EVENT_RXD))
 
+
+#define BFBACKOFF_TABLE_SIZE            10
+#define BFBACKOFF_BBPCR_SIZE             6
+#define RATE_POWER_TMAC_SIZE            16
+#define RATE_POWER_TMAC_SIZE_BAND0       8
+#define CR_COLUMN_SIZE                   4
 
 struct _RTMP_ADAPTER;
 struct cmd_msg;
@@ -125,6 +132,126 @@ INT32 AndesMTEraseRomPatch(struct _RTMP_ADAPTER *ad);
 VOID ExtEventWifiSpectrumRawDataDumpHandler(struct _RTMP_ADAPTER *pAd, UINT8 *Data, UINT32 Length);
 NTSTATUS WifiSpectrumRawDataDumpHandler(struct _RTMP_ADAPTER *pAd, PCmdQElmt CMDQelmt);
 #endif/*INTERNAL_CAPTURE_SUPPORT*/
+
+VOID EventTxPowerHandler(struct _RTMP_ADAPTER *pAd, UINT8 *Data, UINT32 Length);
+VOID EventTxPowerShowInfo(struct _RTMP_ADAPTER *pAd, UINT8 *Data, UINT32 Length);
+#ifdef SINGLE_SKU_V2
+VOID EventTxPowerCompTable(struct _RTMP_ADAPTER *pAd, UINT8 *Data, UINT32 Length);
+#endif /* SINGLE_SKU_V2 */
+VOID EventTxPowerEPAInfo(struct _RTMP_ADAPTER *pAd, UINT8 *Data, UINT32 Length);
+
+#if defined(RLM_CAL_CACHE_SUPPORT) || defined(PRE_CAL_TRX_SET2_SUPPORT)
+NTSTATUS PreCalTxLPFStoreProcHandler(struct _RTMP_ADAPTER *pAd, PCmdQElmt CMDQelmt);
+NTSTATUS PreCalTxIQStoreProcHandler(struct _RTMP_ADAPTER *pAd, PCmdQElmt CMDQelmt);
+NTSTATUS PreCalTxDCStoreProcHandler(struct _RTMP_ADAPTER *pAd, PCmdQElmt CMDQelmt);
+NTSTATUS PreCalRxFIStoreProcHandler(struct _RTMP_ADAPTER *pAd, PCmdQElmt CMDQelmt);
+NTSTATUS PreCalRxFDStoreProcHandler(struct _RTMP_ADAPTER *pAd, PCmdQElmt CMDQelmt);
+#endif /* defined(RLM_CAL_CACHE_SUPPORT) || defined(PRE_CAL_TRX_SET2_SUPPORT) */
+
+typedef struct _TX_RATE_POWER_TABLE_T {
+	UINT8  TxRateModulation;
+	UINT8  CRValue;
+    INT8   PowerDecimal;
+} TX_RATE_POWER_TABLE_T, *P_TX_RATE_POWER_TABLE_T;
+
+typedef struct _TX_POWER_BOUND_TABLE_T {
+    UINT8  MaxMinType;
+    UINT8  CRValue;
+    INT8   PowerDecimal;
+} TX_POWER_BOUND_TABLE_T, *P_TX_POWER_BOUND_TABLE_T;
+
+typedef enum _TX_POWER_SKU_TABLE
+{
+    CCK1M2M,
+    CCK5M11M,
+    OFDM6M9M,
+    OFDM12M18M,
+    OFDM24M36M,
+    OFDM48M,
+    OFDM54M,
+    HT20M0,
+	HT20M32,
+	HT20M1M2,
+	HT20M3M4,
+	HT20M5,
+	HT20M6,
+	HT20M7,
+	HT40M0,
+	HT40M32,
+	HT40M1M2,
+	HT40M3M4,
+	HT40M5,
+	HT40M6,
+	HT40M7,
+    VHT20M0,
+    VHT20M1M2, 
+    VHT20M3M4,
+    VHT20M5M6,
+    VHT20M7,
+    VHT20M8,
+    VHT20M9,
+    VHT40M0,
+    VHT40M1M2, 
+    VHT40M3M4,
+    VHT40M5M6,
+    VHT40M7,
+    VHT40M8,
+    VHT40M9,
+    VHT80M0,
+    VHT80M1M2, 
+    VHT80M3M4,
+    VHT80M5M6,
+    VHT80M7,
+    VHT80M8,
+    VHT80M9,
+    VHT160M0,
+    VHT160M1M2, 
+    VHT160M3M4,
+    VHT160M5M6,
+    VHT160M7,
+    VHT160M8,
+    VHT160M9
+} TX_POWER_SKU_TABLE, *P_TX_POWER_SKU_TABLE;
+
+typedef enum _ENUM_MAX_MIN_TYPE_T {
+    MAX_POWER_BAND0,
+    MIN_POWER_BAND0,
+    MAX_POWER_BAND1,
+    MIN_POWER_BAND1
+} ENUM_MAX_MIN_TYPE_T, *P_ENUM_MAX_MIN_TYPE_T;
+
+typedef enum _ENUM_TX_RATE_MODULATION_T {
+    OFDM_48M,
+    OFDM_24M_36M,
+    OFDM_12M_18M, 
+    OFDM_6M_9M,
+    HT20_MCS5,
+    HT20_MCS3_4,
+    HT20_MCS1_2,
+    HT20_MCS0,
+    HT40_MCS5,
+    HT40_MCS3_4, 
+    HT40_MCS1_2,
+    HT40_MCS0,
+    HT40_MCS32,
+    CCK_5M11M, 
+    OFDM_54M,
+    CCK_1M2M,
+    HT40_MCS7,
+    HT40_MCS6,
+    HT20_MCS7,
+    HT20_MCS6,
+    VHT20_MCS5_6,
+    VHT20_MCS3_4,
+    VHT20_MCS1_2,
+    VHT20_MCS0,
+    VHT20_MCS9,
+    VHT20_MCS8,
+    VHT20_MCS7,
+    VHT160,
+    VHT80,
+    VHT40
+} ENUM_TX_RATE_MODULATION_T, *P_ENUM_TX_RATE_MODULATION_T;
 
 #endif /* __ANDES_MT_H__ */
 

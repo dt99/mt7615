@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	Who			When		  What
 	--------	----------	  ----------------------------------------------
 */
-
+#endif /* MTK_LICENSE */
 
 #ifndef __WF_AGG_H__
 #define __WF_AGG_H__
@@ -233,6 +234,7 @@
 #define RTS_PKT_NUM_THRESHOLD(p)	(((p) & 0x7f) << 25)
 #define GET_RTS_PKT_NUM_THRESHOLD(p) (((p) & RTS_PKT_NUM_THRESHOLD_MASK) >> 25)
 
+#define AGG_PCR2		(WF_AGG_BASE + 0x15c)
 
 #define AGG_ASRCR0		(WF_AGG_BASE + 0x060)	/* 0x20a60 */
 #define AGG_ASRCR1		(WF_AGG_BASE + 0x064)	/* 0x20a60 */
@@ -336,6 +338,7 @@ typedef enum _AGG_OFDM_RATE_T
 
 #define AGG_SCR			(WF_AGG_BASE + 0xfc)	/* 0x20afc */
 #define NLNAV_MID_PTEC_DIS  (1<<3)
+#define RTS_FAIL_CHARGE_DIS  (1<<27)
 
 #endif /* __WF_AGG_H__ */
 

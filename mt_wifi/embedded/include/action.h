@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -25,7 +26,7 @@
 	--------	----------		----------------------------------------------
 	Name		Date			Modification logs
 */
-
+#endif /* MTK_LICENSE */
 #ifndef	__ACTION_H__
 #define	__ACTION_H__
 

@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -13,6 +14,7 @@
 	Module Name:
 	mt_ate.c
 */
+#endif /* MTK_LICENSE */
 #include "rt_config.h"
 static VOID MtATEWTBL2Update(RTMP_ADAPTER *pAd, UCHAR wcid)
 {	
@@ -416,6 +418,7 @@ static INT32 MT_ATESetupFrame(RTMP_ADAPTER *pAd, UINT32 TxIdx)
 			Info.Preamble = SHORT_PREAMBLE;	
 		}
 	} 
+	Info.IsAutoRate = FALSE;
 
 	write_tmac_info(pAd, pDMAHeaderBufVA, &Info, &Transmit);
 
@@ -483,6 +486,7 @@ static INT32 MT_ATEStartTx(RTMP_ADAPTER *pAd)
 #ifdef CONFIG_AP_SUPPORT
 	INT32 IdBss, MaxNumBss = pAd->ApCfg.BssidNum;
 #endif
+	UCHAR TxPath, RxPath;
 
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s\n", __FUNCTION__));
 	/* TxRx switch workaround */
@@ -490,8 +494,23 @@ static INT32 MT_ATEStartTx(RTMP_ADAPTER *pAd)
 		MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s(), DID Rx Before\n", __FUNCTION__));
 		MT_ATERestoreInit(pAd);
 	}
+
+	if (pAd->CommonCfg.dbdc_mode)
+	{
+		if (ATECtrl->Channel <= 14) {
+			TxPath = pAd->dbdc_2G_tx_stream;
+			RxPath = pAd->dbdc_2G_rx_stream;
+		} else {
+			TxPath = pAd->dbdc_5G_tx_stream;
+			RxPath = pAd->dbdc_5G_rx_stream;
+		}
+	} else {
+		TxPath = pAd->Antenna.field.TxPath;
+		RxPath = pAd->Antenna.field.RxPath;
+	}
+
 	MtCmdChannelSwitch(pAd, ATECtrl->ControlChl, ATECtrl->Channel, ATECtrl->BW,
-							pAd->CommonCfg.TxStream, pAd->CommonCfg.RxStream, FALSE);
+							TxPath, RxPath, FALSE);
 
 	AsicSetMacTxRx(pAd, ASIC_MAC_RX_RXV, FALSE);
 
@@ -929,11 +948,26 @@ static INT32 MT_ATESetChannel(RTMP_ADAPTER *pAd, INT16 Value)
 {
 	ATE_CTRL *ATECtrl = &pAd->ATECtrl;
 	INT32 Ret = 0;
+	UCHAR TxPath, RxPath;
 
 	MTWF_LOG(DBG_CAT_TEST, DBG_SUBCAT_ALL, DBG_LVL_TRACE, ("%s\n", __FUNCTION__));
 
+	if (pAd->CommonCfg.dbdc_mode)
+	{
+		if (ATECtrl->Channel <= 14) {
+			TxPath = pAd->dbdc_2G_tx_stream;
+			RxPath = pAd->dbdc_2G_rx_stream;
+		} else {
+			TxPath = pAd->dbdc_5G_tx_stream;
+			RxPath = pAd->dbdc_5G_rx_stream;
+		}
+	} else {
+		TxPath = pAd->Antenna.field.TxPath;
+		RxPath = pAd->Antenna.field.RxPath;
+	}
+
 	MtCmdChannelSwitch(pAd, ATECtrl->ControlChl, ATECtrl->Channel, ATECtrl->BW,
-							pAd->CommonCfg.TxStream, pAd->CommonCfg.RxStream, FALSE);
+							TxPath, RxPath, FALSE);
 
 	return Ret;
 }
@@ -1292,6 +1326,7 @@ static INT32 sdio_setup_frame(RTMP_ADAPTER *pAd, UINT32 q_idx){
 			mac_info.Preamble = SHORT_PREAMBLE;	
 		}
 	}
+	mac_info.IsAutoRate = FALSE;
 	write_tmac_info(pAd, (UCHAR *)buf, &mac_info, &Transmit);
 	RTMPMoveMemory((VOID *)&buf[sizeof(TMAC_TXD_L)], (VOID *)&pAd->NullFrame, ATECtrl->TxLength);
 	return NDIS_STATUS_SUCCESS;

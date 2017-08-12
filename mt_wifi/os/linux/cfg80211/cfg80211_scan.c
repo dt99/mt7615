@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /****************************************************************************
  * Ralink Tech Inc.
  * Taiwan, R.O.C.
@@ -11,7 +12,7 @@
  * way altering the source code is stricitly prohibited, unless the prior
  * written consent of Ralink Technology, Inc. is obtained.
  ***************************************************************************/
-
+#endif /* MTK_LICENSE */
 /****************************************************************************
  
 	Abstract:
@@ -91,6 +92,7 @@ BOOLEAN CFG80211DRV_OpsScanCheckStatus(
 	VOID						*pAdOrg,
 	UINT8						 IfType)
 {
+	return TRUE;
 }
 
 #ifdef RT_CFG80211_P2P_MULTI_CHAN_SUPPORT

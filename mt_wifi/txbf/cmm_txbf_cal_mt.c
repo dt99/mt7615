@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc. 
@@ -13,7 +14,7 @@
 	Module Name:
 	cmm_txbf_cal_mt.c
 */
-
+#endif /* MTK_LICENSE */
 #ifdef COMPOS_WIN
 #include "MtConfig.h"
 #if defined(EVENT_TRACING)
@@ -59,6 +60,27 @@ VOID E2pMemWrite(IN PRTMP_ADAPTER pAd,
 }
 
 
+VOID iBFPhaseCalE2PInit(IN PRTMP_ADAPTER pAd)
+{
+    UINT_16 u2BfE2pOccupiedSize;
+
+    // Group 0
+    u2BfE2pOccupiedSize = sizeof(IBF_PHASE_G0_T);
+    RT28xx_EEPROM_READ_WITH_RANGE(pAd, au2IBfCalEEPROMOffset[GROUP_0], u2BfE2pOccupiedSize, (PUCHAR)&pAd->iBfPhaseG0);
+
+    // Group 1 ~ 7
+    u2BfE2pOccupiedSize = (sizeof(IBF_PHASE_Gx_T) * 7) - 4;
+    RT28xx_EEPROM_READ_WITH_RANGE(pAd, au2IBfCalEEPROMOffset[GROUP_1], u2BfE2pOccupiedSize, (PUCHAR)&pAd->iBfPhaseGx[0]);
+    
+    // Group 8
+    u2BfE2pOccupiedSize = sizeof(IBF_PHASE_Gx_T);
+    RT28xx_EEPROM_READ_WITH_RANGE(pAd, au2IBfCalEEPROMOffset[GROUP_8], u2BfE2pOccupiedSize, (PUCHAR)&pAd->iBfPhaseGx[7]);
+
+    pAd->fgCalibrationFail = FALSE;
+    NdisZeroMemory(&pAd->fgGroupIdPassFailStatus[0], 9);
+}
+
+
 VOID iBFPhaseCalE2PUpdate(IN PRTMP_ADAPTER pAd,
                           IN UCHAR   ucGroup,
                           IN BOOLEAN fgSX2,
@@ -66,7 +88,7 @@ VOID iBFPhaseCalE2PUpdate(IN PRTMP_ADAPTER pAd,
 {
     IBF_PHASE_Gx_T iBfPhaseGx;
     IBF_PHASE_G0_T iBfPhaseG0;
-    UCHAR  ucGroupIdx, ucEndLoop;
+    UCHAR  ucGroupIdx, ucEndLoop, ucCounter;
     UCHAR  ucIBfGroupSize;
     UCHAR  ucBuf[64];
     //UINT16 u2Value;
@@ -74,6 +96,8 @@ VOID iBFPhaseCalE2PUpdate(IN PRTMP_ADAPTER pAd,
 
     /* IF phase calibration is for BW20/40/80/160 */
     ucGroupIdx = 0;
+    NdisZeroMemory(&iBfPhaseG0, sizeof(IBF_PHASE_G0_T));
+    NdisZeroMemory(&iBfPhaseGx, sizeof(IBF_PHASE_Gx_T));
 
     switch (ucUpdateAllTye)
     {
@@ -164,8 +188,9 @@ VOID iBFPhaseCalE2PUpdate(IN PRTMP_ADAPTER pAd,
 
             break;
         case IBF_PHASE_ALL_GROUP_UPDATE:
-            if (pAd->fgCalibrationStatus == TRUE)
+            if (pAd->fgCalibrationFail == FALSE)
             {
+                MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("All of groups can pass criterion and calibrated phases can be written into EEPROM\n"));
                 NdisCopyMemory(ucBuf, &pAd->iBfPhaseG0, sizeof(IBF_PHASE_G0_T));
                 NdisCopyMemory(&ucBuf[sizeof(IBF_PHASE_G0_T)], &pAd->iBfPhaseGx[0], sizeof(IBF_PHASE_Gx_T));
                 // Write Group 0 and 1 into EEPROM
@@ -177,13 +202,26 @@ VOID iBFPhaseCalE2PUpdate(IN PRTMP_ADAPTER pAd,
                 // Write Group 8 into EEPROM
                 RT28xx_EEPROM_WRITE_WITH_RANGE(pAd, au2IBfCalEEPROMOffset[8], sizeof(IBF_PHASE_Gx_T), (PUCHAR)&pAd->iBfPhaseGx[7]);
             }
+            else
+            {
+                MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("Calibrated phases can't be written into EEPROM because some groups can't pass criterion!!!\n"));
+                for (ucCounter = GROUP_0; ucCounter <= GROUP_8; ucCounter++)
+                {
+                    MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("Group%d = %s\n", 
+                                                                       ucCounter, 
+                                                                      (pAd->fgGroupIdPassFailStatus[ucCounter] == TRUE) ? "FAIL" : "PASS"));
+                }
+            }
             break;
         case IBF_PHASE_ALL_GROUP_ERASE:
             NdisZeroMemory(&pAd->iBfPhaseG0, sizeof(IBF_PHASE_G0_T));
             NdisZeroMemory(pAd->iBfPhaseGx, sizeof(IBF_PHASE_Gx_T) * 8);
-            RT28xx_EEPROM_WRITE_WITH_RANGE(pAd, au2IBfCalEEPROMOffset[0], sizeof(IBF_PHASE_G0_T), (PUCHAR)&pAd->iBfPhaseG0);
-            RT28xx_EEPROM_WRITE_WITH_RANGE(pAd, au2IBfCalEEPROMOffset[1], (sizeof(IBF_PHASE_Gx_T) * 7 - 4), (PUCHAR)&pAd->iBfPhaseGx[0]);
-            RT28xx_EEPROM_WRITE_WITH_RANGE(pAd, au2IBfCalEEPROMOffset[8], sizeof(IBF_PHASE_Gx_T), (PUCHAR)&pAd->iBfPhaseGx[7]);
+            RT28xx_EEPROM_WRITE_WITH_RANGE(pAd, au2IBfCalEEPROMOffset[GROUP_0], sizeof(IBF_PHASE_G0_T), (PUCHAR)&pAd->iBfPhaseG0);
+            RT28xx_EEPROM_WRITE_WITH_RANGE(pAd, au2IBfCalEEPROMOffset[GROUP_1], (sizeof(IBF_PHASE_Gx_T) * 7 - 4), (PUCHAR)&pAd->iBfPhaseGx[0]);
+            RT28xx_EEPROM_WRITE_WITH_RANGE(pAd, au2IBfCalEEPROMOffset[GROUP_8], sizeof(IBF_PHASE_Gx_T), (PUCHAR)&pAd->iBfPhaseGx[7]);
+            break;
+        case IBF_PHASE_ALL_GROUP_READ_FROM_E2P:
+            iBFPhaseCalE2PInit(pAd);
             break;
         default:
             ucGroupIdx = ucGroup - 1;
@@ -482,7 +520,10 @@ VOID iBFPhaseCalReport(IN PRTMP_ADAPTER pAd,
     case IBF_PHASE_CAL_VERIFY: /* Show calibrated result only */
     case IBF_PHASE_CAL_VERIFY_INSTRUMENT:
         NdisCopyMemory(&iBfPhaseOut, pBuf, sizeof(IBF_PHASE_OUT));
-        pAd->fgCalibrationStatus = (ucStatus == 1) ? TRUE : FALSE;
+        // Update calibrated status
+        pAd->fgCalibrationFail |= ((ucStatus == 1) ? FALSE : TRUE);
+        pAd->fgGroupIdPassFailStatus[ucGroup] = ((ucStatus == 1) ? FALSE : TRUE);
+
         MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("Group : %d\n", ucGroup));
         MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("Calibration == 1? or Verification == 2? : %d\n", ucPhaseCalType));
         MTWF_LOG(DBG_CAT_HW, DBG_SUBCAT_ALL, DBG_LVL_OFF, ("Calibrated result = %d\n", ucStatus));

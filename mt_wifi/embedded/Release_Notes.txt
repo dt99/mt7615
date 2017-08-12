@@ -1,3 +1,40 @@
+[ V4.4.1.0 ]
+   Support function:
+    1.  Single Card DBDC AP/Repeater
+    2.  802.11v BSS Transition Management
+    3.  802.11K Beacon  Report/ Neighbor Report
+    4.  Hostapd (CFG80211/Kernel 3.10)
+    5.  PassPoint R2
+    6.  MU-MIMO
+    7.  DFS Zero Wait
+    8.  Background scan for channel quality check
+    9.  TPC (Transmit Power Control)
+    10. AirTime Fairness
+    11. Green AP
+    12. TxBF support
+    13. BW160 for IEEE 802.11 new standard modification  
+    14. CAL_TO_FLASH - Support calibration data to/from BIN file
+    15. Support multicast rate setting
+
+   Issue fixed : 
+    1.  MU/BF performance improvement
+    2.  Fix incorrect rate information with iwconfig
+    3.  Fix IOT issue with the following devices (low throughput/traffic stop/ICV Error/Connection):
+        - QCA9377
+        - AC68/MacBook
+        - Iphone 6
+        - DIR890L
+        - TL-WDN4800
+		- Marvel TGn test bed AP.
+    4.  Fix profile HT_AMSDU disable not working issue
+    5.  Throughput/performance related enhancement
+    6.  1x daemon spport 16 SSID 
+    7.  Fix Traffic stuck with AC68 when AMSDU enabled
+    8.  Fix HTC decrypt IOT with QCA STA
+    9.  Fix single sku Tx Power VHT40/80/160 with no flexibility issue
+    10. Fix ATE Power related issue
+
+
 [ V4.4.0.2 ]
     Support function:
 		1. MU-MIMO support.

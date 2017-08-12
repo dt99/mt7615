@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * MediaTek Inc.
@@ -16,7 +17,7 @@
  ***************************************************************************
 
 */
-
+#endif /* MTK_LICENSE */
 #ifndef __HDEV_H
 #define __HDEV_H
 
@@ -54,6 +55,8 @@ UCHAR RcGetPhyMode(HD_DEV *pHdev);
 UCHAR RcGetChannel(HD_DEV *pHdev);
 UCHAR RcGetCentralCh(HD_DEV *pHdev);
 UCHAR RcGetBandIdx(HD_DEV *pHdev);
+PHY_STATUS RcGetRadioCurStat(HD_DEV *pHdev);
+VOID RcSetRadioCurStat(HD_DEV *pHdev, PHY_STATUS CurStat);
 UCHAR RcGetBw(HD_DEV *pHdev);
 HD_DEV *RcGetBandIdxByBf(HD_CFG *pHdCfg);
 BOOLEAN RcIsBfCapSupport(HD_DEV_OBJ *obj);
@@ -92,7 +95,6 @@ VOID WtcRecDump(HD_CFG *pHdCfg);
 UCHAR WtcHwAcquireWcid(HD_CFG *pHdCfg, UCHAR idx);
 UCHAR WtcHwReleaseWcid(HD_CFG *pHdCfg, UCHAR idx);
 
-
-
+#define INVAILD_WCID 0xff
 
 #endif /*__HDEV_H*/

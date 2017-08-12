@@ -1,3 +1,4 @@
+#ifdef MTK_LICENSE
 /*
  ***************************************************************************
  * Ralink Tech Inc.
@@ -22,7 +23,7 @@
 	--------		----------		----------------------------------------------
 	
 */
-
+#endif /* MTK_LICENSE */
 #ifndef	__DOT11I_WPA_H__
 #define	__DOT11I_WPA_H__
 
@@ -104,6 +105,7 @@
 #define LEN_TKIP_GTK				(LEN_TK + LEN_TK2)
 #define LEN_AES_GTK					LEN_TK
 #define LEN_MAX_GTK					32
+#define LEN_MAX_IGTK					16
 #define LEN_TKIP_TK					(LEN_TK + LEN_TK2)
 #define LEN_AES_TK					LEN_TK
 #define LEN_CCMP128_TK				16
